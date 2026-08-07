@@ -1,0 +1,33 @@
+# Segredos e dados — nunca versionar
+.env
+.streamlit/secrets.toml
+dados.db
+*.db
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Sobras do Replit: o app é Python puro, nada disso é usado em produção
+artifacts/
+scripts/
+lib/
+.agents/
+node_modules/
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+tsconfig.json
+tsconfig.base.json
+.npmrc
+.replit
+.replitignore
+replit.md
+attached_assets/
+.local/
+.cache/
+.upm/
+.config/

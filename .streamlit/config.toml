@@ -1,0 +1,11 @@
+# Paleta lida de annis.store: creme #FFF6F0 de fundo, marrom #68380A da marca.
+# A tipografia e os ajustes de componente ficam no bloco de CSS do app.py.
+[theme]
+base = "light"
+primaryColor = "#68380A"
+backgroundColor = "#FFF6F0"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#4A2C0F"
+
+[browser]
+gatherUsageStats = false
