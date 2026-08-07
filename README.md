@@ -56,6 +56,10 @@ vem do cofre de secrets. Ambos estão no `.gitignore`.
 - **O extrato abre com saldo anterior.** A soma dos lançamentos da API não
   fecha com o `available_amount` que ela mesma informa — a diferença entra
   como saldo de abertura, para o saldo final bater com o da conta.
+- **Python fica em 3.12** (`runtime.txt`). Em 3.14 o Altair quebra no import:
+  ele declara `TypedDict(..., closed=True)`, sintaxe que o `typing` dessa
+  versão ainda não aceita. A Streamlit Cloud oferece 3.14 por padrão, então
+  sem o `runtime.txt` um app novo já nasce quebrado.
 - **Taxas contratadas são digitadas à mão** em `TAXAS_CONTRATADAS` no
   `app.py`, lidas de Configurações › Taxas e prazos no Dash. Não há endpoint
   de API para elas; se a taxa for renegociada, atualize lá.
