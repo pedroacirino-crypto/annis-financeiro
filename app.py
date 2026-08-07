@@ -100,6 +100,12 @@ section[data-testid="stSidebar"] > div {{ padding-top: 3.4rem; }}
 [data-testid="stHeader"]::before {{ content: ""; position: absolute; left: 1.5rem; top: 50%; transform: translateY(-50%); width: 104px; height: 23px; background: url("{LOGO_URL}") no-repeat left center / contain; filter: brightness(0) invert(1); opacity: 0.95; }}
 [data-testid="stHeader"] button, [data-testid="stHeader"] span, [data-testid="stHeader"] svg {{ color: #FFFFFF !important; fill: #FFFFFF !important; }}
 [data-testid="stSidebarCollapsedControl"] button svg, [data-testid="stSidebarCollapseButton"] svg {{ color: #FFFFFF !important; }}
+/* No celular a barra lateral nasce recolhida e o Streamlit põe o botão de
+   abrir no canto esquerdo do cabeçalho — em cima do logo. Empurra o logo
+   para depois do botão. */
+@media (max-width: 768px) {{
+  [data-testid="stHeader"]::before {{ left: 3.6rem; width: 88px; }}
+}}
 h1, h2, h3, [data-testid="stMetricValue"] {{ font-family: 'Newsreader', serif !important; font-weight: 200 !important; color: {MARROM} !important; letter-spacing: 0.01em; }}
 h1 {{ font-size: 2.4rem !important; line-height: 1.15; }}
 h2 {{ font-size: 1.8rem !important; }}
