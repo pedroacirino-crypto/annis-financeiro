@@ -31,3 +31,6 @@ attached_assets/
 .cache/
 .upm/
 .config/
+
+# Anotacoes de trabalho: tem nome de cliente, e o repo e publico
+CHECKPOINT.md
