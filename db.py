@@ -443,10 +443,16 @@ def clientes() -> "list[dict]":
 
     con = _conn()
     con.row_factory = sqlite3.Row
+    # Entra cobrança paga e também cobrança estornada, que é a que foi paga e
+    # depois devolvida. Sem ela a pessoa sumia da base, e a aba Recuperar
+    # continuava dizendo "já comprou 1x antes", olhando o cadastro da Shopify.
+    # Cancelada que nunca foi paga fica de fora: não virou compra.
     linhas = con.execute(
         "SELECT customer_name, customer_email, amount, paid_amount, created_at, "
-        "code, payment_method, installments, raw_json "
-        "FROM charges WHERE status = 'paid' ORDER BY created_at"
+        "code, payment_method, installments, status, paid_at, raw_json "
+        "FROM charges WHERE status = 'paid' "
+        "   OR (status = 'canceled' AND paid_at IS NOT NULL AND paid_at != '') "
+        "ORDER BY created_at"
     ).fetchall()
     con.close()
 
@@ -467,7 +473,8 @@ def clientes() -> "list[dict]":
 
         p = pessoas.setdefault(chave, {
             "nome": "", "email": email, "telefone": "",
-            "compras": 0, "total": 0, "primeira": "", "ultima": "", "pedidos": [],
+            "compras": 0, "total": 0, "estornos": 0, "total_estornado": 0,
+            "primeira": "", "ultima": "", "pedidos": [],
         })
         # As cobranças vêm em ordem crescente, então o último nome e telefone
         # que passam por aqui são os mais recentes que a cliente cadastrou.
@@ -475,16 +482,24 @@ def clientes() -> "list[dict]":
         p["telefone"] = fone or p["telefone"]
         valor = r["paid_amount"] or r["amount"] or 0
         dia = (r["created_at"] or "")[:10]
-        # Uma cobrança paga é um pedido: nesta base as 78 cobranças pagas
-        # correspondem a 78 pedidos distintos, então contar cobrança é contar
-        # vez que a cliente comprou, não peça nem parcela.
-        p["compras"] += 1
-        p["total"] += valor
+        estornada = r["status"] == "canceled"
+        # Uma cobrança paga é um pedido: nesta base as cobranças pagas
+        # correspondem a pedidos distintos, então contar cobrança é contar
+        # vez que a cliente comprou, não peça nem parcela. A estornada conta
+        # à parte, porque o dinheiro voltou e não pode entrar no faturamento.
+        if estornada:
+            p["estornos"] += 1
+            p["total_estornado"] += valor
+        else:
+            p["compras"] += 1
+            p["total"] += valor
         p["primeira"] = p["primeira"] or dia
         p["ultima"] = dia
         p["pedidos"].append({
             "dia": dia, "valor": valor, "codigo": r["code"] or "",
             "metodo": r["payment_method"] or "", "parcelas": r["installments"] or 1,
+            "estornada": estornada,
+            "estornada_em": (bruto.get("canceled_at") or "")[:10] if estornada else "",
         })
 
     # Peça, tamanho e cidade vêm da Shopify e só existem dentro da janela que
@@ -546,7 +561,8 @@ def abandonados_classificados(dias: int = 90) -> "list[dict]":
     con.row_factory = sqlite3.Row
     cur = con.cursor()
 
-    cur.execute("SELECT customer_name, customer_email, amount, status, created_at FROM charges")
+    cur.execute("SELECT customer_name, customer_email, amount, status, created_at, "
+                "paid_at FROM charges")
     cobrancas = [dict(r) for r in cur.fetchall()]
     por_email, por_nome = {}, {}
     for c in cobrancas:
@@ -577,6 +593,13 @@ def abandonados_classificados(dias: int = 90) -> "list[dict]":
             a["situacao"] = "Não tentou pagar"
         a["por_email"] = bool(por_email.get(a["email"]))
         a["tentativas"] = len(proximas)
+        # "Já comprou 1x antes" vem do cadastro da Shopify, que continua
+        # contando pedido estornado como venda. Sem esta contagem o cartão
+        # afirmava uma compra que a loja já devolveu.
+        a["compras_estornadas"] = sum(
+            1 for c in candidatas
+            if c["status"] == "canceled" and (c["paid_at"] or "")
+        )
         linhas.append(a)
 
     con.close()

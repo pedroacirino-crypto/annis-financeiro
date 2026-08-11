@@ -616,6 +616,11 @@ def _card_recuperar(a: dict):
                 f"padding-top:0.25rem'>"
                 + ("Já comprou {}x antes".format(a["pedidos_anteriores"])
                    if a.get("pedidos_anteriores") else "Primeira compra")
+                # O contador de pedidos é da Shopify, que segue marcando o
+                # pedido estornado como pago. Sem este aviso a tela afirma uma
+                # compra que a loja devolveu.
+                + (f" · {a['compras_estornadas']} estornada(s)"
+                   if a.get("compras_estornadas") else "")
                 + (f" · {a['tentativas']} tentativa(s) de pagamento" if a.get("tentativas") else "")
                 + "</div>",
                 unsafe_allow_html=True,
@@ -675,6 +680,8 @@ def _detalhe_cliente(c: dict):
         e2.metric("Vezes que comprou", c["compras"])
         e3.metric("Sem comprar há", f"{c['dias_sem_comprar']} dias"
                   if c["dias_sem_comprar"] is not None else "—")
+        if c["estornos"]:
+            e1.caption(md(fmt_brl(c["total_estornado"])) + " estornados")
 
         fone = _so_digitos(c.get("telefone", ""))
         bonito = (f"+{fone[:2]} ({fone[2:4]}) {fone[4:-4]}-{fone[-4:]}"
@@ -702,13 +709,17 @@ def _detalhe_cliente(c: dict):
                 faltando += 1
             else:
                 pecas = "Sem peças registradas"
+            pagamento = (_METODOS.get(p["metodo"], p["metodo"] or "—")
+                         + (f" em {p['parcelas']}x" if p["parcelas"] > 1 else ""))
+            if p.get("estornada"):
+                pagamento += (" · estornada em " + _dia_br(p["estornada_em"])
+                              if p.get("estornada_em") else " · estornada")
             linhas.append({
                 "Data": _dia_br(p["dia"]),
                 "Pedido": p.get("numero") or "—",
                 "Peças": pecas,
                 "Valor": fmt_brl(p["valor"]),
-                "Pagamento": _METODOS.get(p["metodo"], p["metodo"] or "—")
-                + (f" em {p['parcelas']}x" if p["parcelas"] > 1 else ""),
+                "Pagamento": pagamento,
             })
         tabela(pd.DataFrame(linhas), num=("Valor",))
 
@@ -749,10 +760,12 @@ def _card_cliente(c: dict):
                 f"padding-top:0.1rem'>{c.get('nome') or 'Sem cadastro'}</div>"
                 f"<div style='font-family:Poppins;font-size:0.75rem;color:{MARROM_CLARO};"
                 f"padding-top:0.35rem'>"
-                + (f"{c['compras']} compras" if c["compras"] > 1 else "1 compra")
+                + (f"{c['compras']} compras" if c["compras"] > 1
+                   else ("1 compra" if c["compras"] == 1 else "nenhuma compra que ficou"))
                 + f" · última em {_dia_br(c['ultima'])}"
                 + (f" · {c['cidade']}/{c['uf']}" if c.get("cidade") else "")
                 + (f" · primeira em {_dia_br(c['primeira'])}" if c["compras"] > 1 else "")
+                + (f" · {c['estornos']} compra(s) estornada(s)" if c["estornos"] else "")
                 + "</div>",
                 unsafe_allow_html=True,
             )
@@ -1247,16 +1260,29 @@ if "Clientes" in abas:
         compras = sum(c["compras"] for c in cli)
         total = sum(c["total"] for c in cli)
         voltaram = [c for c in cli if c["compras"] > 1]
+        estornadas = [c for c in cli if c["estornos"]]
+        total_estornado = sum(c["total_estornado"] for c in estornadas)
 
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Clientes", len(cli))
         k1.caption(f"{compras} compras no total")
+        # As médias dividem só o dinheiro que ficou, mas pelo total de gente,
+        # inclusive quem teve a compra estornada. Tirar essas pessoas da conta
+        # inflaria a média com uma base que não existe.
         k2.metric("Gasto por cliente", fmt_brl(total // len(cli)))
         k2.caption("Média do que cada uma já deixou")
-        k3.metric("Ticket médio", fmt_brl(total // compras))
-        k3.caption("Por compra")
+        k3.metric("Ticket médio", fmt_brl(total // compras) if compras else "—")
+        k3.caption("Por compra paga")
         k4.metric("Voltaram a comprar", len(voltaram))
         k4.caption(fmt_pct(len(voltaram) / len(cli) * 100, 0) + " da base")
+
+        if estornadas:
+            st.warning(
+                f"{len(estornadas)} pessoas tiveram a compra estornada, "
+                + md(fmt_brl(total_estornado))
+                + " que voltaram. Elas aparecem na lista marcadas, e não entram "
+                "no faturamento nem no ticket médio."
+            )
 
         st.divider()
 
@@ -1295,17 +1321,22 @@ if "Clientes" in abas:
                     "Cidade": f"{c['cidade']}/{c['uf']}" if c["cidade"] else "—",
                     "Vezes que comprou": c["compras"],
                     "Total gasto": fmt_brl(c["total"]),
+                    "Estornado": fmt_brl(c["total_estornado"]) if c["estornos"] else "—",
                     "Última compra": _dia_br(c["ultima"]),
                     "Dias sem comprar": c["dias_sem_comprar"] if c["dias_sem_comprar"] is not None else "",
                 } for c in vistas]),
-                num=("Vezes que comprou", "Total gasto", "Dias sem comprar"),
+                num=("Vezes que comprou", "Total gasto", "Estornado", "Dias sem comprar"),
                 altura_max=420,
             )
 
             # Clicar na linha da tabela exigiria recarregar a página, e como o
             # login vive na sessão isso jogaria a Ana de volta para a senha.
             # Por isso o detalhe abre por seleção, sem sair da página.
-            rotulos = {f"{c['nome'] or c['email']} · {fmt_brl(c['total'])}": c for c in vistas}
+            rotulos = {
+                f"{c['nome'] or c['email']} · {fmt_brl(c['total'])}"
+                + (" · estornada" if c["estornos"] else ""): c
+                for c in vistas
+            }
             escolha = st.selectbox("Ver os dados de", ["Ninguém selecionada"] + list(rotulos),
                                    key="cli_detalhe")
             if escolha in rotulos:
