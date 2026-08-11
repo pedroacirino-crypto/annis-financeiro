@@ -3,17 +3,17 @@
 Painel de conciliação financeira sobre a API da Pagar.me. Responde três
 perguntas: quanto vendeu, quanto tem a receber e quando, e se tudo bate.
 
-Somente leitura — nenhuma rota de escrita da API é usada.
+Somente leitura, nenhuma rota de escrita da API é usada.
 
 ## Abas
 
-- **Vendas** — faturamento do período, ticket médio, aprovação, e a ponte
+- **Vendas**, faturamento do período, ticket médio, aprovação, e a ponte
   entre o que foi vendido e o que sobra depois de taxa e antecipação.
-- **A receber** — agenda por data de liquidação, com a venda que originou
+- **A receber**, agenda por data de liquidação, com a venda que originou
   cada parcela.
-- **Conciliação** — confere cada recebível contra o extrato.
-- **Extrato** — no formato de extrato bancário, com saldo corrido.
-- **Histórico** — série mensal de todo o período, fora do filtro de data.
+- **Conciliação**, confere cada recebível contra o extrato.
+- **Extrato**, no formato de extrato bancário, com saldo corrido.
+- **Histórico**, série mensal de todo o período, fora do filtro de data.
 
 ## Rodar local
 
@@ -35,7 +35,7 @@ streamlit run app.py
    APP_PASSWORD = "a_senha_de_acesso"
    ```
 
-A Streamlit Community Cloud só publica apps **públicos** — app privado exige
+A Streamlit Community Cloud só publica apps **públicos**, app privado exige
 plano pago com Snowflake. Por isso o painel exige senha própria e falha
 fechado: sem `APP_PASSWORD` configurada ele não abre. Aqui aparecem nome de
 cliente, faturamento e agenda de recebimentos; um esquecimento de
@@ -54,7 +54,7 @@ vem do cofre de secrets. Ambos estão no `.gitignore`.
   recebível é `amount - fee - anticipation_fee`; ignorar o terceiro campo
   infla o resultado.
 - **O extrato abre com saldo anterior.** A soma dos lançamentos da API não
-  fecha com o `available_amount` que ela mesma informa — a diferença entra
+  fecha com o `available_amount` que ela mesma informa, a diferença entra
   como saldo de abertura, para o saldo final bater com o da conta.
 - **Python fica em 3.12** (`runtime.txt`). Em 3.14 o Altair quebra no import:
   ele declara `TypedDict(..., closed=True)`, sintaxe que o `typing` dessa

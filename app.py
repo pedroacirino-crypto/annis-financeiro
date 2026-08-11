@@ -1,5 +1,5 @@
 """
-Dashboard de Conciliação Financeira — Pagar.me
+Dashboard de Conciliação Financeira sobre Pagar.me
 """
 
 import hmac
@@ -13,6 +13,7 @@ from datetime import date, timedelta, datetime
 
 import db
 import pagarme_client
+import shopify_client
 
 # Precisa ser o primeiro comando Streamlit do arquivo.
 st.set_page_config(
@@ -31,7 +32,7 @@ def sincronizar(ate: date, avisar=None):
 
     Vendas vêm por inteiro (a aba Histórico precisa de todos os meses e o
     volume é baixo); extrato e recebíveis vêm da janela recente. O corte de
-    dia é em horário de Brasília, igual ao Dash oficial — em UTC as vendas da
+    dia é em horário de Brasília, igual ao Dash oficial, em UTC as vendas da
     noite cairiam no dia seguinte.
     """
     tz_ini = (ate - timedelta(days=JANELA_SYNC)).isoformat() + "T00:00:00-03:00"
@@ -54,7 +55,7 @@ def sincronizar(ate: date, avisar=None):
 
     # Recebíveis também vêm por inteiro: a aba Histórico calcula o custo de
     # cada mês cruzando recebível com venda, e com janela curta os meses
-    # antigos apareceriam com custo zero — errado, não vazio.
+    # antigos apareceriam com custo zero, errado, não vazio.
     if avisar:
         avisar("Buscando recebíveis…")
     conta["recebiveis"] = db.upsert_payables(
@@ -62,6 +63,23 @@ def sincronizar(ate: date, avisar=None):
             created_since="2020-01-01T00:00:00-03:00", created_until=tz_fim
         )
     )
+    # Checkouts abandonados: só se a Shopify estiver configurada. Diferente
+    # de pedidos, esta consulta não sofre o corte de 60 dias.
+    if shopify_client.configurado():
+        if avisar:
+            avisar("Buscando checkouts abandonados…")
+        try:
+            conta["abandonados"] = db.upsert_abandonados(
+                shopify_client.listar_abandonados(limite=500)
+            )
+            if avisar:
+                avisar("Buscando pedidos da loja…")
+            conta["pedidos_loja"] = db.upsert_pedidos(
+                shopify_client.listar_pedidos(limite=500)
+            )
+        except Exception as e:
+            conta["abandonados"] = 0
+            conta["erro_shopify"] = str(e)
     return conta
 
 
@@ -76,6 +94,12 @@ MARROM_CLARO = "#7F6040"
 LINHA = "#E8DACB"
 CREME = "#FFF6F0"
 LOGO_URL = "https://annis.store/cdn/shop/files/Artboard_1_copy_6.png"
+
+# Cupom de recuperação, lido de Descontos no admin da loja. Só é aplicado a
+# quem abandonou sem tentar pagar, ver _card_recuperar. Se o código mudar ou
+# expirar, atualize aqui; não há endpoint que descubra sozinho qual usar.
+CUPOM_RECUPERACAO = "VOLTE5"
+DESCONTO_RECUPERACAO = "5% OFF"
 
 # O bloco abaixo não pode conter linhas em branco: no markdown do Streamlit
 # uma linha vazia encerra o bloco HTML e o resto do CSS vaza como texto na
@@ -93,7 +117,7 @@ html, body, .stApp {{ font-family: 'Poppins', sans-serif; }}
 /* `position: fixed` com left:0 e 100vw: por padrão o cabeçalho é absolute
    dentro da área de conteúdo, então em tela larga ele começa depois da barra
    lateral (left: 256px) e a tarja fica pela metade. Em tela estreita o
-   Streamlit sobrepõe a lateral e o problema não aparece — daí passar
+   Streamlit sobrepõe a lateral e o problema não aparece, daí passar
    despercebido. O z-index sobe acima do 999991 da lateral. */
 [data-testid="stHeader"] {{ background: {MARROM}; height: 3.4rem; border-bottom: 1px solid rgba(0,0,0,0.15); position: fixed; top: 0; left: 0; width: 100vw; z-index: 999992; }}
 section[data-testid="stSidebar"] > div {{ padding-top: 3.4rem; }}
@@ -101,7 +125,7 @@ section[data-testid="stSidebar"] > div {{ padding-top: 3.4rem; }}
 [data-testid="stHeader"] button, [data-testid="stHeader"] span, [data-testid="stHeader"] svg {{ color: #FFFFFF !important; fill: #FFFFFF !important; }}
 [data-testid="stSidebarCollapsedControl"] button svg, [data-testid="stSidebarCollapseButton"] svg {{ color: #FFFFFF !important; }}
 /* No celular a barra lateral nasce recolhida e o Streamlit põe o botão de
-   abrir no canto esquerdo do cabeçalho — em cima do logo. Empurra o logo
+   abrir no canto esquerdo do cabeçalho, em cima do logo. Empurra o logo
    para depois do botão. */
 @media (max-width: 768px) {{
   [data-testid="stHeader"]::before {{ left: 3.6rem; width: 88px; }}
@@ -129,6 +153,9 @@ hr {{ border-color: rgba(104,56,10,0.15); }}
 .tbl tbody tr:hover td {{ background:#FFFBF7; }}
 .tbl th.num, .tbl td.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
 .tbl td.neg {{ color:#8C2F0D; }}
+.btn-acao {{ display:block; text-align:center; padding:0.5rem 0.6rem; border:1px solid rgba(104,56,10,0.35); border-radius:2px; color:{MARROM}; text-decoration:none; font-family:'Poppins',sans-serif; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.1em; background:#FFFFFF; }}
+.btn-acao:hover {{ background:#FFF3EA; text-decoration:none; }}
+.btn-acao.off {{ opacity:0.4; pointer-events:none; border-style:dashed; }}
 /* Cartão em volta de cada gráfico: lado a lado e sem moldura, dois gráficos
    viram uma faixa só de barras e o olho não sabe onde um termina.
    O `>` é essencial: sem ele o seletor casa também os blocos externos que
@@ -156,8 +183,8 @@ def exigir_senha():
     """Porta de entrada do painel.
 
     Falha fechada de propósito: sem senha configurada o app não abre. A
-    Streamlit Community Cloud só publica apps públicos — qualquer um com o
-    link entraria — e aqui aparecem nome de cliente, faturamento e agenda de
+    Streamlit Community Cloud só publica apps públicos, qualquer um com o
+    link entraria, e aqui aparecem nome de cliente, faturamento e agenda de
     recebimentos. Deixar passar quando a senha falta seria transformar um
     esquecimento de configuração em vazamento.
     """
@@ -202,7 +229,7 @@ exigir_senha()
 # na API, e não faz sentido um visitante sem senha provocar isso.
 db.init_db()
 
-# Hospedado o disco é efêmero — o banco some a cada reinício e a tela abriria
+# Hospedado o disco é efêmero, o banco some a cada reinício e a tela abriria
 # vazia. Sem isto, alguém teria que clicar em "Atualizar dados" toda vez.
 if db.get_db_counts()["charges"] == 0:
     try:
@@ -218,14 +245,14 @@ def fmt_brl(centavos: int) -> str:
 
 
 def md(texto: str) -> str:
-    """Escapa o cifrão — em markdown o Streamlit trata `$...$` como LaTeX."""
+    """Escapa o cifrão, em markdown o Streamlit trata `$...$` como LaTeX."""
     return texto.replace("$", r"\$")
 
 
 def tabela(df, num=(), altura_max=None):
     """Tabela em HTML no padrão da marca.
 
-    O st.dataframe desenha num canvas com grade em volta de cada célula — não
+    O st.dataframe desenha num canvas com grade em volta de cada célula, não
     dá para estilizar por CSS e destoa do resto. Aqui sai HTML de verdade:
     sem linhas verticais, cabeçalho em caixa alta discreta, régua fina entre
     as linhas. `num` são as colunas alinhadas à direita (valores).
@@ -261,12 +288,12 @@ def tabela(df, num=(), altura_max=None):
 
 
 def fmt_pct(x: float, casas: int = 2) -> str:
-    """Percentual com vírgula decimal — o resto da tela é todo pt-BR."""
+    """Percentual com vírgula decimal, o resto da tela é todo pt-BR."""
     return f"{x:.{casas}f}%".replace(".", ",")
 
 
 def fmt_curto(centavos: int) -> str:
-    """Valor sem centavos e sem 'R$' — para caber como rótulo em cima da barra."""
+    """Valor sem centavos e sem 'R$', para caber como rótulo em cima da barra."""
     return f"{centavos / 100:,.0f}".replace(",", ".")
 
 
@@ -274,8 +301,8 @@ def barras(df, x, y, rotulo=None, rotulo_x="", rotulo_y="", tooltip=None, altura
     """Barras em hue único da marca, com o valor escrito em cima.
 
     Feito à mão em vez de st.bar_chart por três motivos: aquele liga pan/zoom
-    no hover, usa escala contínua no eixo x — o que deixa as barras com
-    larguras e espaçamentos irregulares quando há dias sem venda — e ignora a
+    no hover, usa escala contínua no eixo x, o que deixa as barras com
+    larguras e espaçamentos irregulares quando há dias sem venda, e ignora a
     paleta. Aqui o x é ordinal (uma faixa por categoria, todas iguais),
     sem interação de zoom.
 
@@ -334,6 +361,368 @@ def barras(df, x, y, rotulo=None, rotulo_x="", rotulo_y="", tooltip=None, altura
     return grafico
 
 
+def _so_digitos(t: str) -> str:
+    return "".join(c for c in (t or "") if c.isdigit())
+
+
+def _link_whatsapp(telefone: str, texto: str) -> str:
+    """Link do WhatsApp com a mensagem já escrita.
+
+    É link, não integração: abre a conversa preenchida e ela revisa antes de
+    enviar. Resolve o caso de uso sem API de WhatsApp, template aprovado nem
+    custo por mensagem.
+
+    Vai direto para web.whatsapp.com, sem passar por wa.me nem por
+    api.whatsapp.com, por dois motivos.
+
+    O wa.me reencoda a URL ao redirecionar (troca %20 por +) e nessa passagem
+    destrói caracteres de 4 bytes: o emoji 🤎 chegava como losango de
+    interrogação. O api.whatsapp.com preserva a URL, mas é só uma página
+    intermediária cujo botão "Continuar para o WhatsApp Web" abre uma aba nova
+    por conta própria, fora do nosso controle.
+    """
+    from urllib.parse import quote
+    num = _so_digitos(telefone)
+    if num and not num.startswith("55"):
+        num = "55" + num
+    return f"https://web.whatsapp.com/send?phone={num}&text={quote(texto)}"
+
+
+def _link_recuperacao(url: str) -> str:
+    """URL do carrinho em português, sem mexer em cupom.
+
+    Nada de `?discount=` aqui de propósito: 11 dos 25 carrinhos já vêm com
+    FRETEGRATIS, que em compra pequena vale mais que 5% (R$ 71 num pedido de
+    R$ 528). Como os dois não acumulam, forçar o cupom pioraria a oferta na
+    maioria dos casos. O código vai no texto da mensagem e a cliente escolhe.
+    """
+    if not url:
+        return url
+    return url if "locale=" in url else f"{url}{'&' if '?' in url else '?'}locale=pt-BR"
+
+
+def _nome_curto(titulo: str) -> str:
+    """'Top de Jacquard Azul - Giverny' vira 'Top Giverny'.
+
+    O título do catálogo é feito para busca; na mensagem ele soa robótico.
+    Tipo da peça + coleção é como a cliente chama o produto.
+    """
+    titulo = (titulo or "").strip()
+    if " - " in titulo:
+        tipo, colecao = titulo.split(" - ", 1)
+        return f"{tipo.split()[0]} {colecao.strip()}"
+    return titulo
+
+
+def _artigo(nome: str) -> str:
+    """Heurística de gênero: peça terminada em 'a' é feminina."""
+    primeira = (nome or "").split()[0] if nome else ""
+    return "uma" if primeira.lower().endswith("a") else "um"
+
+
+def _lista_produtos(itens_txt: str) -> tuple:
+    """Devolve (frase com artigos, coleção comum, pronome de retomada).
+
+    O pronome existe para a frase concordar: uma peça só vira "ela ficou
+    esperando"; duas viram "eles ficaram". Sem isso a mensagem sai errada
+    justamente no caso mais comum, que é carrinho de item único.
+    """
+    partes = []
+    for pedaco in (itens_txt or "").split(", "):
+        titulo = pedaco.split("x ", 1)[-1] if "x " in pedaco else pedaco
+        curto = _nome_curto(titulo)
+        if curto:
+            partes.append(curto)
+    if not partes:
+        return "as peças que separou", None, "elas ficaram"
+
+    colecoes = {p.split()[-1] for p in partes}
+    colecao = colecoes.pop() if len(colecoes) == 1 else None
+
+    com_artigo = [f"{_artigo(p)} {p}" for p in partes]
+    if len(com_artigo) == 1:
+        frase = com_artigo[0]
+        pronome = "ela ficou" if com_artigo[0].startswith("uma") else "ele ficou"
+    else:
+        frase = ", ".join(com_artigo[:-1]) + " e " + com_artigo[-1]
+        pronome = "eles ficaram"
+    return frase, colecao, pronome
+
+
+def _botoes_acao(a: dict, texto: str, rotulo_link: str = "Ver o carrinho",
+                 url_link: str = None):
+    """Botões de contato num componente isolado.
+
+    Precisa ser componente e não markdown porque o Streamlit injeta
+    rel="noopener noreferrer" em todo link de markdown. Aqui o HTML é nosso.
+
+    O clique abre uma aba nova a cada pessoa contatada. Não tem contorno: o
+    navegador só consegue mirar uma aba que ele mesmo abriu e nomeou, e o
+    Chrome apaga esse nome na primeira navegação para outro domínio, que é
+    justamente a ida para o whatsapp.com. Alvo nomeado, window.open e link de
+    markdown esbarram todos nisso.
+    """
+    import html as _h
+    import streamlit.components.v1 as componentes
+
+    def link(rotulo, href, ativo=True):
+        if not ativo:
+            return f'<span class="b off">{rotulo}</span>'
+        return f'<a class="b" href="{_h.escape(href, quote=True)}" target="_blank">{rotulo}</a>'
+
+    zap = link("Abrir no WhatsApp", _link_whatsapp(a.get("telefone", ""), texto),
+               bool(_so_digitos(a.get("telefone", ""))))
+    url = a.get("url_recuperacao", "") if url_link is None else url_link
+    carrinho = link(rotulo_link, url, bool(url))
+
+    componentes.html(
+        "<style>"
+        "*{box-sizing:border-box}"
+        "body{margin:0;font-family:Poppins,-apple-system,sans-serif;background:transparent}"
+        ".linha{display:flex;gap:0.6rem}"
+        ".b{flex:1;display:block;text-align:center;padding:0.55rem 0.3rem;"
+        "border:1px solid rgba(104,56,10,0.35);border-radius:2px;color:#68380A;"
+        "text-decoration:none;font-family:inherit;font-size:0.7rem;"
+        "text-transform:uppercase;letter-spacing:0.08em;background:#fff;"
+        "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}"
+        ".b:hover{background:#FFF3EA}"
+        ".b.off{opacity:0.4;border-style:dashed;cursor:default}"
+        "</style>"
+        f'<div class="linha">{zap}{carrinho}</div>',
+        height=46,
+    )
+
+
+def _card_recuperar(a: dict):
+    """Uma pessoa da fila, com o texto pronto e o link que restaura o carrinho."""
+    primeiro_nome = (a.get("cliente") or "").split()[0] if a.get("cliente") else ""
+    saudacao = f"Oi, {primeiro_nome}! Tudo bem? 🤎" if primeiro_nome else "Oi! Tudo bem? 🤎"
+    itens = a.get("itens") or ""
+    produtos, colecao, pronome = _lista_produtos(itens)
+    url = _link_recuperacao(a.get("url_recuperacao", ""))
+
+    if a["situacao"] == "Tentou e não passou":
+        # Três decisões aqui, todas para não repetir o que já deu errado:
+        # sem cupom, porque quem tentou pagar já aceitou o preço; sem
+        # especular o motivo da recusa, que soa como se a cliente não tivesse
+        # limite; e sem link para o mesmo checkout que acabou de falhar, a
+        # saída é conversar, não tentar de novo sozinha.
+        texto = (
+            f"{saudacao}\n\n"
+            f"Vimos que você tentou finalizar a compra de {produtos}, "
+            "mas o pagamento não foi concluído.\n\n"
+            "Seu carrinho continua guardadinho aqui com a gente. "
+            "Se quiser, posso te ajudar a fechar por outra forma de pagamento. "
+            "É só me responder por aqui que eu cuido do resto. 🤎\n\n"
+            "Com carinho,\nAnnis"
+        )
+        cor, rotulo = "#8C2F0D", "Tentou e não passou"
+    else:
+        fecho = (
+            f"Se ainda estiver apaixonada pelo {colecao}, é só finalizar por aqui:"
+            if colecao else "Se ainda quiser, é só finalizar por aqui:"
+        )
+        # O cupom vai no texto e nunca na URL, mesmo para quem já tinha
+        # FRETEGRATIS aplicado. Os dois não acumulam, então forçar um na URL
+        # tiraria o outro sem avisar. Escrito na mensagem, a oferta aparece
+        # inteira e a cliente escolhe qual usar.
+        texto = (
+            f"{saudacao}\n\n"
+            f"Vimos que você deixou {produtos} no seu carrinho, "
+            f"e {pronome} esperando por você!\n\n"
+            f"Preparamos um desconto especial: {DESCONTO_RECUPERACAO} para sua "
+            f"compra com o cupom {CUPOM_RECUPERACAO}.\n\n"
+            f"{fecho}\n{url}\n\n"
+            "Com carinho,\nAnnis"
+        )
+        cor, rotulo = MARROM, "Não tentou pagar"
+    if a["situacao"] == "Já comprou":
+        cor, rotulo = "#4A7C46", "Já comprou, não contatar"
+
+    # O tempo desde o abandono fica na etiqueta, junto da situação, porque é
+    # com ele que se decide se ainda vale mandar mensagem. Enterrado na linha
+    # de baixo, junto de "primeira compra", ele passava batido.
+    dias = ""
+    try:
+        d = (date.today() - date.fromisoformat((a["criado_em"] or "")[:10])).days
+        dias = "hoje" if d == 0 else ("ontem" if d == 1 else f"há {d} dias")
+    except Exception:
+        pass
+
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.markdown(
+                f"<div style='font-family:Poppins;font-size:0.6rem;letter-spacing:0.12em;"
+                f"text-transform:uppercase;color:{cor}'>{rotulo}"
+                + (f" · {dias}" if dias else "")
+                + "</div>"
+                f"<div style='font-family:Newsreader,serif;font-size:1.3rem;color:{MARROM};"
+                f"padding-top:0.1rem'>{a.get('cliente') or 'Sem cadastro'}</div>"
+                f"<div style='font-family:Poppins;font-size:0.8rem;color:#4A2C0F;"
+                f"padding-top:0.35rem'>{itens}</div>"
+                f"<div style='font-family:Poppins;font-size:0.75rem;color:{MARROM_CLARO};"
+                f"padding-top:0.25rem'>"
+                + ("Já comprou {}x antes".format(a["pedidos_anteriores"])
+                   if a.get("pedidos_anteriores") else "Primeira compra")
+                + (f" · {a['tentativas']} tentativa(s) de pagamento" if a.get("tentativas") else "")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+        with c2:
+            st.markdown(
+                f"<div style='text-align:right;font-family:Newsreader,serif;"
+                f"font-size:1.5rem;color:{MARROM}'>{fmt_brl(a['valor'])}</div>",
+                unsafe_allow_html=True,
+            )
+
+        if a["situacao"] != "Já comprou":
+            # A mensagem é editável antes de enviar: cada cliente tem contexto
+            # que o painel não sabe. O texto sugerido é ponto de partida, não
+            # roteiro, e os botões abaixo usam sempre o que estiver na caixa.
+            texto_final = st.text_area(
+                "Mensagem",
+                value=texto,
+                height=210,
+                key=f"msg_{a['id']}",
+                label_visibility="collapsed",
+            )
+
+            _botoes_acao(a, texto_final)
+            if texto_final != texto:
+                st.caption("Texto editado. Os botões acima já usam a sua versão.")
+
+
+def _dia_br(iso: str) -> str:
+    """'2025-12-30' vira '30/12/2025'."""
+    try:
+        return date.fromisoformat((iso or "")[:10]).strftime("%d/%m/%Y")
+    except Exception:
+        return iso or ""
+
+
+def _normalizar_busca(t: str) -> str:
+    """Busca que ignora acento e caixa: 'andrea' acha 'Andréa'."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", t or "")
+    return "".join(ch for ch in t if not unicodedata.combining(ch)).lower().strip()
+
+
+_METODOS = {
+    "credit_card": "Cartão de crédito",
+    "debit_card": "Cartão de débito",
+    "pix": "Pix",
+    "boleto": "Boleto",
+}
+
+
+def _detalhe_cliente(c: dict):
+    """Ficha da cliente: contato, o que já gastou e cada compra que fez."""
+    with st.container(border=True):
+        e1, e2, e3 = st.columns(3)
+        e1.metric("Já gastou", fmt_brl(c["total"]))
+        e2.metric("Vezes que comprou", c["compras"])
+        e3.metric("Sem comprar há", f"{c['dias_sem_comprar']} dias"
+                  if c["dias_sem_comprar"] is not None else "—")
+
+        fone = _so_digitos(c.get("telefone", ""))
+        bonito = (f"+{fone[:2]} ({fone[2:4]}) {fone[4:-4]}-{fone[-4:]}"
+                  if len(fone) >= 12 else fone)
+        cidade = f"{c['cidade']}/{c['uf']}" if c.get("cidade") else ""
+        st.markdown(
+            f"<div style='font-family:Poppins;font-size:0.8rem;color:#4A2C0F;"
+            f"padding-top:0.3rem'>{c.get('email') or 'sem e-mail'}"
+            + (f" · {bonito}" if fone else "")
+            + (f" · {cidade}" if cidade else "")
+            + f" · primeira compra em {_dia_br(c['primeira'])}</div>",
+            unsafe_allow_html=True,
+        )
+
+        linhas = []
+        faltando = 0
+        for p in sorted(c["pedidos"], key=lambda p: p["dia"], reverse=True):
+            if p.get("itens"):
+                pecas = p["itens"]
+            elif p.get("fora_do_alcance"):
+                # Não é pedido vazio: é pedido que a Shopify se recusa a
+                # devolver. Dizer "sem itens" seria mentira por omissão.
+                dias = (date.today() - date.fromisoformat(p["dia"])).days
+                pecas = f"Compra de {dias} dias atrás, a loja não devolve as peças"
+                faltando += 1
+            else:
+                pecas = "Sem peças registradas"
+            linhas.append({
+                "Data": _dia_br(p["dia"]),
+                "Pedido": p.get("numero") or "—",
+                "Peças": pecas,
+                "Valor": fmt_brl(p["valor"]),
+                "Pagamento": _METODOS.get(p["metodo"], p["metodo"] or "—")
+                + (f" em {p['parcelas']}x" if p["parcelas"] > 1 else ""),
+            })
+        tabela(pd.DataFrame(linhas), num=("Valor",))
+
+        if faltando:
+            st.caption(
+                f"{faltando} compra(s) sem detalhe. A Shopify só devolve pedidos "
+                f"a partir de {_dia_br(c.get('limite_loja', ''))} enquanto o app "
+                "não tiver o escopo `read_all_orders`."
+            )
+
+
+def _card_cliente(c: dict):
+    """Uma cliente que sumiu, com o convite pronto para voltar.
+
+    Sem cupom de propósito: quem já comprou pagou o preço cheio uma vez, e
+    abrir desconto para todo mundo que some ensina a base a esperar desconto.
+    """
+    primeiro_nome = (c.get("nome") or "").split()[0] if c.get("nome") else ""
+    saudacao = f"Oi, {primeiro_nome}! Tudo bem? 🤎" if primeiro_nome else "Oi! Tudo bem? 🤎"
+    texto = (
+        f"{saudacao}\n\n"
+        "Passando para dizer que a gente lembra de você por aqui. "
+        "Chegaram peças novas na loja e algumas têm a sua cara.\n\n"
+        "Se quiser dar uma olhada, é por aqui:\nhttps://annis.store\n\n"
+        "Com carinho,\nAnnis"
+    )
+
+    dias = c.get("dias_sem_comprar")
+    etiqueta = f"Sem comprar há {dias} dias" if dias else "Comprou hoje"
+
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.markdown(
+                f"<div style='font-family:Poppins;font-size:0.6rem;letter-spacing:0.12em;"
+                f"text-transform:uppercase;color:{MARROM_CLARO}'>{etiqueta}</div>"
+                f"<div style='font-family:Newsreader,serif;font-size:1.3rem;color:{MARROM};"
+                f"padding-top:0.1rem'>{c.get('nome') or 'Sem cadastro'}</div>"
+                f"<div style='font-family:Poppins;font-size:0.75rem;color:{MARROM_CLARO};"
+                f"padding-top:0.35rem'>"
+                + (f"{c['compras']} compras" if c["compras"] > 1 else "1 compra")
+                + f" · última em {_dia_br(c['ultima'])}"
+                + (f" · {c['cidade']}/{c['uf']}" if c.get("cidade") else "")
+                + (f" · primeira em {_dia_br(c['primeira'])}" if c["compras"] > 1 else "")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+        with c2:
+            st.markdown(
+                f"<div style='text-align:right;font-family:Newsreader,serif;"
+                f"font-size:1.5rem;color:{MARROM}'>{fmt_brl(c['total'])}</div>"
+                f"<div style='text-align:right;font-family:Poppins;font-size:0.65rem;"
+                f"color:{MARROM_CLARO}'>já gastou</div>",
+                unsafe_allow_html=True,
+            )
+
+        texto_final = st.text_area(
+            "Mensagem", value=texto, height=170,
+            key=f"cli_{c['email'] or c['nome']}", label_visibility="collapsed",
+        )
+        _botoes_acao(c, texto_final, "Abrir a loja", "https://annis.store")
+        if texto_final != texto:
+            st.caption("Texto editado. Os botões acima já usam a sua versão.")
+
+
 def para_brt(serie):
     """A API devolve tudo em UTC; o Dash exibe em horário de Brasília.
     Sem converter, operações da madrugada caem no dia anterior."""
@@ -357,7 +746,7 @@ def to_df_ops(rows):
 
 
 # Nos recebíveis a taxa de antecipação é cobrada à parte do `fee`; ignorá-la
-# infla o líquido. Nas operações de saldo isso não existe — elas já vêm
+# infla o líquido. Nas operações de saldo isso não existe, elas já vêm
 # líquidas de antecipação.
 def to_df_pay(rows):
     if not rows:
@@ -381,7 +770,7 @@ def to_df_pay(rows):
 
 # "available" primeiro: é o que corresponde ao extrato oficial do Dash.
 # "transferred"/"waiting_funds" são lançamentos contábeis (contrapartida de
-# transferências e recebíveis futuros) — úteis como visão avançada.
+# transferências e recebíveis futuros), úteis como visão avançada.
 STATUS_OP_LABEL = {
     "available": "Disponível (= extrato do Dash)",
     "waiting_funds": "Aguardando fundos",
@@ -434,7 +823,7 @@ METODO_PT = {
 }
 
 # Condições comerciais lidas de Configurações › Taxas e prazos no Dash em
-# 07/08/2026. Não existe endpoint de API para isso — se a taxa for
+# 07/08/2026. Não existe endpoint de API para isso, se a taxa for
 # renegociada, é preciso atualizar aqui à mão.
 TAXAS_CONTRATADAS = {
     "lidas_em": "07/08/2026",
@@ -554,16 +943,29 @@ with st.sidebar:
 
 # ── Abas principais ──────────────────────────────────────────────────────────
 
-aba = st.tabs(["Vendas", "A receber", "Conciliação", "Extrato", "Histórico"])
+# Duas naturezas de trabalho na mesma tela cansavam a leitura: Recuperar e
+# Clientes são fila de contato, as outras são conferência de dinheiro. Elas
+# não se misturam no dia da Ana, então também não se misturam no menu.
+TRABALHO = ["Recuperar", "Clientes"]
+FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico"]
+
+secao = st.segmented_control(
+    "Seção", ["Financeiro", "Trabalho"], default="Financeiro",
+    key="secao", label_visibility="collapsed",
+) or "Financeiro"
+
+nomes = FINANCEIRO if secao == "Financeiro" else TRABALHO
+abas = dict(zip(nomes, st.tabs(nomes)))
 
 date_from_str = str(data_ini)
 date_to_str = str(data_fim)
 recip = recipient_id or None
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 1 — VENDAS: quanto vendeu
+# ABA 1: VENDAS: quanto vendeu
 # ════════════════════════════════════════════════════════════════════════════
-with aba[0]:
+if "Vendas" in abas:
+  with abas["Vendas"]:
     st.header("Quanto vendeu")
 
     chg_rows = db.query_charges(date_from=date_from_str, date_to=date_to_str)
@@ -588,7 +990,7 @@ with aba[0]:
 
         if not perdidas.empty:
             valor_perdido = int(perdidas["amount"].sum())
-            with st.expander(f"Ver as {len(perdidas)} vendas que não entraram — {fmt_brl(valor_perdido)}"):
+            with st.expander(f"Ver as {len(perdidas)} vendas que não entraram ({fmt_brl(valor_perdido)})"):
                 pd_ = perdidas.copy()
                 pd_["valor"] = pd_["amount"].apply(fmt_brl)
                 pd_["quando"] = pd_["created_at"].dt.strftime("%d/%m/%Y %H:%M")
@@ -648,7 +1050,7 @@ with aba[0]:
                     f"antecipação {TAXAS_CONTRATADAS['antecipacao'][0]}, "
                     f"crédito recebido em {TAXAS_CONTRATADAS['prazo_credito']}. "
                     "A taxa de crédito varia por bandeira e parcelamento, então a paga "
-                    "fica naturalmente acima do piso contratado — a comparação serve "
+                    "fica naturalmente acima do piso contratado. A comparação serve "
                     "para achar desvio grande, não para bater exato. "
                     "Tarifas por transação (processamento, antifraude, transferência) "
                     "não entram nestes percentuais."
@@ -700,9 +1102,249 @@ with aba[0]:
             )
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 2 — A RECEBER: quanto e quando
+# ABA 2: RECUPERAR: fila de trabalho dos checkouts abandonados
 # ════════════════════════════════════════════════════════════════════════════
-with aba[1]:
+if "Recuperar" in abas:
+  with abas["Recuperar"]:
+    st.header("Quem quase comprou")
+    st.caption(
+        "Carrinhos abandonados na loja, cruzados com as cobranças da Pagar.me. "
+        "Não usa o filtro de período da barra lateral: é uma fila de trabalho, "
+        "não um relatório."
+    )
+
+    if not shopify_client.configurado():
+        st.info(
+            "Shopify não configurada. Defina `SHOPIFY_LOJA`, `SHOPIFY_CLIENT_ID` "
+            "e `SHOPIFY_CLIENT_SECRET` para esta aba funcionar."
+        )
+    else:
+        abandonos = db.abandonados_classificados(dias=180)
+        if not abandonos:
+            st.info("Nenhum carrinho abandonado. Use **Atualizar dados** na barra lateral.")
+        else:
+            # Os filtros vêm antes dos números porque os números obedecem a
+            # eles. Cartão que muda por causa de um controle que está abaixo
+            # dele é exatamente o que fazia a conta de cima não bater com a
+            # lista de baixo.
+            f1, f2 = st.columns([2, 1])
+            with f1:
+                st.caption("Mostrar")
+                m1, m2, m3 = st.columns(3)
+                marcadas = []
+                if m1.checkbox("Não tentou pagar", value=True, key="rec_lead"):
+                    marcadas.append("Não tentou pagar")
+                if m2.checkbox("Tentou e não passou", value=True, key="rec_falhou"):
+                    marcadas.append("Tentou e não passou")
+                if m3.checkbox("Já comprou", value=False, key="rec_comprou"):
+                    marcadas.append("Já comprou")
+            with f2:
+                dias_max = st.selectbox(
+                    "Abandonados nos últimos", [7, 15, 30, 60, 90, 180], index=2, key="rec_dias"
+                )
+
+            corte = (date.today() - timedelta(days=dias_max)).isoformat()
+            janela = [a for a in abandonos if (a["criado_em"] or "")[:10] >= corte]
+
+            leads = [a for a in janela if a["situacao"] == "Não tentou pagar"]
+            falhou = [a for a in janela if a["situacao"] == "Tentou e não passou"]
+            comprou = [a for a in janela if a["situacao"] == "Já comprou"]
+
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Não tentaram pagar", len(leads))
+            k1.caption(md(fmt_brl(sum(a["valor"] for a in leads))) + " em carrinho")
+            k2.metric("Tentaram e não passou", len(falhou))
+            k2.caption("O pagamento não foi concluído")
+            k3.metric("Já compraram", len(comprou))
+            k3.caption("Não contatar. A Shopify ainda lista")
+
+            if comprou and "Já comprou" not in marcadas:
+                st.success(
+                    f"{len(comprou)} pessoas deste período compraram depois de abandonar. "
+                    "Elas estão fora da lista para você não cobrar quem já pagou."
+                )
+
+            st.divider()
+
+            escolhidos = [a for a in janela if a["situacao"] in marcadas]
+            if not marcadas:
+                st.info("Marque ao menos uma situação em **Mostrar**.")
+            elif not escolhidos:
+                st.info("Ninguém nesse recorte.")
+            else:
+                st.caption(f"{len(escolhidos)} pessoas · mais recentes primeiro")
+                for a in escolhidos:
+                    _card_recuperar(a)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA 3: CLIENTES: quem já comprou, e quem não volta
+# ════════════════════════════════════════════════════════════════════════════
+if "Clientes" in abas:
+  with abas["Clientes"]:
+    st.header("Clientes")
+    st.caption(
+        "Todo mundo que já comprou, desde a primeira venda da loja. Não usa o "
+        "filtro de período da barra lateral: é a base de clientes, não um "
+        "relatório do mês."
+    )
+
+    cli = db.clientes()
+    if not cli:
+        st.info("Nenhuma compra paga ainda. Use **Atualizar dados** na barra lateral.")
+    else:
+        compras = sum(c["compras"] for c in cli)
+        total = sum(c["total"] for c in cli)
+        voltaram = [c for c in cli if c["compras"] > 1]
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Clientes", len(cli))
+        k1.caption(f"{compras} compras no total")
+        k2.metric("Gasto por cliente", fmt_brl(total // len(cli)))
+        k2.caption("Média do que cada uma já deixou")
+        k3.metric("Ticket médio", fmt_brl(total // compras))
+        k3.caption("Por compra")
+        k4.metric("Voltaram a comprar", len(voltaram))
+        k4.caption(fmt_pct(len(voltaram) / len(cli) * 100, 0) + " da base")
+
+        st.divider()
+
+        # A tabela vem antes da fila porque responde "quem são minhas
+        # clientes", que é a pergunta da aba. A fila embaixo é o trabalho.
+        st.subheader("A base inteira")
+
+        ORDENS = {
+            "Quanto gastou": lambda c: -c["total"],
+            "Vezes que comprou": lambda c: (-c["compras"], -c["total"]),
+            "Compra mais recente": lambda c: c["dias_sem_comprar"] or 0,
+            "Há mais tempo sem comprar": lambda c: -(c["dias_sem_comprar"] or 0),
+        }
+        t1, t2 = st.columns([1, 1])
+        with t1:
+            busca = st.text_input("Buscar pelo nome ou e-mail", key="cli_busca",
+                                  placeholder="comece a digitar")
+        with t2:
+            ordem = st.selectbox("Ordenar por", list(ORDENS), key="cli_ordem")
+
+        alvo = _normalizar_busca(busca)
+        vistas = [c for c in cli
+                  if not alvo
+                  or alvo in _normalizar_busca(c["nome"])
+                  or alvo in _normalizar_busca(c["email"])
+                  or alvo in _normalizar_busca(c["cidade"])]
+        vistas = sorted(vistas, key=ORDENS[ordem])
+
+        if not vistas:
+            st.info("Nenhuma cliente com esse nome.")
+        else:
+            st.caption(f"{len(vistas)} de {len(cli)} clientes")
+            tabela(
+                pd.DataFrame([{
+                    "Cliente": c["nome"] or c["email"],
+                    "Cidade": f"{c['cidade']}/{c['uf']}" if c["cidade"] else "—",
+                    "Vezes que comprou": c["compras"],
+                    "Total gasto": fmt_brl(c["total"]),
+                    "Última compra": _dia_br(c["ultima"]),
+                    "Dias sem comprar": c["dias_sem_comprar"] if c["dias_sem_comprar"] is not None else "",
+                } for c in vistas]),
+                num=("Vezes que comprou", "Total gasto", "Dias sem comprar"),
+                altura_max=420,
+            )
+
+            # Clicar na linha da tabela exigiria recarregar a página, e como o
+            # login vive na sessão isso jogaria a Ana de volta para a senha.
+            # Por isso o detalhe abre por seleção, sem sair da página.
+            rotulos = {f"{c['nome'] or c['email']} · {fmt_brl(c['total'])}": c for c in vistas}
+            escolha = st.selectbox("Ver os dados de", ["Ninguém selecionada"] + list(rotulos),
+                                   key="cli_detalhe")
+            if escolha in rotulos:
+                _detalhe_cliente(rotulos[escolha])
+
+        st.divider()
+
+        st.subheader("Quem não volta")
+        st.caption(
+            "Já comprou, gostou o bastante para pagar, e sumiu. Custa menos "
+            "trazer de volta do que achar cliente nova."
+        )
+        # Campos digitáveis em vez de lista fechada: o corte útil muda com a
+        # conversa (às vezes é 45 dias, às vezes R$ 1.500) e lista pronta
+        # obriga a escolher o número errado mais próximo.
+        q1, q2, q3 = st.columns(3)
+        with q1:
+            corte_dias = st.number_input(
+                "Sem comprar há mais de (dias)", min_value=0, max_value=3650,
+                value=90, step=15, key="cli_corte",
+            )
+        with q2:
+            piso_reais = st.number_input(
+                "Já gastou pelo menos (R$)", min_value=0, max_value=1_000_000,
+                value=0, step=100, key="cli_faixa",
+            )
+        with q3:
+            min_compras = st.number_input(
+                "Comprou pelo menos (vezes)", min_value=1, max_value=50,
+                value=1, step=1, key="cli_quantas",
+            )
+
+        q4, q5, q6 = st.columns(3)
+        with q4:
+            cidade_f = st.text_input(
+                "Cidade contém", key="cli_cidade", placeholder="são paulo, rio…"
+            )
+        with q5:
+            peca_f = st.text_input(
+                "Comprou peça que contém", key="cli_peca", placeholder="giverny, saia…"
+            )
+        with q6:
+            ordem_fila = st.selectbox(
+                "Chamar primeiro quem", ["Gastou mais", "Sumiu há mais tempo",
+                                         "Comprou mais vezes"],
+                key="cli_ordem_fila",
+            )
+
+        alvo_cidade = _normalizar_busca(cidade_f)
+        alvo_peca = _normalizar_busca(peca_f)
+        sumidas = [
+            c for c in cli
+            if (c["dias_sem_comprar"] or 0) > corte_dias
+            and c["total"] >= piso_reais * 100
+            and c["compras"] >= min_compras
+            and (not alvo_cidade or alvo_cidade in _normalizar_busca(c["cidade"]))
+            and (not alvo_peca or any(
+                alvo_peca in _normalizar_busca(p.get("itens", "")) for p in c["pedidos"]))
+        ]
+        sumidas = sorted(sumidas, key={
+            "Gastou mais": ORDENS["Quanto gastou"],
+            "Sumiu há mais tempo": ORDENS["Há mais tempo sem comprar"],
+            "Comprou mais vezes": ORDENS["Vezes que comprou"],
+        }[ordem_fila])
+
+        if alvo_cidade or alvo_peca:
+            st.caption(
+                "Cidade e peça só existem para quem comprou de "
+                + _dia_br(db.alcance_pedidos()) + " para cá, que é até onde a "
+                "Shopify devolve pedido. Quem comprou antes fica de fora deste "
+                "filtro mesmo que se encaixe."
+            )
+
+        if not sumidas:
+            st.info("Ninguém nesse recorte.")
+        else:
+            st.caption(
+                f"{len(sumidas)} pessoas · "
+                + md(fmt_brl(sum(c["total"] for c in sumidas)))
+                + " já gastos aqui"
+            )
+            for c in sumidas:
+                _card_cliente(c)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA 4: A RECEBER: quanto e quando
+# ════════════════════════════════════════════════════════════════════════════
+if "A receber" in abas:
+  with abas["A receber"]:
     st.header("Quanto tem a receber, e quando")
 
     try:
@@ -723,7 +1365,7 @@ with aba[1]:
 
     agenda = db.agenda_recebimentos(recip)
     if not agenda:
-        st.info("Nada a receber no momento — tudo já liquidado.")
+        st.info("Nada a receber no momento, tudo já liquidado.")
     else:
         df_ag = pd.DataFrame(agenda)
         df_ag["Data"] = pd.to_datetime(df_ag["dia"]).dt.strftime("%d/%m/%Y")
@@ -792,9 +1434,10 @@ with aba[1]:
                            file_name=f"a_receber_{date_to_str}.csv", mime="text/csv")
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 4 — EXTRATO: no formato de extrato bancário, com saldo corrido
+# ABA 6: EXTRATO: no formato de extrato bancário, com saldo corrido
 # ════════════════════════════════════════════════════════════════════════════
-with aba[3]:
+if "Extrato" in abas:
+  with abas["Extrato"]:
     st.header("Extrato")
 
     try:
@@ -817,7 +1460,7 @@ with aba[3]:
         # isso: o primeiro par de lançamentos da conta é uma entrada de
         # R$ 214,46 seguida de uma transferência de exatamente R$ 214,46 —
         # começando do zero, o saldo sobe e volta a zero, como tem que ser.
-        # A soma dos lançamentos não chega ao saldo que a Pagar.me informa — a
+        # A soma dos lançamentos não chega ao saldo que a Pagar.me informa, a
         # API é inconsistente aqui: os lançamentos disponíveis somam mais que o
         # available_amount. Essa diferença vira o saldo de ABERTURA, não uma
         # linha de ajuste no fim: extrato se lê como "saldo anterior →
@@ -851,7 +1494,7 @@ with aba[3]:
                 else:
                     base = "Antecipação recebida" if antecipada else "Liquidação"
                 if cliente:
-                    return f"{base} — {cliente}{parcela}{venda}"
+                    return f"{base} de {cliente}{parcela}{venda}"
                 bandeira = (r.get("bandeira") or "").title()
                 return f"{base}{' (' + bandeira + ')' if bandeira else ''}{parcela}"
             if tipo == "transfer":
@@ -860,7 +1503,7 @@ with aba[3]:
                 # A própria API descreve a tarifa; é melhor que um rótulo genérico.
                 return r.get("descricao_tarifa") or "Tarifa"
             if tipo == "refund":
-                return f"Estorno{' — ' + cliente if cliente else ''}"
+                return f"Estorno{' de ' + cliente if cliente else ''}"
             return TIPO_OP_PT.get(tipo, tipo or "Lançamento")
 
         for r in todos:
@@ -960,14 +1603,15 @@ with aba[3]:
                     num=("Bruto", "Taxa", "Líquido"), altura_max=360,
                 )
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 3 — CONCILIAÇÃO
+# ABA 5: CONCILIAÇÃO
 # ════════════════════════════════════════════════════════════════════════════
-with aba[2]:
+if "Conciliação" in abas:
+  with abas["Conciliação"]:
     st.header("Conciliação")
     st.caption(
         "Confere se cada recebível apareceu no extrato pelo valor certo. "
-        "O que é (venda ou estorno) fica separado de em que pé está — "
-        "misturar as duas coisas num rótulo só era o que confundia."
+        "O que é (venda ou estorno) fica separado de em que pé está. "
+        "Misturar as duas coisas num rótulo só era o que confundia."
     )
 
     pays_rows = db.query_payables(date_from=date_from_str, date_to=date_to_str, recipient_id=recip)
@@ -981,7 +1625,7 @@ with aba[2]:
     else:
         # Um recebível antecipado gera DOIS lançamentos no extrato: o original e
         # a reversão. Somar os dois dá zero e faria todo antecipado parecer
-        # divergente — por isso a comparação usa o lançamento original.
+        # divergente, por isso a comparação usa o lançamento original.
         ops_agg = (
             df_o.sort_values("created_at")
             .groupby("movement_object_id")
@@ -1002,13 +1646,13 @@ with aba[2]:
             merged["customer_name"] = None
 
         def situacao(row):
-            """Em que pé está — só isso, sem dizer o que o registro é.
+            """Em que pé está, só isso, sem dizer o que o registro é.
 
             O status cru da API não serve de rótulo: um estorno de venda
             cancelada volta como `prepaid`, que soa como dinheiro recebido
             adiantado quando na verdade é uma dívida sendo descontada antes do
             prazo original. Aqui `prepaid` e `waiting_funds` viram a mesma
-            coisa — pendente — e o sinal do valor diz o resto.
+            coisa, pendente, e o sinal do valor diz o resto.
             """
             if pd.isna(row.get("valor_extrato")):
                 return "Sem lançamento"
@@ -1038,7 +1682,7 @@ with aba[2]:
         if divergentes or sem_lanc:
             st.warning(
                 f"{divergentes} com valor divergente e {sem_lanc} sem lançamento "
-                "no extrato — são os que valem investigar."
+                "no extrato. São os que valem investigar."
             )
         else:
             st.success("Nenhuma divergência: todos os recebíveis do período batem com o extrato.")
@@ -1087,9 +1731,10 @@ with aba[2]:
             )
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA 5 — HISTÓRICO: visão gerencial de todos os meses
+# ABA 7: HISTÓRICO: visão gerencial de todos os meses
 # ════════════════════════════════════════════════════════════════════════════
-with aba[4]:
+if "Histórico" in abas:
+  with abas["Histórico"]:
     st.header("Histórico mês a mês")
     st.caption(
         "Todo o período disponível, independente do filtro da barra lateral."
@@ -1188,7 +1833,7 @@ with aba[4]:
         )
         st.caption(
             "Faturamento e ticket consideram apenas cobranças pagas. Custo é a "
-            "soma de taxa e antecipação dos recebíveis dessas vendas — meses "
+            "soma de taxa e antecipação dos recebíveis dessas vendas. Meses "
             "anteriores à primeira sincronização de recebíveis aparecem com "
             "custo zerado."
         )

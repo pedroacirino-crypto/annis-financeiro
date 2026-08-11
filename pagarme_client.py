@@ -67,7 +67,7 @@ def _get(endpoint: str, params: dict = None, max_retries: int = 3) -> dict:
             if attempt == max_retries - 1:
                 raise
             time.sleep(2 ** attempt)
-    # Todas as tentativas esgotadas em 429 — falhar explicitamente para não
+    # Todas as tentativas esgotadas em 429, falhar explicitamente para não
     # gravar sincronização parcial como se fosse completa.
     raise RuntimeError(
         f"Limite de requisições da Pagar.me excedido (429) após {max_retries} tentativas em {endpoint}."
@@ -109,7 +109,7 @@ def get_balance_operations(
 
     IMPORTANTE: a API usa status='available' como padrão quando o parâmetro
     é omitido. Por isso, quando status=None, buscamos os 3 status e
-    deduplicamos por id — senão o extrato ficaria incompleto.
+    deduplicamos por id, senão o extrato ficaria incompleto.
     """
     if status is None:
         seen = {}
@@ -199,7 +199,7 @@ def get_charges(
     """Busca cobranças (vendas) com paginação automática.
 
     É a fonte de 'quanto vendeu': o extrato mostra dinheiro que entrou na
-    conta, enquanto a cobrança é a venda em si — uma venda parcelada entra
+    conta, enquanto a cobrança é a venda em si, uma venda parcelada entra
     ao longo de meses, mas é uma venda só, na data em que foi feita.
     status: paid | pending | failed | canceled
     """

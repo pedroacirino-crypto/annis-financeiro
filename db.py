@@ -69,6 +69,35 @@ def init_db():
             raw_json TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS abandoned_checkouts (
+            id TEXT PRIMARY KEY,
+            nome TEXT,
+            criado_em TEXT,
+            url_recuperacao TEXT,
+            valor INTEGER,
+            cliente TEXT,
+            email TEXT,
+            telefone TEXT,
+            pedidos_anteriores INTEGER,
+            itens TEXT,
+            raw_json TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS shopify_orders (
+            id TEXT PRIMARY KEY,
+            numero TEXT,
+            criado_em TEXT,
+            email TEXT,
+            cliente TEXT,
+            cidade TEXT,
+            uf TEXT,
+            itens TEXT,
+            cupom TEXT,
+            total INTEGER,
+            situacao TEXT,
+            raw_json TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS sync_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             synced_at TEXT DEFAULT (datetime('now')),
@@ -88,7 +117,7 @@ def init_db():
     """)
 
     # `liquidation_arrangement_id` é o que liga uma liquidação de antecipação
-    # ao recebível que ela pagou — sem isso o extrato só consegue dizer
+    # ao recebível que ela pagou, sem isso o extrato só consegue dizer
     # "liquidação de recebíveis", sem apontar a venda.
     if "arranjo" not in cols:
         cur.execute("ALTER TABLE payables ADD COLUMN arranjo TEXT")
@@ -97,6 +126,25 @@ def init_db():
            SET arranjo = json_extract(raw_json, '$.liquidation_arrangement_id')
          WHERE arranjo IS NULL
     """)
+    # E-mail do cliente: chave de cruzamento com o checkout abandonado muito
+    # mais confiável que o nome, que varia com acento e grafia.
+    if "customer_email" not in {r[1] for r in cur.execute("PRAGMA table_info(charges)")}:
+        cur.execute("ALTER TABLE charges ADD COLUMN customer_email TEXT")
+    cur.execute("""
+        UPDATE charges
+           SET customer_email = lower(json_extract(raw_json, '$.customer.email'))
+         WHERE customer_email IS NULL
+    """)
+
+    # Cupom que a própria cliente digitou no checkout. Sem guardar isso, a
+    # mensagem de recuperação oferecia VOLTE5 para quem já tinha FRETEGRATIS,
+    # que costuma valer mais e não acumula, ou seja, oferecia uma piora.
+    cols_ab = {r[1] for r in cur.execute("PRAGMA table_info(abandoned_checkouts)")}
+    if "cupom" not in cols_ab:
+        cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN cupom TEXT")
+    if "desconto" not in cols_ab:
+        cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN desconto INTEGER DEFAULT 0")
+
     cols_op = {r[1] for r in cur.execute("PRAGMA table_info(balance_operations)")}
     if "arranjo" not in cols_op:
         cur.execute("ALTER TABLE balance_operations ADD COLUMN arranjo TEXT")
@@ -245,6 +293,294 @@ def upsert_charges(items: List[dict]) -> int:
     con.close()
     _log_sync("charges", count)
     return count
+
+
+def upsert_pedidos(itens: List[dict]) -> int:
+    """Grava pedidos da Shopify: é de onde saem peça, tamanho e cidade.
+
+    A Pagar.me não tem nada disso. Ela guarda o dinheiro, não o que foi
+    vendido nem para onde foi: das 78 cobranças pagas, zero têm endereço.
+    """
+    import json
+    con = _conn()
+    cur = con.cursor()
+    n = 0
+    for it in itens:
+        c = it.get("customer") or {}
+        end = it.get("shippingAddress") or {}
+        partes = []
+        for li in ((it.get("lineItems") or {}).get("nodes") or []):
+            opcoes = ((li.get("variant") or {}).get("selectedOptions")) or []
+            detalhe = "/".join(o.get("value", "") for o in opcoes if o.get("value"))
+            partes.append(
+                f"{li.get('quantity')}x {li.get('title')}"
+                + (f" ({detalhe})" if detalhe else "")
+            )
+        total = (it.get("totalPriceSet") or {}).get("shopMoney", {}).get("amount") or "0"
+        cur.execute("""
+            INSERT INTO shopify_orders
+                (id, numero, criado_em, email, cliente, cidade, uf, itens,
+                 cupom, total, situacao, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                numero=excluded.numero, criado_em=excluded.criado_em,
+                email=excluded.email, cliente=excluded.cliente,
+                cidade=excluded.cidade, uf=excluded.uf, itens=excluded.itens,
+                cupom=excluded.cupom, total=excluded.total,
+                situacao=excluded.situacao, raw_json=excluded.raw_json
+        """, (
+            it.get("id", ""),
+            it.get("name", ""),
+            it.get("createdAt", ""),
+            (c.get("email") or "").strip().lower(),
+            (c.get("displayName") or "").strip(),
+            (end.get("city") or "").strip(),
+            (end.get("provinceCode") or end.get("province") or "").strip(),
+            ", ".join(partes),
+            ", ".join(it.get("discountCodes") or []),
+            int(round(float(total) * 100)),
+            it.get("displayFinancialStatus", ""),
+            json.dumps(it, ensure_ascii=False),
+        ))
+        n += 1
+    con.commit()
+    con.close()
+    _log_sync("shopify_orders", n)
+    return n
+
+
+def alcance_pedidos() -> str:
+    """Data do pedido mais antigo que a Shopify deixa ver. '' se não houver."""
+    con = _conn()
+    r = con.execute("SELECT MIN(substr(criado_em,1,10)) FROM shopify_orders").fetchone()
+    con.close()
+    return (r[0] or "") if r else ""
+
+
+def upsert_abandonados(itens: List[dict]) -> int:
+    """Grava checkouts abandonados vindos da Shopify."""
+    import json
+    con = _conn()
+    cur = con.cursor()
+    n = 0
+    for it in itens:
+        c = it.get("customer") or {}
+        linhas = (it.get("lineItems") or {}).get("nodes") or []
+        itens_txt = ", ".join(
+            f"{li.get('quantity')}x {li.get('title')}" for li in linhas
+        )
+        valor = it.get("totalPriceSet", {}).get("shopMoney", {}).get("amount") or "0"
+        desconto = (it.get("totalDiscountSet") or {}).get("shopMoney", {}).get("amount") or "0"
+        cur.execute("""
+            INSERT INTO abandoned_checkouts
+                (id, nome, criado_em, url_recuperacao, valor, cliente, email,
+                 telefone, pedidos_anteriores, itens, cupom, desconto, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                nome=excluded.nome, criado_em=excluded.criado_em,
+                url_recuperacao=excluded.url_recuperacao, valor=excluded.valor,
+                cliente=excluded.cliente, email=excluded.email,
+                telefone=excluded.telefone,
+                pedidos_anteriores=excluded.pedidos_anteriores,
+                itens=excluded.itens, cupom=excluded.cupom,
+                desconto=excluded.desconto, raw_json=excluded.raw_json
+        """, (
+            it.get("id", ""),
+            it.get("name", ""),
+            it.get("createdAt", ""),
+            it.get("abandonedCheckoutUrl", ""),
+            int(round(float(valor) * 100)),
+            (c.get("displayName") or "").strip(),
+            (c.get("email") or "").strip().lower(),
+            # O telefone quase nunca está no cadastro do cliente; vem do
+            # endereço, que o checkout exige. Consultar só customer.phone dá a
+            # impressão errada de que a loja não coleta telefone.
+            ((c.get("phone") or "")
+             or ((it.get("shippingAddress") or {}).get("phone") or "")
+             or ((it.get("billingAddress") or {}).get("phone") or "")).strip(),
+            c.get("numberOfOrders") or 0,
+            itens_txt,
+            # A Shopify devolve lista; na prática vem no máximo um cupom.
+            ", ".join(it.get("discountCodes") or []),
+            int(round(float(desconto) * 100)),
+            json.dumps(it, ensure_ascii=False),
+        ))
+        n += 1
+    con.commit()
+    con.close()
+    _log_sync("abandoned_checkouts", n)
+    return n
+
+
+def _normalizar(texto: str) -> str:
+    """Nome comparável: sem acento, sem caixa, sem espaço duplicado.
+
+    'Andréa Fontoura' e 'Andrea Fontoura' são a mesma pessoa para a Pagar.me e
+    para a Shopify, mas não para uma comparação literal.
+    """
+    import unicodedata
+    if not texto:
+        return ""
+    t = unicodedata.normalize("NFKD", texto)
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return " ".join(t.lower().split())
+
+
+def clientes() -> "list[dict]":
+    """Uma linha por pessoa que já comprou, com quanto vale e há quanto sumiu.
+
+    Só entra cobrança paga: quem tentou e não passou não virou cliente, e
+    contá-la aqui inflaria a base com gente que a loja nunca atendeu.
+
+    A identidade é o e-mail, que está em todas as cobranças desta base. Nome
+    normalizado fica de reserva para cobrança sem e-mail. A ressalva honesta é
+    que a mesma pessoa com dois e-mails conta como duas, não há como saber.
+
+    O telefone sai do `raw_json`, onde a Pagar.me guarda o celular do
+    comprador. Não tem coluna própria porque é o único lugar que precisa dele.
+    """
+    import json
+
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    linhas = con.execute(
+        "SELECT customer_name, customer_email, amount, paid_amount, created_at, "
+        "code, payment_method, installments, raw_json "
+        "FROM charges WHERE status = 'paid' ORDER BY created_at"
+    ).fetchall()
+    con.close()
+
+    pessoas = {}
+    for r in linhas:
+        email = (r["customer_email"] or "").strip().lower()
+        chave = email or "nome:" + _normalizar(r["customer_name"])
+        if chave == "nome:":
+            continue  # cobrança sem e-mail e sem nome: não dá para atribuir
+
+        try:
+            bruto = json.loads(r["raw_json"] or "{}")
+        except Exception:
+            bruto = {}
+        fones = ((bruto.get("customer") or {}).get("phones") or {})
+        cel = fones.get("mobile_phone") or fones.get("home_phone") or {}
+        fone = f"{cel.get('country_code','')}{cel.get('area_code','')}{cel.get('number','')}"
+
+        p = pessoas.setdefault(chave, {
+            "nome": "", "email": email, "telefone": "",
+            "compras": 0, "total": 0, "primeira": "", "ultima": "", "pedidos": [],
+        })
+        # As cobranças vêm em ordem crescente, então o último nome e telefone
+        # que passam por aqui são os mais recentes que a cliente cadastrou.
+        p["nome"] = (r["customer_name"] or "").strip() or p["nome"]
+        p["telefone"] = fone or p["telefone"]
+        valor = r["paid_amount"] or r["amount"] or 0
+        dia = (r["created_at"] or "")[:10]
+        # Uma cobrança paga é um pedido: nesta base as 78 cobranças pagas
+        # correspondem a 78 pedidos distintos, então contar cobrança é contar
+        # vez que a cliente comprou, não peça nem parcela.
+        p["compras"] += 1
+        p["total"] += valor
+        p["primeira"] = p["primeira"] or dia
+        p["ultima"] = dia
+        p["pedidos"].append({
+            "dia": dia, "valor": valor, "codigo": r["code"] or "",
+            "metodo": r["payment_method"] or "", "parcelas": r["installments"] or 1,
+        })
+
+    # Peça, tamanho e cidade vêm da Shopify e só existem dentro da janela que
+    # ela devolve. O casamento é por dia e e-mail, porque a cobrança da
+    # Pagar.me e o pedido da Shopify não compartilham identificador.
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    pedidos_loja = con.execute(
+        "SELECT email, cidade, uf, itens, numero, criado_em FROM shopify_orders"
+    ).fetchall()
+    limite_loja = (con.execute(
+        "SELECT MIN(substr(criado_em,1,10)) FROM shopify_orders"
+    ).fetchone() or [""])[0] or ""
+    con.close()
+
+    por_dia = {}
+    for o in pedidos_loja:
+        por_dia[((o["email"] or "").lower(), (o["criado_em"] or "")[:10])] = o
+
+    for chave, p in pessoas.items():
+        p["cidade"] = ""
+        p["uf"] = ""
+        p["limite_loja"] = limite_loja
+        for ped in p["pedidos"]:
+            o = por_dia.get((p["email"], ped["dia"]))
+            ped["itens"] = o["itens"] if o else ""
+            ped["numero"] = o["numero"] if o else ""
+            # Distingue "a loja não devolve esse período" de "pedido sem itens".
+            ped["fora_do_alcance"] = bool(limite_loja) and ped["dia"] < limite_loja
+            if o and o["cidade"] and not p["cidade"]:
+                p["cidade"], p["uf"] = o["cidade"], o["uf"]
+
+    hoje = date.today()
+    for p in pessoas.values():
+        try:
+            p["dias_sem_comprar"] = (hoje - date.fromisoformat(p["ultima"])).days
+        except Exception:
+            p["dias_sem_comprar"] = None
+
+    return sorted(pessoas.values(), key=lambda p: -p["total"])
+
+
+def abandonados_classificados(dias: int = 90) -> "list[dict]":
+    """Checkouts abandonados cruzados com as cobranças da Pagar.me.
+
+    O ponto da tela: a lista crua da Shopify inclui gente que abandonou e
+    comprou depois. Mandar mensagem para quem já pagou constrange a cliente e
+    gasta o tempo de quem atende. Aqui cada abandono é classificado:
+
+      Já comprou           , existe cobrança paga da mesma pessoa em janela próxima
+      Tentou e não passou  , tentou pagar e não passou; precisa de ajuda, não de convencimento
+      Não tentou pagar     , não há cobrança nenhuma; é oportunidade de verdade
+
+    O cruzamento é por e-mail quando existe, com nome normalizado de reserva.
+    Na dúvida a linha continua aparecendo, marcada, esconder lead real custa
+    mais caro que mostrar um a mais.
+    """
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+
+    cur.execute("SELECT customer_name, customer_email, amount, status, created_at FROM charges")
+    cobrancas = [dict(r) for r in cur.fetchall()]
+    por_email, por_nome = {}, {}
+    for c in cobrancas:
+        if c["customer_email"]:
+            por_email.setdefault(c["customer_email"], []).append(c)
+        n = _normalizar(c["customer_name"])
+        if n:
+            por_nome.setdefault(n, []).append(c)
+
+    corte = (date.today() - timedelta(days=dias)).isoformat()
+    cur.execute(
+        "SELECT * FROM abandoned_checkouts WHERE substr(criado_em,1,10) >= ? "
+        "ORDER BY criado_em DESC", (corte,)
+    )
+    linhas = []
+    for r in cur.fetchall():
+        a = dict(r)
+        candidatas = por_email.get(a["email"]) or por_nome.get(_normalizar(a["cliente"])) or []
+        # Só cobranças a partir do dia do abandono: compra anterior é outra venda.
+        dia = (a["criado_em"] or "")[:10]
+        proximas = [c for c in candidatas if (c["created_at"] or "")[:10] >= dia]
+
+        if any(c["status"] == "paid" for c in proximas):
+            a["situacao"] = "Já comprou"
+        elif any(c["status"] in ("failed", "canceled") for c in proximas):
+            a["situacao"] = "Tentou e não passou"
+        else:
+            a["situacao"] = "Não tentou pagar"
+        a["por_email"] = bool(por_email.get(a["email"]))
+        a["tentativas"] = len(proximas)
+        linhas.append(a)
+
+    con.close()
+    return linhas
 
 
 def query_charges(
@@ -435,7 +771,7 @@ def resumo_mensal() -> "list[dict]":
 def a_receber_detalhado(recipient_id: str = None) -> "list[dict]":
     """Parcelas a receber com a venda que as originou.
 
-    O recebível sozinho não diz de quem é — o nome do cliente e o valor da
+    O recebível sozinho não diz de quem é, o nome do cliente e o valor da
     compra vivem em `charges`, alcançados pelo charge_id. LEFT JOIN porque
     a venda pode ser anterior à janela sincronizada.
     """
@@ -502,7 +838,7 @@ def custo_por_meio(date_from: str = None, date_to: str = None) -> "list[dict]":
 
 
 def agenda_recebimentos(recipient_id: str = None) -> "list[dict]":
-    """Quando cada valor cai na conta — agrupado por data de liquidação.
+    """Quando cada valor cai na conta, agrupado por data de liquidação.
 
     Inclui 'prepaid' porque os estornos de antecipação dão baixa nos
     recebíveis já antecipados que ainda constam como pendentes.
