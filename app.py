@@ -385,12 +385,23 @@ def _link_whatsapp(telefone: str, texto: str) -> str:
 
 
 def _links_whatsapp(telefone: str, texto: str) -> tuple:
-    """Devolve (link do navegador, link do aplicativo) para o mesmo contato.
+    """Devolve (computador, Android, iPhone) para o mesmo contato.
 
-    Celular não tem WhatsApp Web: no telefone o certo é `whatsapp://`, que
-    entrega a conversa direto para o aplicativo. No computador o aplicativo
-    pode não estar instalado, e aí o site é o que sempre funciona. Quem decide
-    é o navegador, na hora, olhando o próprio aparelho.
+    São três porque cada aparelho falha de um jeito diferente:
+
+    - **Computador**: `web.whatsapp.com`, que é o que sempre funciona mesmo
+      sem o aplicativo instalado.
+    - **Android**: `whatsapp://`, que entrega a conversa direto ao aplicativo
+      sem passar por página nenhuma. Testado no aparelho do Pedro.
+    - **iPhone**: `api.whatsapp.com`, porque o WebKit se recusa a abrir
+      aplicativo a partir de um iframe isolado, que é onde estes botões vivem.
+      No iPhone da Ana o `whatsapp://` não fez nada, enquanto no Android
+      funcionou. Como este é `https`, o bloqueio não se aplica.
+
+    O `wa.me` está fora dos três de propósito: ele reencoda a URL ao
+    redirecionar e destrói caracteres de 4 bytes, então o 🤎 chega como
+    losango de interrogação. Medido de novo em 11/08/2026, continua quebrando.
+    O `api.whatsapp.com` preserva o emoji intacto.
     """
     from urllib.parse import quote
     num = _so_digitos(telefone)
@@ -400,6 +411,7 @@ def _links_whatsapp(telefone: str, texto: str) -> tuple:
     return (
         f"https://web.whatsapp.com/send?phone={num}&text={texto_url}",
         f"whatsapp://send?phone={num}&text={texto_url}",
+        f"https://api.whatsapp.com/send?phone={num}&text={texto_url}",
     )
 
 
@@ -486,11 +498,12 @@ def _botoes_acao(a: dict, texto: str, rotulo_link: str = "Ver o carrinho",
         return f'<a class="b" href="{_h.escape(href, quote=True)}" target="_blank">{rotulo}</a>'
 
     tem_fone = bool(_so_digitos(a.get("telefone", "")))
-    web, app = _links_whatsapp(a.get("telefone", ""), texto)
+    web, app, ios = _links_whatsapp(a.get("telefone", ""), texto)
     if tem_fone:
         zap = (
             f'<a class="b zap" href="{_h.escape(web, quote=True)}" target="_blank" '
-            f'data-app="{_h.escape(app, quote=True)}">Abrir no WhatsApp</a>'
+            f'data-app="{_h.escape(app, quote=True)}" '
+            f'data-ios="{_h.escape(ios, quote=True)}">Abrir no WhatsApp</a>'
         )
     else:
         zap = '<span class="b off">Sem telefone</span>'
@@ -512,16 +525,20 @@ def _botoes_acao(a: dict, texto: str, rotulo_link: str = "Ver o carrinho",
         "</style>"
         f'<div class="linha">{zap}{carrinho}</div>'
         "<script>"
-        # No celular não existe WhatsApp Web, então o botão passa a apontar
-        # para o aplicativo. A troca é feita aqui, no navegador, porque o
-        # servidor não sabe de que aparelho veio a página.
+        # No celular não existe WhatsApp Web, então o botão troca de destino.
+        # A escolha é feita aqui, no navegador, porque o servidor não sabe de
+        # que aparelho veio a página.
         "(function(){var a=document.querySelector('a.zap');if(!a)return;"
         "var ua=navigator.userAgent||'';"
-        "var movel=/Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i.test(ua)"
+        "var ios=/iPad|iPhone|iPod/.test(ua)"
         "||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform));"
-        # Sem target no celular: aba nova para esquema de aplicativo costuma
-        # abrir uma página em branco antes de o sistema assumir o link.
-        "if(movel){a.href=a.dataset.app;a.removeAttribute('target')}})();"
+        "var android=/Android/i.test(ua);"
+        # iPhone fica no https e mantém a aba nova: o WebKit bloqueia abrir
+        # aplicativo direto de dentro de um iframe isolado como este.
+        "if(ios){a.href=a.dataset.ios}"
+        # Android abre o aplicativo direto. Sem target, porque aba nova para
+        # esquema de aplicativo deixa uma página em branco para trás.
+        "else if(android){a.href=a.dataset.app;a.removeAttribute('target')}})();"
         "</script>",
         height=46,
     )
