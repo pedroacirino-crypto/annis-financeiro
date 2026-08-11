@@ -381,11 +381,26 @@ def _link_whatsapp(telefone: str, texto: str) -> str:
     intermediária cujo botão "Continuar para o WhatsApp Web" abre uma aba nova
     por conta própria, fora do nosso controle.
     """
+    return _links_whatsapp(telefone, texto)[0]
+
+
+def _links_whatsapp(telefone: str, texto: str) -> tuple:
+    """Devolve (link do navegador, link do aplicativo) para o mesmo contato.
+
+    Celular não tem WhatsApp Web: no telefone o certo é `whatsapp://`, que
+    entrega a conversa direto para o aplicativo. No computador o aplicativo
+    pode não estar instalado, e aí o site é o que sempre funciona. Quem decide
+    é o navegador, na hora, olhando o próprio aparelho.
+    """
     from urllib.parse import quote
     num = _so_digitos(telefone)
     if num and not num.startswith("55"):
         num = "55" + num
-    return f"https://web.whatsapp.com/send?phone={num}&text={quote(texto)}"
+    texto_url = quote(texto)
+    return (
+        f"https://web.whatsapp.com/send?phone={num}&text={texto_url}",
+        f"whatsapp://send?phone={num}&text={texto_url}",
+    )
 
 
 def _link_recuperacao(url: str) -> str:
@@ -470,8 +485,15 @@ def _botoes_acao(a: dict, texto: str, rotulo_link: str = "Ver o carrinho",
             return f'<span class="b off">{rotulo}</span>'
         return f'<a class="b" href="{_h.escape(href, quote=True)}" target="_blank">{rotulo}</a>'
 
-    zap = link("Abrir no WhatsApp", _link_whatsapp(a.get("telefone", ""), texto),
-               bool(_so_digitos(a.get("telefone", ""))))
+    tem_fone = bool(_so_digitos(a.get("telefone", "")))
+    web, app = _links_whatsapp(a.get("telefone", ""), texto)
+    if tem_fone:
+        zap = (
+            f'<a class="b zap" href="{_h.escape(web, quote=True)}" target="_blank" '
+            f'data-app="{_h.escape(app, quote=True)}">Abrir no WhatsApp</a>'
+        )
+    else:
+        zap = '<span class="b off">Sem telefone</span>'
     url = a.get("url_recuperacao", "") if url_link is None else url_link
     carrinho = link(rotulo_link, url, bool(url))
 
@@ -488,7 +510,19 @@ def _botoes_acao(a: dict, texto: str, rotulo_link: str = "Ver o carrinho",
         ".b:hover{background:#FFF3EA}"
         ".b.off{opacity:0.4;border-style:dashed;cursor:default}"
         "</style>"
-        f'<div class="linha">{zap}{carrinho}</div>',
+        f'<div class="linha">{zap}{carrinho}</div>'
+        "<script>"
+        # No celular não existe WhatsApp Web, então o botão passa a apontar
+        # para o aplicativo. A troca é feita aqui, no navegador, porque o
+        # servidor não sabe de que aparelho veio a página.
+        "(function(){var a=document.querySelector('a.zap');if(!a)return;"
+        "var ua=navigator.userAgent||'';"
+        "var movel=/Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i.test(ua)"
+        "||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform));"
+        # Sem target no celular: aba nova para esquema de aplicativo costuma
+        # abrir uma página em branco antes de o sistema assumir o link.
+        "if(movel){a.href=a.dataset.app;a.removeAttribute('target')}})();"
+        "</script>",
         height=46,
     )
 
