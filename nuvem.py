@@ -26,6 +26,27 @@ TABELA = "pedidos_historicos"
 _motor = None
 
 
+def _carregar_env():
+    """Carrega o .env ao lado deste módulo, se existir.
+
+    Precisa carregar aqui também, e não só via `app.py`, para que scripts
+    soltos e testes enxerguem a conexão sem subir o Streamlit inteiro.
+    """
+    caminho = os.path.join(os.path.dirname(__file__), ".env")
+    if not os.path.exists(caminho):
+        return
+    with open(caminho) as f:
+        for linha in f:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            k, _, v = linha.partition("=")
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+_carregar_env()
+
+
 def _cfg(nome: str) -> Optional[str]:
     """Lê config do ambiente, do .env local ou do cofre do Streamlit."""
     v = os.environ.get(nome)
