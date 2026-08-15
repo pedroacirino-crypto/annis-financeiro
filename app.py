@@ -85,6 +85,14 @@ def sincronizar(ate: date, avisar=None):
                     conta["pedidos_guardados"] = nuvem.salvar_pedidos(
                         db.pedidos_para_nuvem()
                     )
+                    # Localizar no mapa faz parte de sincronizar, não é tarefa
+                    # de ninguém. O limite existe para um lote grande não
+                    # segurar a tela: o que sobrar entra na próxima.
+                    if avisar:
+                        avisar("Localizando as compras no mapa…")
+                    conta["localizados"] = nuvem.geocodificar_pendentes(
+                        limite=40
+                    )["achados"]
                 except Exception as e:
                     conta["erro_nuvem"] = str(e)[:200]
         except Exception as e:
@@ -819,8 +827,8 @@ def _mapa_das_compras():
     fora = len(pedidos) - len(com_local)
     if fora:
         st.caption(
-            f"{fora} pedido(s) sem localização, por CEP ausente ou não "
-            "encontrado. Use **Localizar no mapa** no bloco abaixo."
+            f"{fora} pedido(s) ainda sem localização. Eles entram na próxima "
+            "vez que você atualizar os dados."
         )
 
 
@@ -1378,48 +1386,6 @@ if "Clientes" in abas:
             )
 
         _mapa_das_compras()
-
-        # O histórico anterior ao alcance da Shopify mora fora do Streamlit,
-        # porque o disco daqui é apagado a cada reinício. Este bloco é a única
-        # porta de entrada dele, e some da tela quando não há banco ligado.
-        if nuvem.configurado():
-            with st.expander("Histórico antigo de pedidos", expanded=False):
-                info = nuvem.resumo()
-                if not info["conectado"]:
-                    st.error(
-                        "Banco configurado mas fora de alcance. "
-                        + md(info.get("erro", "")[:200])
-                    )
-                else:
-                    st.caption(
-                        f"{info['pedidos']} pedidos guardados"
-                        + (f", o mais antigo de {_dia_br(info['desde'])}"
-                           if info["desde"] else "")
-                        + ". Este é o histórico que a Shopify não devolve mais."
-                    )
-                arquivo = st.file_uploader(
-                    "Exportação de pedidos da Shopify, em CSV",
-                    type=["csv"], key="csv_pedidos",
-                )
-                b1, b2 = st.columns(2)
-                if arquivo is not None and b1.button("Importar", key="btn_importar"):
-                    try:
-                        pedidos = nuvem.ler_csv_shopify(arquivo)
-                        gravados = nuvem.salvar_pedidos(pedidos)
-                        st.success(
-                            f"{gravados} pedidos importados. Reimportar o mesmo "
-                            "arquivo não duplica nada, o número do pedido é a chave."
-                        )
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Não deu para importar: {e}")
-                if b2.button("Localizar no mapa", key="btn_geo"):
-                    with st.status("Convertendo CEP em coordenada…") as s:
-                        r = nuvem.geocodificar_pendentes(avisar=s.update)
-                        s.update(label=f"{r['achados']} localizados, "
-                                       f"{r['falhos']} sem coordenada",
-                                 state="complete")
-                    st.rerun()
 
         st.divider()
 
