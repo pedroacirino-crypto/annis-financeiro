@@ -684,6 +684,8 @@ _METODOS = {
 
 def _detalhe_cliente(c: dict):
     """Ficha da cliente: contato, o que já gastou e cada compra que fez."""
+    import html as _h
+
     with st.container(border=True):
         e1, e2, e3 = st.columns(3)
         e1.metric("Já gastou", fmt_brl(c["total"]))
@@ -706,38 +708,48 @@ def _detalhe_cliente(c: dict):
             unsafe_allow_html=True,
         )
 
-        linhas = []
+        # Cada compra é um bloco, e não linha de tabela. Numa tabela a lista de
+        # peças vira uma linha só, empurra rolagem lateral e some da vista.
         faltando = 0
         for p in sorted(c["pedidos"], key=lambda p: p["dia"], reverse=True):
-            if p.get("itens"):
-                pecas = p["itens"]
-            elif p.get("fora_do_alcance"):
-                # Não é pedido vazio: é pedido que a Shopify se recusa a
-                # devolver. Dizer "sem itens" seria mentira por omissão.
-                dias = (date.today() - date.fromisoformat(p["dia"])).days
-                pecas = f"Compra de {dias} dias atrás, a loja não devolve as peças"
-                faltando += 1
-            else:
-                pecas = "Sem peças registradas"
-            pagamento = (_METODOS.get(p["metodo"], p["metodo"] or "—")
-                         + (f" em {p['parcelas']}x" if p["parcelas"] > 1 else ""))
+            cabecalho = " · ".join(x for x in [
+                _dia_br(p["dia"]),
+                p.get("numero") or "",
+                fmt_brl(p["valor"]),
+                (_METODOS.get(p["metodo"], p["metodo"] or "")
+                 + (f" em {p['parcelas']}x" if p["parcelas"] > 1 else "")),
+            ] if x)
             if p.get("estornada"):
-                pagamento += (" · estornada em " + _dia_br(p["estornada_em"])
+                cabecalho += (" · estornada em " + _dia_br(p["estornada_em"])
                               if p.get("estornada_em") else " · estornada")
-            linhas.append({
-                "Data": _dia_br(p["dia"]),
-                "Pedido": p.get("numero") or "—",
-                "Peças": pecas,
-                "Valor": fmt_brl(p["valor"]),
-                "Pagamento": pagamento,
-            })
-        tabela(pd.DataFrame(linhas), num=("Valor",))
+
+            if p.get("itens"):
+                pecas = [f"<div style='padding-left:0.9rem'>{_h.escape(i.strip())}</div>"
+                         for i in p["itens"].split(", ") if i.strip()]
+            elif p.get("fora_do_alcance"):
+                # Não é pedido vazio: é pedido que a loja não devolve mais.
+                # Dizer "sem itens" seria mentira por omissão.
+                dias_atras = (date.today() - date.fromisoformat(p["dia"])).days
+                faltando += 1
+                pecas = [f"<div style='padding-left:0.9rem;font-style:italic'>"
+                         f"Compra de {dias_atras} dias atrás, sem detalhe guardado</div>"]
+            else:
+                pecas = ["<div style='padding-left:0.9rem;font-style:italic'>"
+                         "Sem peças registradas</div>"]
+
+            st.markdown(
+                f"<div style='padding-top:0.7rem'>"
+                f"<div style='font-family:Poppins;font-size:0.72rem;"
+                f"letter-spacing:0.04em;color:{MARROM_CLARO}'>{cabecalho}</div>"
+                f"<div style='font-family:Poppins;font-size:0.85rem;color:#4A2C0F;"
+                f"padding-top:0.2rem;line-height:1.6'>{''.join(pecas)}</div></div>",
+                unsafe_allow_html=True,
+            )
 
         if faltando:
             st.caption(
-                f"{faltando} compra(s) sem detalhe. A Shopify só devolve pedidos "
-                f"a partir de {_dia_br(c.get('limite_loja', ''))} enquanto o app "
-                "não tiver o escopo `read_all_orders`."
+                f"{faltando} compra(s) sem detalhe, anteriores ao que a loja "
+                "guardou. Importar a exportação de pedidos preenche."
             )
 
 
@@ -1358,19 +1370,31 @@ if "Clientes" in abas:
         if not vistas:
             st.info("Nenhuma cliente com esse nome.")
         else:
-            st.caption(f"{len(vistas)} de {len(cli)} clientes")
+            # Mostra um punhado e deixa a busca fazer o trabalho. A lista
+            # inteira numa caixa de rolagem não ajuda ninguém a achar alguém:
+            # é longa demais para ler e curta demais para navegar.
+            PEDACO = 12
+            todas = st.toggle(
+                f"Ver as {len(vistas)} de uma vez", value=False, key="cli_ver_todas",
+            ) if len(vistas) > PEDACO else True
+            mostradas = vistas if todas else vistas[:PEDACO]
+
+            st.caption(
+                f"{len(vistas)} de {len(cli)} clientes"
+                + ("" if todas else f", mostrando as {len(mostradas)} primeiras")
+            )
             tabela(
                 pd.DataFrame([{
                     "Cliente": c["nome"] or c["email"],
                     "Cidade": f"{c['cidade']}/{c['uf']}" if c["cidade"] else "—",
-                    "Vezes que comprou": c["compras"],
+                    "Compras": c["compras"],
                     "Total gasto": fmt_brl(c["total"]),
                     "Estornado": fmt_brl(c["total_estornado"]) if c["estornos"] else "—",
                     "Última compra": _dia_br(c["ultima"]),
                     "Dias sem comprar": c["dias_sem_comprar"] if c["dias_sem_comprar"] is not None else "",
-                } for c in vistas]),
-                num=("Vezes que comprou", "Total gasto", "Estornado", "Dias sem comprar"),
-                altura_max=420,
+                } for c in mostradas]),
+                num=("Compras", "Total gasto", "Estornado", "Dias sem comprar"),
+                altura_max=520 if todas else None,
             )
 
             # Clicar na linha da tabela exigiria recarregar a página, e como o
