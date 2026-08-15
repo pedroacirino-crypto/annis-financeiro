@@ -2,3 +2,6 @@ streamlit>=1.40,<2
 requests>=2.32,<3
 pandas>=2.2,<3
 altair>=5.4,<6
+# Histórico que precisa sobreviver ao reinício do Streamlit, num Postgres.
+sqlalchemy>=2.0,<3
+psycopg2-binary>=2.9,<3

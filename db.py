@@ -519,6 +519,19 @@ def clientes() -> "list[dict]":
     for o in pedidos_loja:
         por_dia[((o["email"] or "").lower(), (o["criado_em"] or "")[:10])] = o
 
+    # O histórico guardado fora do Streamlit entra por baixo: se a Shopify já
+    # devolveu o pedido pela API, aquele vale, porque é o mais fresco. O da
+    # nuvem cobre justamente o que a API não alcança mais.
+    try:
+        import nuvem
+        for o in nuvem.ler_pedidos():
+            chave_dia = ((o["email"] or "").lower(), (o["criado_em"] or "")[:10])
+            por_dia.setdefault(chave_dia, o)
+            if o["criado_em"] and (not limite_loja or o["criado_em"][:10] < limite_loja):
+                limite_loja = o["criado_em"][:10]
+    except Exception:
+        pass
+
     for chave, p in pessoas.items():
         p["cidade"] = ""
         p["uf"] = ""

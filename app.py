@@ -12,6 +12,7 @@ import json
 from datetime import date, timedelta, datetime
 
 import db
+import nuvem
 import pagarme_client
 import shopify_client
 
@@ -1283,6 +1284,40 @@ if "Clientes" in abas:
                 + " que voltaram. Elas aparecem na lista marcadas, e não entram "
                 "no faturamento nem no ticket médio."
             )
+
+        # O histórico anterior ao alcance da Shopify mora fora do Streamlit,
+        # porque o disco daqui é apagado a cada reinício. Este bloco é a única
+        # porta de entrada dele, e some da tela quando não há banco ligado.
+        if nuvem.configurado():
+            with st.expander("Histórico antigo de pedidos", expanded=False):
+                info = nuvem.resumo()
+                if not info["conectado"]:
+                    st.error(
+                        "Banco configurado mas fora de alcance. "
+                        + md(info.get("erro", "")[:200])
+                    )
+                else:
+                    st.caption(
+                        f"{info['pedidos']} pedidos guardados"
+                        + (f", o mais antigo de {_dia_br(info['desde'])}"
+                           if info["desde"] else "")
+                        + ". Este é o histórico que a Shopify não devolve mais."
+                    )
+                arquivo = st.file_uploader(
+                    "Exportação de pedidos da Shopify, em CSV",
+                    type=["csv"], key="csv_pedidos",
+                )
+                if arquivo is not None and st.button("Importar", key="btn_importar"):
+                    try:
+                        pedidos = nuvem.ler_csv_shopify(arquivo)
+                        gravados = nuvem.salvar_pedidos(pedidos)
+                        st.success(
+                            f"{gravados} pedidos importados. Reimportar o mesmo "
+                            "arquivo não duplica nada, o número do pedido é a chave."
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Não deu para importar: {e}")
 
         st.divider()
 
