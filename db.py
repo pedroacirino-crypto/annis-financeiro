@@ -349,6 +349,18 @@ def upsert_pedidos(itens: List[dict]) -> int:
     return n
 
 
+def pedidos_para_nuvem() -> "list[dict]":
+    """Pedidos locais no formato que o banco da nuvem espera."""
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    linhas = con.execute(
+        "SELECT numero, criado_em, email, cliente, cidade, uf, itens, cupom,"
+        " total, situacao FROM shopify_orders WHERE numero != ''"
+    ).fetchall()
+    con.close()
+    return [dict(l, origem="shopify") for l in linhas]
+
+
 def alcance_pedidos() -> str:
     """Data do pedido mais antigo que a Shopify deixa ver. '' se não houver."""
     con = _conn()

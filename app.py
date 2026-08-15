@@ -75,9 +75,18 @@ def sincronizar(ate: date, avisar=None):
             )
             if avisar:
                 avisar("Buscando pedidos da loja…")
-            conta["pedidos_loja"] = db.upsert_pedidos(
-                shopify_client.listar_pedidos(limite=500)
-            )
+            pedidos_loja = shopify_client.listar_pedidos(limite=500)
+            conta["pedidos_loja"] = db.upsert_pedidos(pedidos_loja)
+            # Copia para o banco que sobrevive ao reinício. Assim o histórico
+            # deixa de depender da janela de 60 dias da Shopify: o que passou
+            # por aqui uma vez fica guardado para sempre, sem CSV nenhum.
+            if nuvem.configurado():
+                try:
+                    conta["pedidos_guardados"] = nuvem.salvar_pedidos(
+                        db.pedidos_para_nuvem()
+                    )
+                except Exception as e:
+                    conta["erro_nuvem"] = str(e)[:200]
         except Exception as e:
             conta["abandonados"] = 0
             conta["erro_shopify"] = str(e)
