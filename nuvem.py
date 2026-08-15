@@ -256,10 +256,34 @@ def ler_csv_shopify(caminho_ou_arquivo) -> List[dict]:
     saida = []
     for p in pedidos.values():
         p["itens"] = ", ".join(p.pop("pecas"))
-        p["criado_em"] = (p["criado_em"] or "")[:19].replace(" ", "T")
+        p["criado_em"] = _para_utc(p["criado_em"])
         p["email"] = p["email"].lower()
         saida.append(p)
     return sorted(saida, key=lambda p: p["criado_em"])
+
+
+def _para_utc(quando: str) -> str:
+    """Converte a data da exportação para UTC.
+
+    A exportação vem em horário local com o fuso junto, tipo
+    `2026-07-18 19:36:23 -0300`, enquanto a Pagar.me e a própria API da Shopify
+    guardam UTC. Sem converter, toda compra feita depois das 21h caía no dia
+    anterior na hora de casar os dois lados, e a cliente ficava sem peça e sem
+    cidade. Eram 9 dos 11 casos que sobraram na primeira importação.
+    """
+    from datetime import datetime, timezone
+    texto = (quando or "").strip()
+    if not texto:
+        return ""
+    for formato in ("%Y-%m-%d %H:%M:%S %z", "%Y-%m-%d %H:%M:%S%z"):
+        try:
+            return (datetime.strptime(texto, formato)
+                    .astimezone(timezone.utc)
+                    .strftime("%Y-%m-%dT%H:%M:%S"))
+        except ValueError:
+            continue
+    # Sem fuso declarado não dá para converter; fica como veio.
+    return texto[:19].replace(" ", "T")
 
 
 def resumo() -> dict:

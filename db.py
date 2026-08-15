@@ -544,12 +544,40 @@ def clientes() -> "list[dict]":
     except Exception:
         pass
 
+    # Índice por e-mail para o casamento tolerante a um dia de diferença.
+    por_email = {}
+    for (email_o, dia_o), o in por_dia.items():
+        por_email.setdefault(email_o, []).append((dia_o, o))
+
+    def achar_pedido(email, dia):
+        """Pedido da loja correspondente à cobrança, aceitando um dia de folga.
+
+        Cobrança e pedido nem sempre caem no mesmo dia: boleto e Pix pagos no
+        dia seguinte, e tentativas de cartão que só passam de madrugada. O
+        casamento exato deixava essas pessoas sem peça e sem cidade.
+        """
+        exato = por_dia.get((email, dia))
+        if exato:
+            return exato
+        from datetime import date as _date
+        try:
+            alvo = _date.fromisoformat(dia)
+        except ValueError:
+            return None
+        for dia_o, o in por_email.get(email, []):
+            try:
+                if abs((_date.fromisoformat(dia_o) - alvo).days) <= 1:
+                    return o
+            except ValueError:
+                continue
+        return None
+
     for chave, p in pessoas.items():
         p["cidade"] = ""
         p["uf"] = ""
         p["limite_loja"] = limite_loja
         for ped in p["pedidos"]:
-            o = por_dia.get((p["email"], ped["dia"]))
+            o = achar_pedido(p["email"], ped["dia"])
             ped["itens"] = o["itens"] if o else ""
             ped["numero"] = o["numero"] if o else ""
             # Distingue "a loja não devolve esse período" de "pedido sem itens".
