@@ -95,6 +95,7 @@ def init_db():
             cupom TEXT,
             total INTEGER,
             situacao TEXT,
+            cep TEXT,
             raw_json TEXT
         );
 
@@ -144,6 +145,9 @@ def init_db():
         cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN cupom TEXT")
     if "desconto" not in cols_ab:
         cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN desconto INTEGER DEFAULT 0")
+
+    if "cep" not in {r[1] for r in cur.execute("PRAGMA table_info(shopify_orders)")}:
+        cur.execute("ALTER TABLE shopify_orders ADD COLUMN cep TEXT")
 
     cols_op = {r[1] for r in cur.execute("PRAGMA table_info(balance_operations)")}
     if "arranjo" not in cols_op:
@@ -320,14 +324,15 @@ def upsert_pedidos(itens: List[dict]) -> int:
         cur.execute("""
             INSERT INTO shopify_orders
                 (id, numero, criado_em, email, cliente, cidade, uf, itens,
-                 cupom, total, situacao, raw_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 cupom, total, situacao, cep, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 numero=excluded.numero, criado_em=excluded.criado_em,
                 email=excluded.email, cliente=excluded.cliente,
                 cidade=excluded.cidade, uf=excluded.uf, itens=excluded.itens,
                 cupom=excluded.cupom, total=excluded.total,
-                situacao=excluded.situacao, raw_json=excluded.raw_json
+                situacao=excluded.situacao, cep=excluded.cep,
+                raw_json=excluded.raw_json
         """, (
             it.get("id", ""),
             it.get("name", ""),
@@ -340,6 +345,7 @@ def upsert_pedidos(itens: List[dict]) -> int:
             ", ".join(it.get("discountCodes") or []),
             int(round(float(total) * 100)),
             it.get("displayFinancialStatus", ""),
+            (end.get("zip") or "").strip(),
             json.dumps(it, ensure_ascii=False),
         ))
         n += 1
@@ -355,7 +361,7 @@ def pedidos_para_nuvem() -> "list[dict]":
     con.row_factory = sqlite3.Row
     linhas = con.execute(
         "SELECT numero, criado_em, email, cliente, cidade, uf, itens, cupom,"
-        " total, situacao FROM shopify_orders WHERE numero != ''"
+        " total, situacao, cep FROM shopify_orders WHERE numero != ''"
     ).fetchall()
     con.close()
     return [dict(l, origem="shopify") for l in linhas]

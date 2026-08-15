@@ -753,6 +753,77 @@ def _detalhe_cliente(c: dict):
             )
 
 
+def _mapa_das_compras():
+    """De onde vêm as compras: mapa por cidade e ranking por estado.
+
+    A coordenada sai do CEP da entrega, convertida uma vez e guardada. Se
+    nenhum pedido tiver coordenada ainda, o bloco não aparece, em vez de
+    mostrar um mapa vazio do oceano.
+    """
+    try:
+        pedidos = nuvem.ler_pedidos()
+    except Exception:
+        return
+    com_local = [p for p in pedidos if p.get("lat") and p.get("lon")]
+    if not com_local:
+        return
+
+    st.divider()
+    st.subheader("De onde vêm as compras")
+
+    por_cidade = {}
+    for p in com_local:
+        chave = (round(p["lat"], 4), round(p["lon"], 4))
+        d = por_cidade.setdefault(chave, {
+            "lat": p["lat"], "lon": p["lon"],
+            "cidade": p.get("cidade") or "", "uf": p.get("uf") or "",
+            "pedidos": 0, "total": 0,
+        })
+        d["pedidos"] += 1
+        d["total"] += p.get("total") or 0
+
+    mapa = pd.DataFrame(por_cidade.values())
+    # O raio cresce com o valor, com piso para o ponto pequeno não sumir.
+    maior = max(mapa["total"]) or 1
+    mapa["raio"] = 12000 + (mapa["total"] / maior) * 45000
+
+    por_uf = {}
+    for p in com_local:
+        uf = (p.get("uf") or "?").upper()
+        d = por_uf.setdefault(uf, {"UF": uf, "Pedidos": 0, "bruto": 0})
+        d["Pedidos"] += 1
+        d["bruto"] += p.get("total") or 0
+
+    ranking = sorted(por_uf.values(), key=lambda d: -d["bruto"])
+    total_geral = sum(d["bruto"] for d in ranking) or 1
+
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.map(mapa, latitude="lat", longitude="lon", size="raio",
+               color="#68380ACC", height=420)
+        st.caption(
+            f"{len(mapa)} lugares · ponto maior é onde entrou mais dinheiro"
+        )
+    with c2:
+        tabela(
+            pd.DataFrame([{
+                "UF": d["UF"],
+                "Pedidos": d["Pedidos"],
+                "Faturamento": fmt_brl(d["bruto"]),
+                "Fatia": fmt_pct(d["bruto"] / total_geral * 100, 0),
+            } for d in ranking]),
+            num=("Pedidos", "Faturamento", "Fatia"),
+            altura_max=420,
+        )
+
+    fora = len(pedidos) - len(com_local)
+    if fora:
+        st.caption(
+            f"{fora} pedido(s) sem localização, por CEP ausente ou não "
+            "encontrado. Use **Localizar no mapa** no bloco abaixo."
+        )
+
+
 def _card_cliente(c: dict):
     """Uma cliente que sumiu, com o convite pronto para voltar.
 
@@ -1306,6 +1377,8 @@ if "Clientes" in abas:
                 "no faturamento nem no ticket médio."
             )
 
+        _mapa_das_compras()
+
         # O histórico anterior ao alcance da Shopify mora fora do Streamlit,
         # porque o disco daqui é apagado a cada reinício. Este bloco é a única
         # porta de entrada dele, e some da tela quando não há banco ligado.
@@ -1328,7 +1401,8 @@ if "Clientes" in abas:
                     "Exportação de pedidos da Shopify, em CSV",
                     type=["csv"], key="csv_pedidos",
                 )
-                if arquivo is not None and st.button("Importar", key="btn_importar"):
+                b1, b2 = st.columns(2)
+                if arquivo is not None and b1.button("Importar", key="btn_importar"):
                     try:
                         pedidos = nuvem.ler_csv_shopify(arquivo)
                         gravados = nuvem.salvar_pedidos(pedidos)
@@ -1339,6 +1413,13 @@ if "Clientes" in abas:
                         st.rerun()
                     except Exception as e:
                         st.error(f"Não deu para importar: {e}")
+                if b2.button("Localizar no mapa", key="btn_geo"):
+                    with st.status("Convertendo CEP em coordenada…") as s:
+                        r = nuvem.geocodificar_pendentes(avisar=s.update)
+                        s.update(label=f"{r['achados']} localizados, "
+                                       f"{r['falhos']} sem coordenada",
+                                 state="complete")
+                    st.rerun()
 
         st.divider()
 

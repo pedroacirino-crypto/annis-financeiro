@@ -116,6 +116,14 @@ def garantir_tabelas() -> None:
         con.execute(text(
             f"CREATE INDEX IF NOT EXISTS {TABELA}_email ON {TABELA} (email)"
         ))
+        # CEP e coordenada vieram depois da tabela existir. O CEP é o que
+        # permite pôr a venda no mapa; a coordenada é calculada uma vez e
+        # guardada, para a tela nunca depender de serviço externo para abrir.
+        for coluna, tipo in (("cep", "TEXT"), ("lat", "DOUBLE PRECISION"),
+                             ("lon", "DOUBLE PRECISION")):
+            con.execute(text(
+                f"ALTER TABLE {TABELA} ADD COLUMN IF NOT EXISTS {coluna} {tipo}"
+            ))
 
 
 def salvar_pedidos(pedidos: List[dict]) -> int:
@@ -131,10 +139,10 @@ def salvar_pedidos(pedidos: List[dict]) -> int:
     sql = text(f"""
         INSERT INTO {TABELA}
             (numero, criado_em, email, cliente, cidade, uf, itens, cupom,
-             total, situacao, origem)
+             total, situacao, origem, cep)
         VALUES
             (:numero, :criado_em, :email, :cliente, :cidade, :uf, :itens,
-             :cupom, :total, :situacao, :origem)
+             :cupom, :total, :situacao, :origem, :cep)
         ON CONFLICT (numero) DO UPDATE SET
             criado_em = EXCLUDED.criado_em,
             email     = EXCLUDED.email,
@@ -145,7 +153,8 @@ def salvar_pedidos(pedidos: List[dict]) -> int:
             cupom     = EXCLUDED.cupom,
             total     = EXCLUDED.total,
             situacao  = EXCLUDED.situacao,
-            origem    = EXCLUDED.origem
+            origem    = EXCLUDED.origem,
+            cep       = COALESCE(NULLIF(EXCLUDED.cep, ''), {TABELA}.cep)
     """)
     with _conectar().begin() as con:
         for p in pedidos:
@@ -161,6 +170,7 @@ def salvar_pedidos(pedidos: List[dict]) -> int:
                 "total": int(p.get("total") or 0),
                 "situacao": p.get("situacao", ""),
                 "origem": p.get("origem", "shopify"),
+                "cep": "".join(c for c in str(p.get("cep") or "") if c.isdigit()),
             })
     return len(pedidos)
 
@@ -175,7 +185,7 @@ def ler_pedidos() -> List[dict]:
         with _conectar().connect() as con:
             linhas = con.execute(text(
                 f"SELECT numero, criado_em, email, cliente, cidade, uf, itens,"
-                f" cupom, total, situacao, origem FROM {TABELA}"
+                f" cupom, total, situacao, origem, cep, lat, lon FROM {TABELA}"
             )).mappings().all()
         return [dict(l) for l in linhas]
     except Exception:
@@ -221,7 +231,7 @@ def ler_csv_shopify(caminho_ou_arquivo) -> List[dict]:
                 continue
             p = pedidos.setdefault(numero, {
                 "numero": numero, "criado_em": "", "email": "", "cliente": "",
-                "cidade": "", "uf": "", "pecas": [], "cupom": "", "total": 0,
+                "cidade": "", "uf": "", "cep": "", "pecas": [], "cupom": "", "total": 0,
                 "situacao": "", "origem": "csv",
             })
             p["criado_em"] = p["criado_em"] or pega(linha, "Created at", "Processed At")
@@ -232,6 +242,7 @@ def ler_csv_shopify(caminho_ou_arquivo) -> List[dict]:
             p["uf"] = p["uf"] or pega(
                 linha, "Shipping Province", "Billing Province",
                 "Shipping Province Name", "Billing Province Name")
+            p["cep"] = p["cep"] or pega(linha, "Shipping Zip", "Billing Zip")
             p["cupom"] = p["cupom"] or pega(linha, "Discount Code")
             p["situacao"] = p["situacao"] or pega(linha, "Financial Status")
 
@@ -284,6 +295,53 @@ def _para_utc(quando: str) -> str:
             continue
     # Sem fuso declarado não dá para converter; fica como veio.
     return texto[:19].replace(" ", "T")
+
+
+def geocodificar_pendentes(limite: int = 200, avisar=None) -> dict:
+    """Converte CEP em coordenada para os pedidos que ainda não têm.
+
+    Roda uma vez por CEP e guarda o resultado, então a tela nunca depende de
+    serviço externo para abrir. Só o CEP é enviado, sem nome nem e-mail.
+
+    CEPs repetidos são resolvidos de uma vez: várias compras do mesmo endereço
+    custam uma consulta só.
+    """
+    import requests
+    from sqlalchemy import text
+
+    garantir_tabelas()
+    with _conectar().connect() as con:
+        pendentes = con.execute(text(
+            f"SELECT DISTINCT cep FROM {TABELA} "
+            f"WHERE cep IS NOT NULL AND cep != '' AND lat IS NULL"
+        )).scalars().all()
+
+    pendentes = pendentes[:limite]
+    achados, falhos = 0, 0
+    for i, cep in enumerate(pendentes, 1):
+        if avisar:
+            avisar(f"Localizando CEP {i} de {len(pendentes)}…")
+        lat = lon = None
+        try:
+            r = requests.get(
+                f"https://brasilapi.com.br/api/cep/v2/{cep}", timeout=10)
+            if r.ok:
+                loc = (r.json().get("location") or {}).get("coordinates") or {}
+                if loc.get("latitude"):
+                    lat, lon = float(loc["latitude"]), float(loc["longitude"])
+        except Exception:
+            pass
+
+        if lat is None:
+            falhos += 1
+            continue
+        achados += 1
+        with _conectar().begin() as con:
+            con.execute(
+                text(f"UPDATE {TABELA} SET lat=:lat, lon=:lon WHERE cep=:cep"),
+                {"lat": lat, "lon": lon, "cep": cep},
+            )
+    return {"pendentes": len(pendentes), "achados": achados, "falhos": falhos}
 
 
 def resumo() -> dict:

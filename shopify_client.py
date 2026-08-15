@@ -124,7 +124,7 @@ query($cursor: String) {
       totalPriceSet { shopMoney { amount } }
       discountCodes
       customer { email displayName }
-      shippingAddress { city province provinceCode }
+      shippingAddress { city province provinceCode zip }
       lineItems(first: 30) {
         nodes { title quantity variant { selectedOptions { name value } } }
       }
