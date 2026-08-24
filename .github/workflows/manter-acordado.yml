@@ -24,9 +24,11 @@ jobs:
     steps:
       - name: Acordar o painel
         run: |
-          codigo=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 "${{ secrets.APP_URL }}")
+          # -L segue redirecionamento: a Streamlit responde 303 antes de
+          # entregar a pagina, e tratar isso como erro derrubava a rotina.
+          codigo=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 "${{ secrets.APP_URL }}")
           echo "painel respondeu $codigo"
-          test "$codigo" = "200"
+          test "$codigo" -lt 400
 
       - name: Cutucar o banco
         env:
