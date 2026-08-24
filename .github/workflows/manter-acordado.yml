@@ -1,0 +1,36 @@
+# Mantém o painel e o banco acordados.
+#
+# Dois adormecimentos diferentes, e cada um precisa de um cutucão:
+#
+#   - A Streamlit Community Cloud hiberna o app depois de dias sem visita, e a
+#     primeira abertura fica uns 30 segundos na tela de espera. Uma requisição
+#     HTTP já acorda o container.
+#   - O plano gratuito do Supabase, na documentação deles, "pode pausar
+#     aplicações que apresentem baixa atividade num período de 7 dias". Banco
+#     pausado derruba o histórico até alguém religar na mão. Uma consulta
+#     qualquer conta como atividade.
+#
+# Roda de segunda a sexta às 8h de Brasília, que é quando a loja começa o dia.
+name: Manter acordado
+
+on:
+  schedule:
+    - cron: "0 11 * * 1-5"   # 11h UTC = 8h de Brasília
+  workflow_dispatch:          # permite rodar na mão pelo site do GitHub
+
+jobs:
+  acordar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acordar o painel
+        run: |
+          codigo=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 "${{ secrets.APP_URL }}")
+          echo "painel respondeu $codigo"
+          test "$codigo" = "200"
+
+      - name: Cutucar o banco
+        env:
+          PGCONN: ${{ secrets.SUPABASE_URL_BANCO }}
+        run: |
+          psql "$PGCONN" -tAc "select count(*) from pedidos_historicos" \
+            | sed 's/^/pedidos guardados: /'
