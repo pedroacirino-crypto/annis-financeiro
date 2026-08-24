@@ -24,11 +24,15 @@ jobs:
     steps:
       - name: Acordar o painel
         run: |
-          # -L segue redirecionamento: a Streamlit responde 303 antes de
-          # entregar a pagina, e tratar isso como erro derrubava a rotina.
-          codigo=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 "${{ secrets.APP_URL }}")
+          # A Streamlit Cloud faz um handshake de cookie antes de entregar a
+          # pagina: sem guardar cookie, o curl entra em laco de redirecionamento
+          # e nunca chega no container. Com o pote de cookies, chega e recebe
+          # 200 com o HTML do app.
+          pote=$(mktemp)
+          codigo=$(curl -sSL -c "$pote" -b "$pote" -o /dev/null \
+                        -w '%{http_code}' --max-time 120 "${{ secrets.APP_URL }}")
           echo "painel respondeu $codigo"
-          test "$codigo" -lt 400
+          test "$codigo" = "200"
 
       - name: Cutucar o banco
         env:
