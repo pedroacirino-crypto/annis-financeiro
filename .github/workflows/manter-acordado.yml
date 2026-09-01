@@ -35,7 +35,6 @@ jobs:
       - name: Atualizar os dados
         env:
           APP_URL: ${{ secrets.APP_URL }}
-          TOKEN_ROTINA: ${{ secrets.TOKEN_ROTINA }}
         run: python rotina/atualizar.py
 
       - name: Cutucar o banco

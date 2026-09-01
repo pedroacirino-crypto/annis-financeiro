@@ -1,11 +1,12 @@
-"""Abre o painel num navegador de verdade e espera a sincronização terminar.
+"""Abre o painel num navegador de verdade, para o app atualizar os dados.
 
 Requisição simples não serve: o Streamlit só executa o código quando um
-navegador abre a sessão por websocket. Testado, o `curl` baixa o HTML e o app
-não roda nada. Por isso a rotina diária usa um Chromium sem tela.
+navegador abre a sessão por websocket. Testado, o `curl` baixa o HTML e nada
+roda. Por isso a rotina diária usa um Chromium sem tela.
 
-O token vai na URL. O app reconhece, sincroniza e encerra antes da senha, então
-as chaves da Pagar.me e da Shopify continuam só no cofre do Streamlit.
+Nenhum segredo é necessário aqui. O próprio app decide sincronizar quando o
+último download passou de 12 horas, e isso acontece antes da tela de senha.
+Esta rotina só provoca a abertura.
 """
 
 import os
@@ -14,27 +15,27 @@ import sys
 from playwright.sync_api import sync_playwright
 
 URL = os.environ["APP_URL"].rstrip("/")
-TOKEN = os.environ["TOKEN_ROTINA"]
-ESPERA_MS = 8 * 60 * 1000  # a primeira carga do dia varre todo o histórico
+ESPERA_MS = 8 * 60 * 1000  # a carga varre todo o histórico de recebíveis
 
 
 def main() -> int:
     with sync_playwright() as p:
         navegador = p.chromium.launch()
         pagina = navegador.new_page()
-        pagina.goto(f"{URL}/?rotina={TOKEN}", wait_until="domcontentloaded")
-        try:
-            marca = pagina.wait_for_selector(
-                "text=/^(ok|falhou) ·/", timeout=ESPERA_MS)
-            recado = marca.inner_text().strip()
-        except Exception:
-            print("não veio resposta da rotina dentro do tempo", file=sys.stderr)
-            navegador.close()
-            return 1
-        navegador.close()
+        pagina.goto(URL, wait_until="domcontentloaded")
 
-    print(recado)
-    return 0 if recado.startswith("ok") else 1
+        # A tela de senha só aparece depois que a sincronização termina, então
+        # esperar por ela é esperar o trabalho acabar.
+        try:
+            pagina.wait_for_selector("input[type=password]", timeout=ESPERA_MS)
+            print("painel atualizado e no ar")
+            ok = True
+        except Exception:
+            print("o painel não chegou na tela de senha a tempo", file=sys.stderr)
+            ok = False
+
+        navegador.close()
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

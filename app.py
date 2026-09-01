@@ -252,28 +252,16 @@ def exigir_senha():
     st.stop()
 
 
-# Rotina automática: uma visita com o token combinado sincroniza e vai embora,
-# sem passar pela senha e sem desenhar tela nenhuma. É assim que o robô diário
-# atualiza os dados sem que as chaves precisem sair do cofre do Streamlit.
-_TOKEN_ROTINA = _segredo("TOKEN_ROTINA")
-if _TOKEN_ROTINA and st.query_params.get("rotina") == _TOKEN_ROTINA:
-    db.init_db()
-    try:
-        n = sincronizar(date.today())
-        st.write(f"ok · {n['vendas']} vendas · {n['operacoes']} operações")
-    except Exception as _e:
-        st.write(f"falhou · {_e}")
-    st.stop()
-
-exigir_senha()
-
-# Daqui para baixo só roda autenticado: a carga inicial dispara uma varredura
-# na API, e não faz sentido um visitante sem senha provocar isso.
 db.init_db()
 
 # Dado velho é pior que dado ausente: a tela parece certa e está errada. Foi
-# assim que 12 vendas ficaram 20 dias fora do painel. Agora, se o último
+# assim que 12 vendas pagas ficaram 20 dias fora do painel. Agora, se o último
 # download passou de meio dia, o app baixa sozinho ao abrir.
+#
+# Isto roda **antes** da senha de propósito, e é o que permite a rotina diária
+# atualizar tudo apenas abrindo a página, sem token nem chave em lugar nenhum
+# além do cofre. Quem não tem a senha continua sem ver dado nenhum: só provoca
+# o download, e no máximo duas vezes por dia, por causa da janela de 12 horas.
 HORAS_ATE_ENVELHECER = 12
 _idade = db.horas_desde_sincronizacao()
 if db.get_db_counts()["charges"] == 0 or _idade is None or _idade > HORAS_ATE_ENVELHECER:
@@ -282,6 +270,8 @@ if db.get_db_counts()["charges"] == 0 or _idade is None or _idade > HORAS_ATE_EN
             sincronizar(date.today())
     except Exception as _e:
         st.warning(f"Não foi possível atualizar os dados automaticamente: {_e}")
+
+exigir_senha()
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
