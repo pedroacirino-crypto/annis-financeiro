@@ -1,38 +1,42 @@
-# Mantém o painel e o banco acordados.
+# Rotina diária do painel: atualiza os dados e mantém tudo acordado.
 #
-# Dois adormecimentos diferentes, e cada um precisa de um cutucão:
+# Três coisas dormem ou envelhecem, e cada uma precisa de um cutucão:
 #
-#   - A Streamlit Community Cloud hiberna o app depois de dias sem visita, e a
-#     primeira abertura fica uns 30 segundos na tela de espera. Uma requisição
-#     HTTP já acorda o container.
-#   - O plano gratuito do Supabase, na documentação deles, "pode pausar
-#     aplicações que apresentem baixa atividade num período de 7 dias". Banco
-#     pausado derruba o histórico até alguém religar na mão. Uma consulta
-#     qualquer conta como atividade.
+#   - Os dados. Sem isto, o painel só atualiza quando alguém clica. Em agosto
+#     12 vendas ficaram 20 dias fora da tela, três delas de fim de semana.
+#   - O app. A Streamlit Community hiberna depois de dias sem visita.
+#   - O banco. A documentação do Supabase diz que o plano gratuito "pode pausar
+#     aplicações que apresentem baixa atividade num período de 7 dias".
 #
-# Roda de segunda a sexta às 8h de Brasília, que é quando a loja começa o dia.
-name: Manter acordado
+# Roda todo dia, inclusive sábado e domingo, que é quando a loja também vende.
+name: Rotina diaria
 
 on:
   schedule:
-    - cron: "0 11 * * 1-5"   # 11h UTC = 8h de Brasília
-  workflow_dispatch:          # permite rodar na mão pelo site do GitHub
+    - cron: "0 11 * * *"   # 11h UTC = 8h de Brasília
+  workflow_dispatch:
 
 jobs:
-  acordar:
+  atualizar:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Acordar o painel
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar o navegador
         run: |
-          # A Streamlit Cloud faz um handshake de cookie antes de entregar a
-          # pagina: sem guardar cookie, o curl entra em laco de redirecionamento
-          # e nunca chega no container. Com o pote de cookies, chega e recebe
-          # 200 com o HTML do app.
-          pote=$(mktemp)
-          codigo=$(curl -sSL -c "$pote" -b "$pote" -o /dev/null \
-                        -w '%{http_code}' --max-time 120 "${{ secrets.APP_URL }}")
-          echo "painel respondeu $codigo"
-          test "$codigo" = "200"
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Atualizar os dados
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          TOKEN_ROTINA: ${{ secrets.TOKEN_ROTINA }}
+        run: python rotina/atualizar.py
 
       - name: Cutucar o banco
         env:

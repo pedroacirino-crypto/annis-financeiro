@@ -186,6 +186,17 @@ hr {{ border-color: rgba(104,56,10,0.15); }}
 
 # ── Acesso ───────────────────────────────────────────────────────────────────
 
+def _segredo(nome: str):
+    """Valor vindo do cofre do host (hospedado) ou do .env (local)."""
+    try:
+        v = st.secrets.get(nome)
+        if v:
+            return v
+    except Exception:
+        pass
+    return os.environ.get(nome)
+
+
 def _senha_configurada():
     """Senha vinda do cofre do host (hospedado) ou do .env (local)."""
     try:
@@ -241,20 +252,36 @@ def exigir_senha():
     st.stop()
 
 
+# Rotina automática: uma visita com o token combinado sincroniza e vai embora,
+# sem passar pela senha e sem desenhar tela nenhuma. É assim que o robô diário
+# atualiza os dados sem que as chaves precisem sair do cofre do Streamlit.
+_TOKEN_ROTINA = _segredo("TOKEN_ROTINA")
+if _TOKEN_ROTINA and st.query_params.get("rotina") == _TOKEN_ROTINA:
+    db.init_db()
+    try:
+        n = sincronizar(date.today())
+        st.write(f"ok · {n['vendas']} vendas · {n['operacoes']} operações")
+    except Exception as _e:
+        st.write(f"falhou · {_e}")
+    st.stop()
+
 exigir_senha()
 
 # Daqui para baixo só roda autenticado: a carga inicial dispara uma varredura
 # na API, e não faz sentido um visitante sem senha provocar isso.
 db.init_db()
 
-# Hospedado o disco é efêmero, o banco some a cada reinício e a tela abriria
-# vazia. Sem isto, alguém teria que clicar em "Atualizar dados" toda vez.
-if db.get_db_counts()["charges"] == 0:
+# Dado velho é pior que dado ausente: a tela parece certa e está errada. Foi
+# assim que 12 vendas ficaram 20 dias fora do painel. Agora, se o último
+# download passou de meio dia, o app baixa sozinho ao abrir.
+HORAS_ATE_ENVELHECER = 12
+_idade = db.horas_desde_sincronizacao()
+if db.get_db_counts()["charges"] == 0 or _idade is None or _idade > HORAS_ATE_ENVELHECER:
     try:
-        with st.spinner("Primeira carga dos dados…"):
+        with st.spinner("Buscando o que entrou desde a última vez…"):
             sincronizar(date.today())
     except Exception as _e:
-        st.warning(f"Não foi possível carregar os dados automaticamente: {_e}")
+        st.warning(f"Não foi possível atualizar os dados automaticamente: {_e}")
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1096,6 +1123,20 @@ with st.sidebar:
             aviso.empty()
             st.error(f"Falha ao atualizar: {e}")
 
+
+    # A idade do dado fica à vista, sempre. Painel que mostra número velho com
+    # cara de novo é pior que painel vazio: em agosto, 12 vendas passaram 20
+    # dias fora da tela sem nada avisar.
+    _h_idade = db.horas_desde_sincronizacao()
+    if _h_idade is None:
+        st.caption("Dados nunca baixados.")
+    elif _h_idade < 1:
+        st.caption("Dados de agora há pouco.")
+    elif _h_idade < 24:
+        st.caption(f"Dados de {int(_h_idade)}h atrás.")
+    else:
+        st.warning(f"Dados de {int(_h_idade / 24)} dia(s) atrás. "
+                   "Clique em Atualizar dados.")
 
     st.caption(f"Baixa os últimos {JANELA_SYNC} dias, mais os recebíveis ainda pendentes.")
 

@@ -1099,3 +1099,24 @@ def get_db_counts() -> dict:
     logs = cur.fetchall()
     con.close()
     return {"balance_operations": ops, "payables": pay, "charges": chg, "recent_sync": logs}
+
+
+def ultima_sincronizacao() -> str:
+    """Quando os dados foram baixados pela última vez, em UTC. '' se nunca."""
+    con = _conn()
+    r = con.execute("SELECT MAX(synced_at) FROM sync_log").fetchone()
+    con.close()
+    return (r[0] or "") if r else ""
+
+
+def horas_desde_sincronizacao():
+    """Idade dos dados em horas. None se nunca sincronizou."""
+    from datetime import datetime, timezone
+    quando = ultima_sincronizacao()
+    if not quando:
+        return None
+    try:
+        t = datetime.fromisoformat(quando).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return (datetime.now(timezone.utc) - t).total_seconds() / 3600
