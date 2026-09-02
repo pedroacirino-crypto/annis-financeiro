@@ -1,0 +1,128 @@
+{%- comment -%}
+  Avise-me quando voltar.
+
+  Aparece só quando a variante escolhida está esgotada. Grava direto na lista
+  de espera do painel, sem app intermediário, usando a chave pública do
+  Supabase. Essa chave é feita para ficar no código do site: o banco só aceita
+  INSERT nesta tabela e não devolve leitura nenhuma.
+
+  Onde colar: no template do produto, logo abaixo do botão de compra.
+  Em temas do Dawn, o arquivo costuma ser snippets/buy-buttons.liquid, ou
+  sections/main-product.liquid.
+
+  Antes de usar, troque SUPABASE_URL e SUPABASE_CHAVE pelos valores do projeto.
+{%- endcomment -%}
+
+<div id="annis-aviso" data-produto="{{ product.title | escape }}" hidden>
+  <p class="annis-aviso__titulo">Esgotado no momento</p>
+  <p class="annis-aviso__texto">
+    Deixe seu contato e avisamos assim que esta peça voltar.
+  </p>
+  <form class="annis-aviso__form" novalidate>
+    <input type="email" name="email" placeholder="Seu e-mail" required>
+    <input type="tel" name="telefone" placeholder="WhatsApp com DDD (opcional)">
+    <button type="submit">Quero ser avisada</button>
+  </form>
+  <p class="annis-aviso__recado" role="status"></p>
+</div>
+
+<style>
+  #annis-aviso { margin-top: 1rem; padding: 1rem 1.1rem;
+    border: 1px solid rgba(104,56,10,0.25); border-radius: 2px; }
+  .annis-aviso__titulo { font-size: 0.7rem; letter-spacing: 0.12em;
+    text-transform: uppercase; margin: 0 0 0.3rem; }
+  .annis-aviso__texto { font-size: 0.9rem; margin: 0 0 0.8rem; }
+  .annis-aviso__form { display: grid; gap: 0.5rem; }
+  .annis-aviso__form input { padding: 0.7rem 0.8rem;
+    border: 1px solid rgba(104,56,10,0.3); border-radius: 2px; font: inherit; }
+  .annis-aviso__form button { padding: 0.8rem; border: 0; border-radius: 2px;
+    background: #68380A; color: #fff; font: inherit; letter-spacing: 0.08em;
+    text-transform: uppercase; font-size: 0.75rem; cursor: pointer; }
+  .annis-aviso__form button[disabled] { opacity: 0.5; cursor: default; }
+  .annis-aviso__recado { font-size: 0.85rem; margin: 0.6rem 0 0; }
+</style>
+
+<script>
+(function () {
+  var URL_BANCO = 'SUPABASE_URL';
+  var CHAVE = 'SUPABASE_CHAVE';
+
+  var caixa = document.getElementById('annis-aviso');
+  if (!caixa) return;
+  var form = caixa.querySelector('form');
+  var recado = caixa.querySelector('.annis-aviso__recado');
+
+  // O tema publica as variantes em JSON; é daí que sai o estoque de cada
+  // tamanho sem precisar de mais nenhuma chamada.
+  var variantes = {{ product.variants | json }};
+
+  function selecionada() {
+    var id = new URLSearchParams(location.search).get('variant');
+    if (id) {
+      for (var i = 0; i < variantes.length; i++) {
+        if (String(variantes[i].id) === String(id)) return variantes[i];
+      }
+    }
+    return variantes.length === 1 ? variantes[0] : null;
+  }
+
+  function atualizar() {
+    var v = selecionada();
+    // Sem variante escolhida, não adivinha: só mostra quando tem certeza.
+    caixa.hidden = !(v && v.available === false);
+    caixa.dataset.varianteId = v ? v.id : '';
+    caixa.dataset.varianteNome = v ? (v.title || '') : '';
+  }
+
+  atualizar();
+  // O tema troca a variante sem recarregar a página.
+  document.addEventListener('change', atualizar);
+  window.addEventListener('popstate', atualizar);
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = form.email.value.trim();
+    var fone = form.telefone.value.replace(/\D/g, '');
+    if (!email && !fone) {
+      recado.textContent = 'Deixe pelo menos um contato, e-mail ou WhatsApp.';
+      return;
+    }
+    if (fone && fone.length >= 10 && fone.slice(0, 2) !== '55') fone = '55' + fone;
+
+    var botao = form.querySelector('button');
+    botao.disabled = true;
+    recado.textContent = 'Enviando…';
+
+    fetch(URL_BANCO + '/rest/v1/lista_espera', {
+      method: 'POST',
+      headers: {
+        'apikey': CHAVE,
+        'Authorization': 'Bearer ' + CHAVE,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        email: email || null,
+        telefone: fone || null,
+        produto: caixa.dataset.produto,
+        variante: caixa.dataset.varianteNome || null,
+        variant_id: caixa.dataset.varianteId || null,
+        handle: {{ product.handle | json }},
+        origem: 'site'
+      })
+    }).then(function (r) {
+      // 409 é a trava de duplicata: a pessoa já está na fila desta peça.
+      if (r.ok || r.status === 409) {
+        form.hidden = true;
+        recado.textContent = 'Pronto! Avisamos assim que ela voltar. 🤎';
+      } else {
+        botao.disabled = false;
+        recado.textContent = 'Não deu para cadastrar agora. Tente de novo em instantes.';
+      }
+    }).catch(function () {
+      botao.disabled = false;
+      recado.textContent = 'Não deu para cadastrar agora. Tente de novo em instantes.';
+    });
+  });
+})();
+</script>
