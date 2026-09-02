@@ -358,3 +358,99 @@ def resumo() -> dict:
         return {"conectado": True, "pedidos": r[0] or 0, "desde": r[1] or ""}
     except Exception as e:
         return {"conectado": False, "pedidos": 0, "desde": "", "erro": str(e)[:200]}
+
+
+TABELA_ESPERA = "lista_espera"
+
+
+def garantir_espera() -> None:
+    """Cria a tabela de lista de espera, se ainda não existir.
+
+    Quem chega numa página esgotada some sem deixar rastro: não passa pelo
+    checkout, então nem a aba Recuperar enxerga. Esta tabela é o registro
+    dessa demanda, que é a metade invisível do funil.
+    """
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        con.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {TABELA_ESPERA} (
+                id          BIGSERIAL PRIMARY KEY,
+                criado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                email       TEXT,
+                telefone    TEXT,
+                produto     TEXT NOT NULL,
+                variante    TEXT,
+                variant_id  TEXT,
+                handle      TEXT,
+                avisado_em  TIMESTAMPTZ,
+                origem      TEXT NOT NULL DEFAULT 'site',
+                CONSTRAINT contato_obrigatorio
+                    CHECK (COALESCE(email,'') <> '' OR COALESCE(telefone,'') <> '')
+            )
+        """))
+        con.execute(text(
+            f"CREATE INDEX IF NOT EXISTS {TABELA_ESPERA}_variante "
+            f"ON {TABELA_ESPERA} (produto, variante)"
+        ))
+        # Uma pessoa não precisa entrar duas vezes na fila da mesma peça.
+        con.execute(text(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {TABELA_ESPERA}_sem_repetir "
+            f"ON {TABELA_ESPERA} (COALESCE(email,''), COALESCE(telefone,''),"
+            f" produto, COALESCE(variante,'')) WHERE avisado_em IS NULL"
+        ))
+
+
+def salvar_espera(registro: dict) -> bool:
+    """Grava um pedido de aviso. Devolve False se a pessoa já estava na fila."""
+    from sqlalchemy import text
+    garantir_espera()
+    try:
+        with _conectar().begin() as con:
+            con.execute(text(f"""
+                INSERT INTO {TABELA_ESPERA}
+                    (email, telefone, produto, variante, variant_id, handle, origem)
+                VALUES (:email, :telefone, :produto, :variante, :variant_id,
+                        :handle, :origem)
+            """), {
+                "email": (registro.get("email") or "").strip().lower() or None,
+                "telefone": (registro.get("telefone") or "").strip() or None,
+                "produto": registro.get("produto", ""),
+                "variante": registro.get("variante") or None,
+                "variant_id": registro.get("variant_id") or None,
+                "handle": registro.get("handle") or None,
+                "origem": registro.get("origem", "site"),
+            })
+        return True
+    except Exception:
+        return False
+
+
+def ler_espera(pendentes_apenas: bool = True) -> List[dict]:
+    """Quem está esperando o quê. Lista vazia se o banco não estiver de pé."""
+    if not configurado():
+        return []
+    from sqlalchemy import text
+    try:
+        garantir_espera()
+        filtro = "WHERE avisado_em IS NULL" if pendentes_apenas else ""
+        with _conectar().connect() as con:
+            linhas = con.execute(text(
+                f"SELECT id, criado_em, email, telefone, produto, variante,"
+                f" variant_id, handle, avisado_em, origem"
+                f" FROM {TABELA_ESPERA} {filtro} ORDER BY criado_em"
+            )).mappings().all()
+        return [dict(l) for l in linhas]
+    except Exception:
+        return []
+
+
+def marcar_avisado(ids: List[int]) -> int:
+    """Risca da fila quem já foi avisada."""
+    if not ids:
+        return 0
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        con.execute(text(
+            f"UPDATE {TABELA_ESPERA} SET avisado_em = now() WHERE id = ANY(:ids)"
+        ), {"ids": list(ids)})
+    return len(ids)

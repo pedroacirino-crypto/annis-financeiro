@@ -778,6 +778,90 @@ def _detalhe_cliente(c: dict):
             )
 
 
+@st.cache_data(ttl=600)
+def _estoque_atual() -> dict:
+    """Estoque por (produto, tamanho), direto da Shopify.
+
+    Guardado por 10 minutos: a lista de espera consulta isso a cada abertura,
+    e sem cache seria uma varredura na API por clique.
+    """
+    if not shopify_client.configurado():
+        return {}
+    consulta = """query($cursor: String) {
+      productVariants(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes { title inventoryQuantity product { title status } } } }"""
+    saida, cursor = {}, None
+    try:
+        while True:
+            d = shopify_client._graphql(consulta, {"cursor": cursor})
+            bloco = d["productVariants"]
+            for v in bloco["nodes"]:
+                prod = v.get("product") or {}
+                if prod.get("status") != "ACTIVE":
+                    continue
+                saida[(prod.get("title", ""), v.get("title") or "")] = \
+                    v.get("inventoryQuantity") or 0
+            if not bloco["pageInfo"]["hasNextPage"]:
+                break
+            cursor = bloco["pageInfo"]["endCursor"]
+    except Exception:
+        return {}
+    return saida
+
+
+def _card_espera(r: dict, pronta: bool):
+    """Uma pessoa da fila, com a mensagem pronta e o botão de WhatsApp."""
+    primeiro = (r.get("email") or "").split("@")[0].split(".")[0].title()
+    peca = r["produto"] + (f", tamanho {r['variante']}" if r.get("variante") else "")
+    if pronta:
+        texto = (
+            f"Oi! Tudo bem? 🤎\n\n"
+            f"Você pediu para avisarmos quando {peca} voltasse, e ele está "
+            "disponível de novo na loja.\n\n"
+            "Separei aqui para você dar uma olhada:\nhttps://annis.store\n\n"
+            "Com carinho,\nAnnis"
+        )
+    else:
+        texto = (
+            f"Oi! Tudo bem? 🤎\n\n"
+            f"Passando para dizer que não esquecemos: você está na lista de "
+            f"{peca}.\n\n"
+            "Assim que voltar, você é uma das primeiras a saber.\n\n"
+            "Com carinho,\nAnnis"
+        )
+
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            dias = ""
+            try:
+                dias = f" · há {(date.today() - r['criado_em'].date()).days} dias"
+            except Exception:
+                pass
+            st.markdown(
+                f"<div style='font-family:Poppins;font-size:0.6rem;letter-spacing:0.12em;"
+                f"text-transform:uppercase;color:{'#4A7C46' if pronta else MARROM_CLARO}'>"
+                + ("Já pode avisar" if pronta else "Aguardando reposição") + dias
+                + "</div>"
+                f"<div style='font-family:Newsreader,serif;font-size:1.15rem;"
+                f"color:{MARROM};padding-top:0.1rem'>{peca}</div>"
+                f"<div style='font-family:Poppins;font-size:0.78rem;color:#4A2C0F;"
+                f"padding-top:0.25rem'>"
+                + (r.get("email") or "") + (" · " + r["telefone"] if r.get("telefone") else "")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+        with c2:
+            if st.button("Marcar avisada", key=f"av_{r['id']}",
+                         use_container_width=True):
+                nuvem.marcar_avisado([r["id"]])
+                st.rerun()
+    if r.get("telefone"):
+        _botoes_acao({"telefone": r["telefone"]}, texto, "Abrir a loja",
+                     "https://annis.store")
+
+
 def _mapa_das_compras():
     """De onde vêm as compras: mapa por cidade e ranking por estado.
 
@@ -1142,7 +1226,7 @@ with st.sidebar:
 # Duas naturezas de trabalho na mesma tela cansavam a leitura: Recuperar e
 # Clientes são fila de contato, as outras são conferência de dinheiro. Elas
 # não se misturam no dia da Ana, então também não se misturam no menu.
-TRABALHO = ["Recuperar", "Clientes"]
+TRABALHO = ["Recuperar", "Clientes", "Lista de espera"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico"]
 
 secao = st.segmented_control(
@@ -1566,6 +1650,65 @@ if "Clientes" in abas:
             )
             for c in sumidas:
                 _card_cliente(c)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA 4: LISTA DE ESPERA: quem quis e não tinha
+# ════════════════════════════════════════════════════════════════════════════
+if "Lista de espera" in abas:
+  with abas["Lista de espera"]:
+    st.header("Quem quis e não tinha")
+    st.caption(
+        "Cadastros de aviso de reposição. É a única parte do funil que não "
+        "aparecia em lugar nenhum: quem bate em página esgotada não chega ao "
+        "checkout, então nem a aba Recuperar enxergava."
+    )
+
+    if not nuvem.configurado():
+        st.info("Banco não configurado. A lista de espera vive fora do Streamlit.")
+    else:
+        fila = nuvem.ler_espera()
+        if not fila:
+            st.info(
+                "Ninguém na fila ainda. Assim que o formulário estiver no site, "
+                "cada pessoa que pedir aviso aparece aqui."
+            )
+        else:
+            # Cruza com o estoque de hoje: quem já pode ser avisada vem primeiro,
+            # porque é a única parte da fila que vira venda agora.
+            estoque = _estoque_atual()
+
+            def tem_estoque(r):
+                return estoque.get((r["produto"], r.get("variante") or ""), 0) > 0
+
+            prontas = [r for r in fila if tem_estoque(r)]
+            aguardando = [r for r in fila if not tem_estoque(r)]
+
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Na fila", len(fila))
+            k2.metric("Já dá para avisar", len(prontas))
+            k2.caption("A peça voltou ao estoque")
+            k3.metric("Peças diferentes", len({(r["produto"], r.get("variante")) for r in fila}))
+
+            if prontas:
+                st.success(f"{len(prontas)} pessoa(s) esperando peça que já voltou.")
+                for r in prontas:
+                    _card_espera(r, pronta=True)
+
+            st.divider()
+            st.subheader("Demanda represada")
+            st.caption("Ordenado por quantas pessoas esperam a mesma peça")
+            agrupado = {}
+            for r in aguardando:
+                ch = (r["produto"], r.get("variante") or "")
+                agrupado.setdefault(ch, []).append(r)
+            for (prod, var), gente in sorted(agrupado.items(), key=lambda kv: -len(kv[1])):
+                with st.expander(
+                    f"{len(gente)} esperando · {prod}" + (f" [{var}]" if var else ""),
+                    expanded=False,
+                ):
+                    for r in gente:
+                        _card_espera(r, pronta=False)
 
 
 # ════════════════════════════════════════════════════════════════════════════
