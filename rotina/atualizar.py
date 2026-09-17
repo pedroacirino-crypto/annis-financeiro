@@ -14,7 +14,11 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
-URL = os.environ["APP_URL"].rstrip("/")
+# `/~/+/` entra direto no app. O endereço normal devolve o console da
+# Streamlit Cloud, um React por fora que decide o que mostrar conforme quem
+# está olhando, e para visitante anônimo ele não desenha nada: a rotina ficava
+# esperando uma tela de senha que nunca vinha, com o corpo da página vazio.
+URL = os.environ["APP_URL"].rstrip("/") + "/~/+/"
 ESPERA_MS = 5 * 60 * 1000
 
 
@@ -49,20 +53,6 @@ def main() -> int:
                   if r.status >= 400 else None)
 
         pagina.goto(URL, wait_until="domcontentloaded")
-
-        # A Streamlit Cloud hiberna o app e mostra uma tela pedindo para
-        # acordar. Sem clicar aqui, a rotina espera para sempre por uma tela
-        # de senha que não vem.
-        for rotulo in ("Yes, get this app back up!", "app back up",
-                       "Acordar", "Wake"):
-            try:
-                botao = pagina.get_by_text(rotulo, exact=False).first
-                if botao.is_visible(timeout=3000):
-                    print(f"app estava hibernando, cliquei em: {rotulo}")
-                    botao.click()
-                    break
-            except Exception:
-                continue
 
         # A tela de senha só aparece depois que a sincronização termina, então
         # esperar por ela é esperar o trabalho acabar.
