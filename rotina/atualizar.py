@@ -35,6 +35,17 @@ def main() -> int:
     with sync_playwright() as p:
         navegador = p.chromium.launch()
         pagina = navegador.new_page()
+
+        # Sem isto o diagnóstico vira adivinhação: título certo com corpo
+        # vazio pode ser websocket barrado, script quebrado ou bloqueio de
+        # cookie, e cada um pede um conserto diferente.
+        erros = []
+        pagina.on("console", lambda m: erros.append(f"console {m.type}: {m.text[:160]}")
+                  if m.type in ("error", "warning") else None)
+        pagina.on("requestfailed", lambda r: erros.append(
+            f"falhou {r.failure}: {r.url[:110]}"))
+        pagina.on("websocket", lambda ws: erros.append(f"websocket aberto: {ws.url[:110]}"))
+
         pagina.goto(URL, wait_until="domcontentloaded")
 
         # A Streamlit Cloud hiberna o app e mostra uma tela pedindo para
@@ -60,6 +71,8 @@ def main() -> int:
         except Exception:
             print("o painel não chegou na tela de senha a tempo", file=sys.stderr)
             contar_o_que_esta_na_tela(pagina)
+            for e in erros[:15]:
+                print(f"  {e}", file=sys.stderr)
             ok = False
 
         navegador.close()
