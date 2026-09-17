@@ -45,6 +45,8 @@ def main() -> int:
         pagina.on("requestfailed", lambda r: erros.append(
             f"falhou {r.failure}: {r.url[:110]}"))
         pagina.on("websocket", lambda ws: erros.append(f"websocket aberto: {ws.url[:110]}"))
+        pagina.on("response", lambda r: erros.append(f"HTTP {r.status}: {r.url[:130]}")
+                  if r.status >= 400 else None)
 
         pagina.goto(URL, wait_until="domcontentloaded")
 
@@ -71,7 +73,7 @@ def main() -> int:
         except Exception:
             print("o painel não chegou na tela de senha a tempo", file=sys.stderr)
             contar_o_que_esta_na_tela(pagina)
-            for e in erros[:15]:
+            for e in erros[:25]:
                 print(f"  {e}", file=sys.stderr)
             ok = False
 
