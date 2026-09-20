@@ -4,7 +4,8 @@
 #
 #   - Os dados. Sem isto, o painel só atualiza quando alguém clica. Em agosto
 #     12 vendas ficaram 20 dias fora da tela, três delas de fim de semana.
-#   - O app. A Streamlit Community hiberna depois de dias sem visita.
+#   - O app. A Streamlit Community hiberna depois de 12 horas sem visita,
+#     e a rotina precisa saber acordá-lo, não só visitá-lo.
 #   - O banco. A documentação do Supabase diz que o plano gratuito "pode pausar
 #     aplicações que apresentem baixa atividade num período de 7 dias".
 #
@@ -13,7 +14,13 @@ name: Rotina diaria
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # 11h UTC = 8h de Brasília
+    # Três toques por dia porque a Streamlit Community hiberna o app depois de
+    # 12 horas sem visita, e o agendador do GitHub costuma atrasar de 3 a 4
+    # horas no plano gratuito: no dia 19/09 a rotina das 11h só rodou às 14h,
+    # com o app já dormindo. Horários em UTC, Brasília é 3 horas a menos.
+    - cron: "0 9 * * *"    # 6h
+    - cron: "0 15 * * *"   # 12h
+    - cron: "0 21 * * *"   # 18h
   workflow_dispatch:
 
 jobs:
