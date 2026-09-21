@@ -27,6 +27,9 @@ from typing import List
 import pandas as pd
 
 import nuvem
+from memo import memo
+
+_tabelas_garantidas = False
 
 
 def disponivel() -> bool:
@@ -34,6 +37,11 @@ def disponivel() -> bool:
 
 
 def garantir() -> None:
+    """Cria as tabelas se faltarem. Uma vez por processo: são seis comandos
+    de DDL e antes rodavam antes de cada leitura."""
+    global _tabelas_garantidas
+    if _tabelas_garantidas:
+        return
     from sqlalchemy import text
     with nuvem._conectar().begin() as con:
         con.execute(text("""
@@ -99,6 +107,7 @@ def garantir() -> None:
                 observacao  TEXT,
                 carregado_em TIMESTAMPTZ NOT NULL DEFAULT now()
             )"""))
+    _tabelas_garantidas = True
 
 
 def _id(*partes) -> str:
@@ -131,6 +140,8 @@ def _upsert(tabela: str, linhas: List[dict], chave: str) -> int:
     with nuvem._conectar().begin() as con:
         for i in range(0, len(linhas), 200):
             con.execute(sql, linhas[i:i + 200])
+    import memo as _m
+    _m.limpar_tudo()
     return len(linhas)
 
 
@@ -150,6 +161,7 @@ def salvar_extrato(df: pd.DataFrame) -> int:
     return _upsert("fin_extrato", linhas, "id")
 
 
+@memo()
 def ler_extrato() -> pd.DataFrame:
     df = _ler("SELECT data, sentido, tipo, valor, contraparte, documento, conta_origem, saldo_depois FROM fin_extrato ORDER BY data")
     if not df.empty:
@@ -166,6 +178,7 @@ def salvar_fichas(df: pd.DataFrame) -> int:
     return _upsert("fin_fichas", linhas, "peca")
 
 
+@memo()
 def ler_fichas() -> pd.DataFrame:
     return _ler("SELECT peca, custo, preco, margem_pct, incompleta FROM fin_fichas ORDER BY peca")
 
@@ -178,6 +191,7 @@ def salvar_lancamentos_legado(df: pd.DataFrame) -> int:
     return _upsert("fin_lancamentos_legado", linhas, "id")
 
 
+@memo()
 def ler_lancamentos_legado() -> pd.DataFrame:
     df = _ler("SELECT data, descricao, setor, atividade, tipo, categoria, terceiro, parcelas, valor FROM fin_lancamentos_legado ORDER BY data")
     if not df.empty:
@@ -191,6 +205,7 @@ def salvar_meta_ads(por_mes: dict, fonte: str = "relatório da agência") -> int
     return _upsert("fin_meta_ads", [{"mes": m, "valor": float(v), "fonte": fonte} for m, v in por_mes.items()], "mes")
 
 
+@memo()
 def ler_meta_ads() -> dict:
     df = _ler("SELECT mes, valor FROM fin_meta_ads ORDER BY mes")
     return dict(zip(df.mes, df.valor)) if not df.empty else {}
@@ -210,6 +225,7 @@ def salvar_contas_a_pagar(df: pd.DataFrame, substituir: bool = True) -> int:
     return _upsert("fin_contas_a_pagar", linhas, "id")
 
 
+@memo()
 def ler_contas_a_pagar() -> pd.DataFrame:
     df = _ler("SELECT data, descricao, valor, situacao, observacao, carregado_em FROM fin_contas_a_pagar ORDER BY data")
     if not df.empty:
@@ -226,6 +242,7 @@ def salvar_regras(regras: List[dict]) -> int:
     return _upsert("fin_regras", linhas, "id")
 
 
+@memo()
 def ler_regras() -> List[dict]:
     df = _ler("SELECT ordem, sentido, padrao, natureza, categoria, confianca, excecao FROM fin_regras ORDER BY ordem")
     return df.to_dict("records") if not df.empty else []

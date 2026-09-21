@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 import db
+from memo import memo
 
 LEGADO = os.path.join(os.path.dirname(__file__), "legado", "planilha_2025.xlsx")
 
@@ -70,6 +71,7 @@ META_ADS = {
 CATEGORIA_CARTAO = "Pagas no cartão das sócias (anúncios, aluguel, outras)"
 
 
+@memo()
 def meta_ads() -> dict:
     """Meta por mês: Supabase, com o dicionário acima como reserva local."""
     import dados_fin
@@ -87,6 +89,7 @@ def legado_disponivel() -> bool:
     return (dados_fin.disponivel() and not dados_fin.ler_fichas().empty) or os.path.exists(LEGADO)
 
 
+@memo()
 def carregar_legado() -> dict:
     """Fichas e lançamentos pré-conta. Supabase primeiro; sem ele, a planilha
     em legado/. Cache: nada disso muda."""
@@ -139,6 +142,7 @@ def ler_planilha_legada() -> dict:
     return {"lancamentos": lanc, "fichas": fichas, "custo_pecas": resumo, "insumos": insumos}
 
 
+@memo()
 def aportes() -> pd.DataFrame:
     """Aportes das sócias: o que entrou na conta da empresa vindo delas (ou do
     Pedro, em nome da Ana), mais o que foi pago do bolso antes de a conta
@@ -165,6 +169,7 @@ def saidas_pre_conta() -> pd.DataFrame:
     return p[p.data < extrato.INICIO_DA_CONTA].reset_index(drop=True)
 
 
+@memo()
 def ledger_saidas() -> pd.DataFrame:
     """Toda saída de dinheiro da empresa, uma fonte por período:
     planilha até 24/03/2025, extrato da conta dali em diante."""
@@ -273,6 +278,7 @@ def _mes_brt(iso: str) -> str:
     return t.strftime("%Y-%m")
 
 
+@memo()
 def pedidos_pagos() -> pd.DataFrame:
     """Um pedido por linha, nuvem e local juntos, só os pagos, cada um casado
     com a cobrança da Pagar.me que o pagou (quando existe)."""
@@ -420,6 +426,7 @@ def receita_fisica_por_mes() -> pd.DataFrame:
     return out
 
 
+@memo()
 def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     ped = pedidos_pagos()
     receita = ped.groupby("mes")["total"].sum() if not ped.empty else pd.Series(dtype=float)
@@ -491,6 +498,7 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     }
 
 
+@memo()
 def fluxo_de_caixa() -> pd.DataFrame:
     """Mês a mês, pelo extrato: o que entrou, o que saiu, aportes e acumulado.
 
@@ -553,6 +561,7 @@ def payback(fluxo: pd.DataFrame):
     return depois.iloc[0]["mes"] if not depois.empty else None
 
 
+@memo()
 def estoque_a_custo() -> float:
     """Produção paga menos CMV consumido: o que está na arara e no rolo, a custo."""
     led = ledger_saidas()

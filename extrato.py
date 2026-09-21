@@ -27,6 +27,8 @@ import re
 
 import pandas as pd
 
+from memo import memo
+
 ARQUIVO = os.path.join(os.path.dirname(__file__), "legado", "extrato.xlsx")
 INICIO_DA_CONTA = pd.Timestamp("2025-03-25")
 
@@ -73,6 +75,7 @@ REGRAS_CREDITO = [
 ARQUIVO_REGRAS = os.path.join(os.path.dirname(__file__), "legado", "regras.json")
 
 
+@memo()
 def regras_externas() -> list:
     """Regras com nome de pessoa: Supabase primeiro, JSON local depois.
     Cada uma: {sentido, padrao, natureza, categoria, confianca, excecao?}.
@@ -181,6 +184,7 @@ def disponivel() -> bool:
     return (dados_fin.disponivel() and not dados_fin.ler_extrato().empty) or os.path.exists(ARQUIVO)
 
 
+@memo()
 def carregar() -> pd.DataFrame:
     """Extrato classificado. Supabase primeiro; sem ele, o xlsx em legado/."""
     import dados_fin

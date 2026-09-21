@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from memo import memo
+
 
 # Contas já contratadas e ainda não pagas em 20/09/2026, fora de aluguel,
 # contador, sistema, Correios e Simples, que já estão em fixos e taxas.
@@ -42,6 +44,7 @@ COMPROMISSOS_LOCAL = {
 _FIXOS_NA_PLANILHA = r"aluguel|condom|koyashiki|contabil|olist|correios|simples"
 
 
+@memo()
 def compromissos_pendentes() -> dict:
     """Contas contratadas e não pagas, por mês, fora do que já é fixo.
     Supabase primeiro; sem ele, o número local de 20/09/2026."""

@@ -1149,9 +1149,12 @@ with st.sidebar:
 
     # Lista suspensa em vez de radio: com 5 opções o radio horizontal quebrava
     # em duas fileiras desalinhadas na largura da barra lateral.
+    # "Este mês" é o padrão: a conversa do dia a dia é sobre o mês corrente,
+    # e "últimos 30 dias" misturava fim do mês passado com o atual.
     PRESETS = {
         "Hoje": 0,
         "Últimos 7 dias": 7,
+        "Este mês": "mes",
         "Últimos 30 dias": 30,
         "Últimos 90 dias": 90,
         "Personalizado": None,
@@ -1161,8 +1164,11 @@ with st.sidebar:
     )
     if PRESETS[preset] is None:
         c_de, c_ate = st.columns(2)
-        data_ini = c_de.date_input("De", value=hoje - timedelta(days=30), key="g_ini")
+        data_ini = c_de.date_input("De", value=hoje.replace(day=1), key="g_ini")
         data_fim = c_ate.date_input("Até", value=hoje, key="g_fim")
+    elif PRESETS[preset] == "mes":
+        data_ini = hoje.replace(day=1)
+        data_fim = hoje
     else:
         data_ini = hoje - timedelta(days=PRESETS[preset])
         data_fim = hoje
