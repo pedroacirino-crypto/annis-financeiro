@@ -34,3 +34,9 @@ attached_assets/
 
 # Anotacoes de trabalho: tem nome de cliente, e o repo e publico
 CHECKPOINT.md
+
+# Planilha legada com fornecedores e valores: fica fora do repositório público
+legado/
+
+# Configuração local do preview
+.claude/

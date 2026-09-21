@@ -11,6 +11,7 @@ import altair as alt
 import json
 from datetime import date, timedelta, datetime
 
+import aba_resultado
 import db
 import nuvem
 import pagarme_client
@@ -1227,7 +1228,7 @@ with st.sidebar:
 # Clientes são fila de contato, as outras são conferência de dinheiro. Elas
 # não se misturam no dia da Ana, então também não se misturam no menu.
 TRABALHO = ["Recuperar", "Clientes", "Lista de espera"]
-FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico"]
+FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 secao = st.segmented_control(
     "Seção", ["Financeiro", "Trabalho"], default="Financeiro",
@@ -2208,3 +2209,8 @@ if "Histórico" in abas:
             "anteriores à primeira sincronização de recebíveis aparecem com "
             "custo zerado."
         )
+
+
+if "Resultado" in abas:
+    with abas["Resultado"]:
+        aba_resultado.render()
