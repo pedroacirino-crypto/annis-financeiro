@@ -119,6 +119,9 @@ LOGO_URL = "https://annis.store/cdn/shop/files/Artboard_1_copy_6.png"
 # expirar, atualize aqui; não há endpoint que descubra sozinho qual usar.
 CUPOM_RECUPERACAO = "VOLTE5"
 DESCONTO_RECUPERACAO = "5% OFF"
+# Validade do Pix do checkout. Medido no pedido #1118: gerado 10:53, expirou
+# 11:23. Se mudar o prazo na Stone, é só trocar aqui.
+MINUTOS_PIX = 30
 
 # O bloco abaixo não pode conter linhas em branco: no markdown do Streamlit
 # uma linha vazia encerra o bloco HTML e o resto do CSS vaza como texto na
@@ -601,7 +604,8 @@ def _card_recuperar(a: dict):
         texto = (
             f"{saudacao}\n\n"
             f"Seu pedido{(' ' + pedido) if pedido else ''}, de {produtos}, "
-            "ficou sem pagamento e o Pix expirou.\n\n"
+            "ficou sem pagamento. O Pix gerado no site expira rápido, em "
+            f"{MINUTOS_PIX} minutos, e o seu venceu antes de ser pago.\n\n"
             "Se ainda quiser, te mando um novo Pix por aqui, sem prazo para "
             "expirar. É só me responder. 🤎\n\n"
             "Com carinho,\nAnnis"
