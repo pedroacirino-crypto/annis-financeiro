@@ -273,6 +273,24 @@ def _local() -> bool:
         return False
 
 
+def _manter_sessao(esperada: str) -> None:
+    """Grava (ou renova) o cookie na primeira tela já autenticada.
+
+    Antes isto ficava dentro do formulário, logo antes do `st.rerun()`, e
+    funcionava na máquina local mas não em produção: o rerun troca a página
+    antes de o componente chegar ao navegador e rodar o script, e o cookie
+    nunca nascia. Aqui a tela não vai a lugar nenhum, então a escrita
+    acontece. De quebra, cada sessão nova empurra a validade para a frente.
+    """
+    if st.session_state.get("_cookie_gravado") or st.session_state.get("_ignorar_cookie"):
+        return
+    if not st.session_state.get("_lembrar", True):
+        return
+    segundos = DIAS_DE_SESSAO * 86400
+    _gravar_cookie(_assinar(int(time.time()) + segundos, esperada), segundos)
+    st.session_state["_cookie_gravado"] = True
+
+
 def sair():
     """Esquece este navegador.
 
@@ -282,9 +300,10 @@ def sair():
     novo. A marca vive só nesta sessão; o cookie some de verdade.
     """
     st.session_state.pop("_autenticado", None)
+    st.session_state.pop("_cookie_gravado", None)
     st.session_state["_ignorar_cookie"] = True
     _gravar_cookie("", 0)
-    time.sleep(0.6)
+    time.sleep(0.8)
     st.rerun()
 
 
@@ -307,6 +326,7 @@ def exigir_senha():
         st.stop()
 
     if st.session_state.get("_autenticado"):
+        _manter_sessao(esperada)
         return
 
     # Sessão lembrada: o cookie assinado dispensa a senha até vencer.
@@ -317,7 +337,11 @@ def exigir_senha():
         token = ""
     if token and _token_valido(token, esperada):
         st.session_state["_autenticado"] = True
+        _manter_sessao(esperada)
         return
+    if token:
+        # Cookie presente e recusado: venceu, ou a senha foi trocada no cofre.
+        st.session_state["_sessao_expirou"] = True
 
     st.markdown(
         f"<div style='text-align:center;padding:3rem 0 1rem'>"
@@ -329,6 +353,8 @@ def exigir_senha():
     )
     _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
+        if st.session_state.get("_sessao_expirou"):
+            st.caption("Sua sessão venceu ou a senha mudou. Entre de novo.")
         with st.form("entrar"):
             senha = st.text_input("Senha", type="password", label_visibility="collapsed",
                                   placeholder="Senha de acesso")
@@ -338,13 +364,9 @@ def exigir_senha():
                 # compare_digest evita vazar o tamanho da senha pelo tempo de resposta
                 if hmac.compare_digest(senha, esperada):
                     st.session_state["_autenticado"] = True
+                    st.session_state["_lembrar"] = lembrar
                     st.session_state.pop("_ignorar_cookie", None)
-                    if lembrar:
-                        segundos = DIAS_DE_SESSAO * 86400
-                        _gravar_cookie(_assinar(int(time.time()) + segundos, esperada), segundos)
-                        # O componente precisa de um instante para gravar o
-                        # cookie antes do rerun levar a página embora.
-                        time.sleep(0.6)
+                    st.session_state.pop("_sessao_expirou", None)
                     st.rerun()
                 else:
                     st.error("Senha incorreta.")
@@ -1387,7 +1409,20 @@ with st.sidebar:
     # Sair existe para o aparelho emprestado ou perdido: apaga o cookie deste
     # navegador. Para derrubar todos de uma vez, troque a APP_PASSWORD no
     # cofre, porque ela é a chave que assina os tokens.
-    st.write("")
+    # Diz em que pé está a sessão lembrada. Serve para a Ana e serve para
+    # diagnóstico: "lembrada" prova que a escrita e a leitura funcionam,
+    # "não está lembrando" mostra qual das duas falhou sem precisar de log.
+    try:
+        _tem_cookie = bool((st.context.cookies or {}).get(COOKIE_SESSAO))
+    except Exception:
+        _tem_cookie = False
+    if _tem_cookie:
+        st.caption(f"Sessão lembrada neste aparelho por {DIAS_DE_SESSAO} dias.")
+    elif st.session_state.get("_cookie_gravado"):
+        st.caption("Sessão marcada para ser lembrada. Recarregue para confirmar.")
+    else:
+        st.caption("Este aparelho não está lembrando a sessão.")
+
     if st.button("Sair", use_container_width=True):
         sair()
 
