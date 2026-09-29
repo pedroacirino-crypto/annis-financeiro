@@ -146,6 +146,12 @@ def init_db():
         cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN cupom TEXT")
     if "desconto" not in cols_ab:
         cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN desconto INTEGER DEFAULT 0")
+    # Cidade veio depois: o carrinho abandonado sabe para onde ia a compra, e
+    # é o que permite mostrar cidade na venda recusada, que não vira pedido.
+    if "cidade" not in cols_ab:
+        cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN cidade TEXT")
+    if "uf" not in cols_ab:
+        cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN uf TEXT")
 
     cols_ped = {r[1] for r in cur.execute("PRAGMA table_info(shopify_orders)")}
     if "cep" not in cols_ped:
@@ -400,8 +406,9 @@ def upsert_abandonados(itens: List[dict]) -> int:
         cur.execute("""
             INSERT INTO abandoned_checkouts
                 (id, nome, criado_em, url_recuperacao, valor, cliente, email,
-                 telefone, pedidos_anteriores, itens, cupom, desconto, raw_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 telefone, pedidos_anteriores, itens, cupom, desconto,
+                 cidade, uf, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 nome=excluded.nome, criado_em=excluded.criado_em,
                 url_recuperacao=excluded.url_recuperacao, valor=excluded.valor,
@@ -409,7 +416,8 @@ def upsert_abandonados(itens: List[dict]) -> int:
                 telefone=excluded.telefone,
                 pedidos_anteriores=excluded.pedidos_anteriores,
                 itens=excluded.itens, cupom=excluded.cupom,
-                desconto=excluded.desconto, raw_json=excluded.raw_json
+                desconto=excluded.desconto, cidade=excluded.cidade,
+                uf=excluded.uf, raw_json=excluded.raw_json
         """, (
             it.get("id", ""),
             it.get("name", ""),
@@ -429,6 +437,11 @@ def upsert_abandonados(itens: List[dict]) -> int:
             # A Shopify devolve lista; na prática vem no máximo um cupom.
             ", ".join(it.get("discountCodes") or []),
             int(round(float(desconto) * 100)),
+            (((it.get("shippingAddress") or {}).get("city")
+              or (it.get("billingAddress") or {}).get("city")) or "").strip(),
+            (((it.get("shippingAddress") or {}).get("provinceCode")
+              or (it.get("shippingAddress") or {}).get("province")
+              or (it.get("billingAddress") or {}).get("provinceCode")) or "").strip(),
             json.dumps(it, ensure_ascii=False),
         ))
         n += 1
@@ -815,6 +828,45 @@ def pedido_de_cada_cobranca() -> dict:
         p = perto[0][2]
         usados.add(p["numero"])
         saida[c["id"]] = p
+
+    # Cartão recusado não vira pedido na Shopify, mas o carrinho abandonado
+    # daquela tentativa guarda as peças e a cidade. Sem esta reserva a venda
+    # recusada aparecia vazia, como se não houvesse dado nenhum, quando o
+    # dado estava a uma consulta de distância.
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    carrinhos = [dict(r) for r in con.execute(
+        "SELECT criado_em, cliente, email, itens, cidade, uf FROM abandoned_checkouts"
+    ).fetchall()]
+    con.close()
+    car_email, car_nome = {}, {}
+    for a in carrinhos:
+        if a.get("email"):
+            car_email.setdefault(a["email"].strip().lower(), []).append(a)
+        n = _normalizar(a.get("cliente") or "")
+        if n:
+            car_nome.setdefault(n, []).append(a)
+
+    for c in cobrancas:
+        if c["id"] in saida:
+            continue
+        cand = (car_email.get((c["customer_email"] or "").strip().lower())
+                or car_nome.get(_normalizar(c["customer_name"] or "")) or [])
+        melhor, menor = None, 99
+        for a in cand:
+            try:
+                d = abs((date.fromisoformat(dia(a["criado_em"]))
+                         - date.fromisoformat(dia(c["created_at"]))).days)
+            except Exception:
+                continue
+            if d <= 2 and d < menor:
+                melhor, menor = a, d
+        if melhor:
+            # Marcado como carrinho para a tela poder dizer que a compra não
+            # se completou, em vez de exibir como se fosse pedido.
+            saida[c["id"]] = {"numero": "", "cliente": melhor["cliente"],
+                              "cidade": melhor["cidade"], "uf": melhor["uf"],
+                              "itens": melhor["itens"], "origem": "carrinho"}
     return saida
 
 

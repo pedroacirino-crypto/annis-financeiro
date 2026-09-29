@@ -103,8 +103,8 @@ query($cursor: String) {
       totalPriceSet { shopMoney { amount } }
       totalDiscountSet { shopMoney { amount } }
       customer { displayName email phone numberOfOrders }
-      shippingAddress { phone }
-      billingAddress { phone }
+      shippingAddress { phone city province provinceCode }
+      billingAddress { phone city province provinceCode }
       lineItems(first: 20) { nodes { title quantity } }
     }
   }

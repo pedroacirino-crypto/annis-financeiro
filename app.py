@@ -1686,7 +1686,9 @@ if "Vendas" in abas:
             det["valor"] = det["amount"].apply(fmt_brl)
             det["quando"] = det["created_at"].dt.strftime("%d/%m/%Y %H:%M")
             # A Pagar.me não sabe o que foi vendido nem para onde: cidade e
-            # peças vêm do pedido da Shopify, amarrado por e-mail e data.
+            # peças vêm do pedido da Shopify e, quando não houve pedido
+            # (cartão recusado não gera um), do carrinho abandonado daquela
+            # tentativa, que guarda as peças e o endereço.
             casados = _pedido_por_cobranca()
             det["cidade"] = det["id"].map(
                 lambda i: (lambda p: f"{p['cidade']}/{p['uf']}" if p and p.get("cidade") else "")(casados.get(i))
@@ -1706,10 +1708,10 @@ if "Vendas" in abas:
                 num=("Valor", "Parcelas"), altura_max=420,
             )
             st.caption(
-                "Cidade e peças vêm do pedido da loja, e por isso a linha fica vazia "
-                "quando não existe pedido: cartão recusado não gera pedido na Shopify, "
-                "e tentativa repetida da mesma compra fica presa ao mesmo pedido, que "
-                "é mostrado só uma vez, na cobrança que valeu."
+                "Cidade e peças vêm do pedido da loja e, quando o cartão foi recusado "
+                "e não houve pedido, do carrinho daquela tentativa. Fica vazio quando "
+                "a pessoa comprou depois, e aí a peça aparece na cobrança que valeu, "
+                "ou quando o carrinho é antigo demais para a Shopify ainda guardar."
             )
 
 # ════════════════════════════════════════════════════════════════════════════
