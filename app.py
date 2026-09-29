@@ -1598,29 +1598,41 @@ if "Vendas" in abas:
         c1.metric("Vendido", fmt_brl(vendido))
         c2.metric("Vendas", qtd)
         c3.metric("Ticket médio", fmt_brl(int(vendido / qtd)) if qtd else "—")
-        aprov = qtd / len(df_chg) * 100
+        # Compra, não cobrança: quatro Pix da mesma pessoa pelo mesmo valor em
+        # um minuto são uma compra perdida, e quem falhou e pagou em seguida
+        # não perdeu nada. Contando cobrança, a aprovação de setembro dava
+        # 70% em vez de 88% e a perda dava mais que o dobro.
+        perdidas = db.vendas_perdidas(date_from_str, date_to_str)
+        tentativas_extras = sum(p["tentativas"] for p in perdidas) - len(perdidas)
+        aprov = qtd / (qtd + len(perdidas)) * 100 if (qtd + len(perdidas)) else 0
         c4.metric("Aprovação", fmt_pct(aprov, 0))
-        perdidas = df_chg[df_chg["status"] != "paid"]
-        c4.caption(f"{len(perdidas)} de {len(df_chg)} não converteram")
+        c4.caption(f"{len(perdidas)} de {qtd + len(perdidas)} não converteram")
 
-        if not perdidas.empty:
-            valor_perdido = int(perdidas["amount"].sum())
+        if perdidas:
+            valor_perdido = int(sum(p["amount"] for p in perdidas))
             with st.expander(f"Ver as {len(perdidas)} vendas que não entraram ({fmt_brl(valor_perdido)})"):
-                pd_ = perdidas.copy()
+                pd_ = pd.DataFrame(perdidas)
                 pd_["valor"] = pd_["amount"].apply(fmt_brl)
-                pd_["quando"] = pd_["created_at"].dt.strftime("%d/%m/%Y %H:%M")
+                pd_["quando"] = para_brt(
+                    pd.to_datetime(pd_["created_at"], errors="coerce", utc=True)
+                ).dt.strftime("%d/%m/%Y %H:%M")
+                pd_["tent"] = pd_["tentativas"].apply(lambda n: "" if n == 1 else f"{n}x")
                 pd_ = traduzir(pd_, {"status": STATUS_CHG_PT, "payment_method": METODO_PT})
                 tabela(
-                    pd_[["quando", "customer_name", "valor", "status", "payment_method"]]
+                    pd_[["quando", "customer_name", "valor", "status", "payment_method", "tent"]]
                     .rename(columns={
                         "quando": "Quando", "customer_name": "Cliente", "valor": "Valor",
-                        "status": "Situação", "payment_method": "Meio",
+                        "status": "Situação", "payment_method": "Meio", "tent": "Tentativas",
                     }),
                     num=("Valor",), altura_max=320,
                 )
                 st.caption(
-                    "Pendente ainda pode virar venda; falha e cancelada, não. "
-                    "Cliente repetido com valor igual costuma ser nova tentativa da mesma compra."
+                    "Uma linha por compra, não por cobrança: tentativas da mesma "
+                    "pessoa pelo mesmo valor em até 24 horas contam uma vez, e quem "
+                    "pagou nos 7 dias seguintes saiu da lista."
+                    + (f" No período foram {tentativas_extras} tentativas repetidas."
+                       if tentativas_extras else "")
+                    + " Pendente ainda pode virar venda; falha e cancelada, não."
                 )
 
         st.divider()

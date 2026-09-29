@@ -1325,3 +1325,100 @@ def horas_desde_sincronizacao():
     except ValueError:
         return None
     return (datetime.now(timezone.utc) - t).total_seconds() / 3600
+
+
+# Tentativa repetida não é venda perdida a mais, e quem tentou de novo e
+# conseguiu não é venda perdida nenhuma.
+_HORAS_MESMA_TENTATIVA = 24     # intervalo máximo entre tentativas da mesma compra
+_DIAS_PARA_CONVERTER = 7        # prazo em que pagar depois ainda conta como a mesma compra
+
+
+def _instante(texto: str):
+    """'2026-09-06T12:45:00Z' em datetime, ou None. Só para medir distância
+    entre tentativas, por isso não precisa de fuso: todas vêm em UTC."""
+    if not texto:
+        return None
+    from datetime import datetime
+    try:
+        return datetime.strptime(texto[:19], "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return None
+
+
+def vendas_perdidas(date_from: str = None, date_to: str = None) -> "list[dict]":
+    """Compras que a pessoa tentou fazer e não entraram, uma por pessoa.
+
+    Contar cobrança não paga é contar errado duas vezes. A Ji Park gerou
+    quatro Pix de R$ 425,60 no intervalo de um minuto em 06/09/2026: é uma
+    compra perdida, não quatro. E a Leticia Blazzi falhou duas vezes e pagou
+    na terceira, um minuto depois: não perdeu nada, e mesmo assim entrava na
+    lista com as duas falhas. Em setembro isso inflava a perda de
+    R$ 2.202,30 para R$ 5.263,50, e derrubava a aprovação de 88% para 70%.
+
+    A regra: tentativas da mesma pessoa pelo mesmo valor a menos de 24 horas
+    de distância são uma compra só. A compra sai da lista se a pessoa pagou
+    qualquer coisa nos 7 dias seguintes à primeira tentativa, por qualquer
+    valor, porque a segunda tentativa costuma vir com desconto de Pix e o
+    valor muda.
+
+    Devolve a tentativa mais recente de cada compra, com quantas foram.
+    """
+    from datetime import timedelta as _td
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    cur.execute("SELECT * FROM charges ORDER BY created_at")
+    todas = [dict(r) for r in cur.fetchall()]
+    con.close()
+
+    pagamentos = {}
+    for c in todas:
+        if c["status"] != "paid":
+            continue
+        quando = _instante(c["created_at"])
+        if not quando:
+            continue
+        for chave in (c["customer_email"] or "", _normalizar(c["customer_name"])):
+            if chave:
+                pagamentos.setdefault(chave, []).append(quando)
+
+    def quem(c):
+        return c["customer_email"] or _normalizar(c["customer_name"]) or c["id"]
+
+    # Agrupa tentativas em compras. Sequência já vem ordenada por data, então
+    # basta olhar a distância para a tentativa anterior da mesma chave.
+    compras, aberta = [], {}
+    for c in todas:
+        if c["status"] == "paid":
+            continue
+        chave = (quem(c), c["amount"])
+        quando = _instante(c["created_at"])
+        g = aberta.get(chave)
+        if g and quando and g["ate"] and (quando - g["ate"]) <= _td(hours=_HORAS_MESMA_TENTATIVA):
+            g["tentativas"] += 1
+            g["ate"] = quando
+            g["ultima"] = c
+            continue
+        g = {"tentativas": 1, "de": quando, "ate": quando, "primeira": c, "ultima": c}
+        aberta[chave] = g
+        compras.append(g)
+
+    saida = []
+    for g in compras:
+        c, inicio = g["ultima"], g["de"]
+        # Pagou nos dias seguintes? Então a compra aconteceu, não é perda.
+        if inicio and any(
+            inicio <= q <= inicio + _td(days=_DIAS_PARA_CONVERTER)
+            for chave in (c["customer_email"] or "", _normalizar(c["customer_name"]))
+            for q in pagamentos.get(chave, [])
+        ):
+            continue
+        # O período recorta pela tentativa mais recente, que é a que a tabela
+        # mostra: assim o que aparece na lista está sempre dentro da janela.
+        dia = (c["created_at"] or "")[:10]
+        if (date_from and dia < date_from) or (date_to and dia > date_to):
+            continue
+        saida.append({**c, "tentativas": g["tentativas"],
+                      "primeira_em": g["primeira"]["created_at"]})
+    saida.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return saida
