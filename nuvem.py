@@ -531,3 +531,129 @@ def ler_contatos() -> dict:
         return {l["id"]: l["enviado_em"] for l in linhas}
     except Exception:
         return {}
+
+
+# ─── Log de acesso ──────────────────────────────────────────────────────────
+#
+# A senha é uma só e o link é público, então o painel não sabe QUEM entrou,
+# só de onde. O que ele consegue afirmar é "este aparelho nunca apareceu
+# aqui", e é esse o sinal que vale alarme. O nome que aparece no log é
+# etiqueta declarada por quem entra, não identificação.
+#
+# Mora na nuvem porque log que some no reinício não serve para investigar
+# nada depois.
+
+TABELA_ACESSOS = "acessos"
+TABELA_APARELHOS = "aparelhos_conhecidos"
+
+
+def garantir_acessos() -> None:
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        con.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {TABELA_ACESSOS} (
+                id          BIGSERIAL PRIMARY KEY,
+                quando      TIMESTAMPTZ NOT NULL DEFAULT now(),
+                aparelho    TEXT NOT NULL,
+                quem        TEXT,
+                ip          TEXT,
+                navegador   TEXT,
+                sistema     TEXT,
+                via         TEXT,
+                conhecido   BOOLEAN NOT NULL DEFAULT false
+            )
+        """))
+        con.execute(text(
+            f"CREATE INDEX IF NOT EXISTS {TABELA_ACESSOS}_quando"
+            f" ON {TABELA_ACESSOS} (quando DESC)"
+        ))
+        con.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {TABELA_APARELHOS} (
+                aparelho    TEXT PRIMARY KEY,
+                apelido     TEXT,
+                quem        TEXT,
+                visto_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
+                suspeito    BOOLEAN NOT NULL DEFAULT false
+            )
+        """))
+
+
+def registrar_acesso(aparelho: str, quem: str, ip: str, navegador: str,
+                     sistema: str, via: str) -> bool:
+    """Grava uma entrada e diz se o aparelho já era conhecido."""
+    if not configurado():
+        return True
+    from sqlalchemy import text
+    try:
+        garantir_acessos()
+        with _conectar().begin() as con:
+            ja = con.execute(text(
+                f"SELECT 1 FROM {TABELA_APARELHOS} WHERE aparelho = :a"
+            ), {"a": aparelho}).first() is not None
+            con.execute(text(
+                f"INSERT INTO {TABELA_ACESSOS}"
+                f" (aparelho, quem, ip, navegador, sistema, via, conhecido)"
+                f" VALUES (:a, :q, :ip, :nav, :sis, :via, :con)"
+            ), {"a": aparelho, "q": quem, "ip": ip, "nav": navegador,
+                "sis": sistema, "via": via, "con": ja})
+        return ja
+    except Exception:
+        # Falha de log não pode impedir alguém de usar o painel.
+        return True
+
+
+def conhecer_aparelho(aparelho: str, apelido: str = "", quem: str = "",
+                      suspeito: bool = False) -> bool:
+    if not configurado():
+        return False
+    from sqlalchemy import text
+    try:
+        garantir_acessos()
+        with _conectar().begin() as con:
+            con.execute(text(
+                f"INSERT INTO {TABELA_APARELHOS} (aparelho, apelido, quem, suspeito)"
+                f" VALUES (:a, :ap, :q, :s)"
+                f" ON CONFLICT (aparelho) DO UPDATE SET apelido = EXCLUDED.apelido,"
+                f" quem = EXCLUDED.quem, suspeito = EXCLUDED.suspeito, visto_em = now()"
+            ), {"a": aparelho, "ap": apelido, "q": quem, "s": suspeito})
+            con.execute(text(
+                f"UPDATE {TABELA_ACESSOS} SET conhecido = true WHERE aparelho = :a"
+            ), {"a": aparelho})
+        return True
+    except Exception:
+        return False
+
+
+def ler_acessos(limite: int = 300) -> List[dict]:
+    if not configurado():
+        return []
+    from sqlalchemy import text
+    try:
+        garantir_acessos()
+        with _conectar().connect() as con:
+            linhas = con.execute(text(
+                f"SELECT a.quando, a.aparelho, a.quem, a.ip, a.navegador, a.sistema,"
+                f" a.via, a.conhecido, c.apelido, c.suspeito"
+                f" FROM {TABELA_ACESSOS} a"
+                f" LEFT JOIN {TABELA_APARELHOS} c ON c.aparelho = a.aparelho"
+                f" ORDER BY a.quando DESC LIMIT :n"
+            ), {"n": limite}).mappings().all()
+        return [dict(l) for l in linhas]
+    except Exception:
+        return []
+
+
+def ler_aparelhos() -> List[dict]:
+    if not configurado():
+        return []
+    from sqlalchemy import text
+    try:
+        garantir_acessos()
+        with _conectar().connect() as con:
+            linhas = con.execute(text(
+                f"SELECT aparelho, apelido, quem, visto_em, suspeito"
+                f" FROM {TABELA_APARELHOS} ORDER BY visto_em DESC"
+            )).mappings().all()
+        return [dict(l) for l in linhas]
+    except Exception:
+        return []

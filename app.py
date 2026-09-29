@@ -262,6 +262,87 @@ def _token_valido(token: str, senha: str) -> bool:
     return hmac.compare_digest(token, _assinar(int(ate), senha))
 
 
+PESSOAS = ["Pedro", "Ana", "Isa"]
+
+
+def _cabecalho(nome: str) -> str:
+    try:
+        return (st.context.headers or {}).get(nome, "") or ""
+    except Exception:
+        return ""
+
+
+def _descrever_aparelho() -> dict:
+    """O que dá para saber de quem está do outro lado.
+
+    Medido em produção: chegam `User-Agent` e `X-Forwarded-For`. O
+    `X-Streamlit-User` vem vazio em app público, então a Streamlit não
+    entrega identidade nenhuma. A impressão do aparelho é o hash do
+    User-Agent: é o que existe de estável. Atualização de navegador muda a
+    versão e cria um aparelho "novo", o que gera um alarme falso de vez em
+    quando, resolvido com um clique em "Fui eu".
+    """
+    import hashlib
+    ua = _cabecalho("User-Agent")
+    ip = (_cabecalho("X-Forwarded-For").split(",")[0] or "").strip()
+    nav, sis = "desconhecido", "desconhecido"
+    for marca, rotulo in (("Edg/", "Edge"), ("OPR/", "Opera"), ("Chrome/", "Chrome"),
+                          ("Firefox/", "Firefox"), ("Safari/", "Safari")):
+        if marca in ua:
+            nav = rotulo
+            break
+    for marca, rotulo in (("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"),
+                          ("Macintosh", "Mac"), ("Windows", "Windows"), ("Linux", "Linux")):
+        if marca in ua:
+            sis = rotulo
+            break
+    return {
+        "aparelho": hashlib.sha1(ua.encode()).hexdigest()[:16] if ua else "sem-user-agent",
+        "ip": ip, "navegador": nav, "sistema": sis,
+    }
+
+
+def _registrar_entrada(via: str, quem: str = "") -> None:
+    """Uma linha no log por sessão. `via` é 'senha' ou 'atalho'."""
+    if st.session_state.get("_acesso_registrado"):
+        return
+    d = _descrever_aparelho()
+    if not quem:
+        quem = next((a.get("quem") or "" for a in nuvem.ler_aparelhos()
+                     if a["aparelho"] == d["aparelho"]), "")
+    conhecido = nuvem.registrar_acesso(d["aparelho"], quem, d["ip"],
+                                       d["navegador"], d["sistema"], via)
+    st.session_state["_acesso_registrado"] = True
+    st.session_state["_aparelho"] = d
+    st.session_state["_quem"] = quem
+    st.session_state["_aparelho_novo"] = not conhecido
+
+
+def aviso_aparelho_novo() -> None:
+    """Faixa no topo quando entra alguém de um aparelho nunca visto."""
+    if not st.session_state.get("_aparelho_novo"):
+        return
+    d = st.session_state.get("_aparelho") or {}
+    st.warning(
+        f"**Acesso de um aparelho que nunca entrou aqui.** "
+        f"{d.get('navegador', '?')} no {d.get('sistema', '?')}, rede {d.get('ip') or 'desconhecida'}. "
+        f"Se não foi você, a Ana nem a Isa, troque a APP_PASSWORD no cofre agora: "
+        f"ela derruba todos os acessos."
+    )
+    c1, c2, c3 = st.columns([1, 1, 3])
+    quem = c1.selectbox("Quem", PESSOAS, label_visibility="collapsed", key="quem_novo")
+    if c2.button("Fui eu", use_container_width=True):
+        nuvem.conhecer_aparelho(d.get("aparelho", ""), f"{d.get('navegador')} no {d.get('sistema')}", quem)
+        st.session_state["_aparelho_novo"] = False
+        st.session_state["_quem"] = quem
+        st.rerun()
+    if c3.button("Não fui eu, marcar como suspeito", use_container_width=True):
+        nuvem.conhecer_aparelho(d.get("aparelho", ""), f"{d.get('navegador')} no {d.get('sistema')}",
+                                "", suspeito=True)
+        st.session_state["_aparelho_novo"] = False
+        st.rerun()
+
+
 def _guardar_token(esperada: str) -> None:
     """Põe o token na URL, de onde ele sobrevive ao recarregar."""
     token = _assinar(int(time.time()) + DIAS_DE_SESSAO * 86400, esperada)
@@ -302,6 +383,7 @@ def exigir_senha():
         st.stop()
 
     if st.session_state.get("_autenticado"):
+        _registrar_entrada(st.session_state.get("_via", "atalho"))
         # Mantém o token na URL mesmo se algo o tiver apagado no caminho.
         if st.session_state.get("_token") and not st.query_params.get(PARAM_SESSAO):
             try:
@@ -315,6 +397,8 @@ def exigir_senha():
     if token and _token_valido(token, esperada):
         st.session_state["_autenticado"] = True
         st.session_state["_token"] = token
+        st.session_state["_via"] = "atalho"
+        _registrar_entrada("atalho")
         return
     if token:
         # Token presente e recusado: venceu, ou a senha mudou no cofre.
@@ -330,31 +414,26 @@ def exigir_senha():
     )
     _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
-        # Diagnóstico temporário: só os NOMES dos cabeçalhos que chegam ao
-        # app, nenhum valor, para saber que sinal existe para o log de acesso.
-        try:
-            _h = sorted((st.context.headers or {}).keys())
-        except Exception as _e:
-            _h = [f"erro: {type(_e).__name__}"]
-        try:
-            _su = (st.context.headers or {}).get("X-Streamlit-User", "")
-        except Exception:
-            _su = ""
-        st.caption(f"diag headers ({len(_h)}): X-Streamlit-User={_su[:120] or 'vazio'}")
         if st.session_state.get("_sessao_expirou"):
             st.caption("Sua sessão venceu ou a senha mudou. Entre de novo.")
         with st.form("entrar"):
             senha = st.text_input("Senha", type="password", label_visibility="collapsed",
                                   placeholder="Senha de acesso")
+            quem_entra = st.selectbox("Quem está entrando", PESSOAS + ["Outra pessoa"],
+                                      index=0, help="Etiqueta para o log de acessos. "
+                                                    "É declaração, não identificação.")
             lembrar = st.checkbox(f"Continuar conectada neste aparelho por {DIAS_DE_SESSAO} dias",
                                   value=True)
             if st.form_submit_button("Entrar", use_container_width=True, type="primary"):
                 # compare_digest evita vazar o tamanho da senha pelo tempo de resposta
                 if hmac.compare_digest(senha, esperada):
                     st.session_state["_autenticado"] = True
+                    st.session_state["_via"] = "senha"
+                    st.session_state["_quem_declarado"] = quem_entra
                     st.session_state.pop("_sessao_expirou", None)
                     if lembrar:
                         _guardar_token(esperada)
+                    _registrar_entrada("senha", quem_entra)
                     st.rerun()
                 else:
                     st.error("Senha incorreta.")
@@ -1418,8 +1497,12 @@ with st.sidebar:
 # Duas naturezas de trabalho na mesma tela cansavam a leitura: Recuperar e
 # Clientes são fila de contato, as outras são conferência de dinheiro. Elas
 # não se misturam no dia da Ana, então também não se misturam no menu.
-TRABALHO = ["Recuperar", "Clientes", "Lista de espera"]
+TRABALHO = ["Recuperar", "Clientes", "Lista de espera", "Acessos"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
+
+# O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
+# coisa da tela que pode significar que alguém de fora está aqui dentro.
+aviso_aparelho_novo()
 
 secao = st.segmented_control(
     "Seção", ["Financeiro", "Trabalho"], default="Financeiro",
@@ -2445,3 +2528,68 @@ if "Histórico" in abas:
 if "Resultado" in abas:
     with abas["Resultado"]:
         aba_resultado.render()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA: ACESSOS: quem entrou no painel, e de onde
+# ════════════════════════════════════════════════════════════════════════════
+if "Acessos" in abas:
+  with abas["Acessos"]:
+    st.header("Quem entrou aqui")
+    st.caption(
+        "Uma linha por entrada no painel. O nome é etiqueta declarada por quem "
+        "entra, não identificação: a senha é uma só. O que o painel afirma de "
+        "verdade é o aparelho e a rede."
+    )
+
+    if not nuvem.configurado():
+        st.info("Sem o banco na nuvem não há log: ele precisa sobreviver ao reinício.")
+    else:
+        acessos = nuvem.ler_acessos(limite=300)
+        aparelhos = nuvem.ler_aparelhos()
+        if not acessos:
+            st.info("Nenhum acesso registrado ainda.")
+        else:
+            desconhecidos = [a for a in acessos if not a["conhecido"]]
+            suspeitos = [a for a in aparelhos if a["suspeito"]]
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Entradas registradas", len(acessos))
+            k2.metric("Aparelhos conhecidos", len([a for a in aparelhos if not a["suspeito"]]))
+            k3.metric("Marcados como suspeitos", len(suspeitos))
+
+            if suspeitos:
+                st.error(
+                    f"{len(suspeitos)} aparelho(s) marcado(s) como suspeito. "
+                    "Troque a APP_PASSWORD no cofre: ela derruba todos os acessos."
+                )
+            elif desconhecidos:
+                st.warning(
+                    f"{len(desconhecidos)} entrada(s) de aparelho ainda não reconhecido. "
+                    "Confirme abaixo quais são de vocês."
+                )
+
+            st.subheader("Aparelhos")
+            st.caption(
+                "Atualização de navegador muda a impressão do aparelho e cria um "
+                "registro novo. Por isso aparece um desconhecido de vez em quando "
+                "sem ninguém estranho ter entrado."
+            )
+            if aparelhos:
+                tabela(pd.DataFrame({
+                    "Aparelho": [a["apelido"] or a["aparelho"][:8] for a in aparelhos],
+                    "Quem": [a["quem"] or "não identificado" for a in aparelhos],
+                    "Último acesso": [a["visto_em"].strftime("%d/%m/%Y %H:%M") for a in aparelhos],
+                    "Situação": ["suspeito" if a["suspeito"] else "conhecido" for a in aparelhos],
+                }))
+            else:
+                st.caption("Nenhum aparelho confirmado ainda.")
+
+            st.subheader("Entradas")
+            tabela(pd.DataFrame({
+                "Quando": [a["quando"].strftime("%d/%m/%Y %H:%M") for a in acessos],
+                "Quem disse ser": [a["quem"] or "não disse" for a in acessos],
+                "Aparelho": [a["apelido"] or f"{a['navegador']} no {a['sistema']}" for a in acessos],
+                "Rede": [a["ip"] or "desconhecida" for a in acessos],
+                "Entrou por": [a["via"] for a in acessos],
+                "Reconhecido": ["sim" if a["conhecido"] else "NÃO" for a in acessos],
+            }), altura_max=520)
