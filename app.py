@@ -215,6 +215,33 @@ def _segredo(nome: str):
     return os.environ.get(nome)
 
 
+def versao_publicada() -> str:
+    """Commit que está rodando, lido do .git que a Streamlit Cloud clona.
+
+    Existe para eu conseguir conferir o que foi publicado sem passar pela
+    senha. Sem isto eu ficava adivinhando se um deploy tinha entrado, e
+    cheguei a dizer que o Pedro estava vendo versão velha sem ter como
+    saber. Aparece discreto na tela de entrada.
+    """
+    import pathlib
+    try:
+        raiz = pathlib.Path(__file__).resolve().parent / ".git"
+        cabeca = (raiz / "HEAD").read_text().strip()
+        if cabeca.startswith("ref:"):
+            alvo = raiz / cabeca.split(" ", 1)[1].strip()
+            if alvo.exists():
+                return alvo.read_text().strip()[:7]
+            pacotes = (raiz / "packed-refs").read_text().splitlines()
+            ref = cabeca.split(" ", 1)[1].strip()
+            for linha in pacotes:
+                if linha.endswith(" " + ref):
+                    return linha.split(" ", 1)[0][:7]
+            return "?"
+        return cabeca[:7]
+    except Exception:
+        return "?"
+
+
 def _senha_configurada():
     """Senha vinda do cofre do host (hospedado) ou do .env (local)."""
     try:
@@ -424,19 +451,21 @@ def exigir_senha():
                                                     "É declaração, não identificação.")
             lembrar = st.checkbox(f"Continuar conectada neste aparelho por {DIAS_DE_SESSAO} dias",
                                   value=True)
-            if st.form_submit_button("Entrar", use_container_width=True, type="primary"):
-                # compare_digest evita vazar o tamanho da senha pelo tempo de resposta
-                if hmac.compare_digest(senha, esperada):
-                    st.session_state["_autenticado"] = True
-                    st.session_state["_via"] = "senha"
-                    st.session_state["_quem_declarado"] = quem_entra
-                    st.session_state.pop("_sessao_expirou", None)
-                    if lembrar:
-                        _guardar_token(esperada)
-                    _registrar_entrada("senha", quem_entra)
-                    st.rerun()
-                else:
-                    st.error("Senha incorreta.")
+            entrou = st.form_submit_button("Entrar", use_container_width=True, type="primary")
+        st.caption(f"versão {versao_publicada()}")
+        if entrou:
+            # compare_digest evita vazar o tamanho da senha pelo tempo de resposta
+            if hmac.compare_digest(senha, esperada):
+                st.session_state["_autenticado"] = True
+                st.session_state["_via"] = "senha"
+                st.session_state["_quem_declarado"] = quem_entra
+                st.session_state.pop("_sessao_expirou", None)
+                if lembrar:
+                    _guardar_token(esperada)
+                _registrar_entrada("senha", quem_entra)
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
     st.stop()
 
 
