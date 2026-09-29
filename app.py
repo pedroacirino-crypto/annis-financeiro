@@ -353,6 +353,14 @@ def exigir_senha():
     )
     _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
+        # Diagnóstico temporário: só os NOMES dos cookies que chegaram ao
+        # servidor, nenhum valor. Serve para saber se o proxy da Streamlit
+        # Cloud entrega o cabeçalho Cookie para o app.
+        try:
+            _nomes = sorted((st.context.cookies or {}).keys())
+        except Exception as _e:
+            _nomes = [f"erro: {type(_e).__name__}"]
+        st.caption(f"diag cookies: {len(_nomes)} · {', '.join(_nomes) or 'nenhum'}")
         if st.session_state.get("_sessao_expirou"):
             st.caption("Sua sessão venceu ou a senha mudou. Entre de novo.")
         with st.form("entrar"):
