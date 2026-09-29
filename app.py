@@ -544,7 +544,9 @@ def _botoes_acao(a: dict, texto: str, rotulo_link: str = "Ver o carrinho",
     else:
         zap = '<span class="b off">Sem telefone</span>'
     url = a.get("url_recuperacao", "") if url_link is None else url_link
-    carrinho = link(rotulo_link, url, bool(url))
+    # Sem rótulo, sem segundo botão: pedido não pago não tem carrinho para
+    # restaurar, e um botão apagado do lado só ocupa espaço.
+    carrinho = link(rotulo_link, url, bool(url)) if rotulo_link else ""
 
     componentes.html(
         "<style>"
@@ -588,7 +590,31 @@ def _card_recuperar(a: dict):
     produtos, colecao, pronome = _lista_produtos(itens)
     url = _link_recuperacao(a.get("url_recuperacao", ""))
 
-    if a["situacao"] == "Tentou e não passou":
+    if a["situacao"] == "Gerou o pedido e não pagou":
+        # Esta cliente acha que comprou: a Shopify manda o e-mail de
+        # confirmação quando o pedido é criado, antes do pagamento. Por isso
+        # a mensagem começa desfazendo o mal-entendido, e não oferecendo
+        # desconto. Sem link também: o Pix daquele pedido já expirou, e
+        # mandar de volta para o mesmo checkout repete o que deu errado.
+        pedido = a.get("numero") or ""
+        texto = (
+            f"{saudacao}\n\n"
+            f"Passando para falar do seu pedido{(' ' + pedido) if pedido else ''}, "
+            f"de {produtos}.\n\n"
+            "O Pix gerado na hora da compra tem validade curta e expirou antes de o "
+            "pagamento ser concluído, então o pedido foi cancelado automaticamente e "
+            "o valor não chegou a sair da sua conta. O e-mail de confirmação é "
+            "disparado no momento em que o pedido é criado, antes do pagamento, e por "
+            "isso pode ter dado a entender que estava tudo certo.\n\n"
+            "Se você identificar alguma saída na sua conta referente a esse pedido, "
+            "me envie o comprovante que eu abro um chamado com o suporte do nosso "
+            "sistema de pagamento na mesma hora.\n\n"
+            "Se ainda quiser, consigo separar as peças e te mandar o Pix direto, sem "
+            "prazo para expirar. É só me responder por aqui. 🤎\n\n"
+            "Com carinho,\nAnnis"
+        )
+        cor, rotulo = "#B8860B", "Gerou o pedido e não pagou"
+    elif a["situacao"] == "Tentou e não passou":
         # Três decisões aqui, todas para não repetir o que já deu errado:
         # sem cupom, porque quem tentou pagar já aceitou o preço; sem
         # especular o motivo da recusa, que soa como se a cliente não tivesse
@@ -680,7 +706,12 @@ def _card_recuperar(a: dict):
                 label_visibility="collapsed",
             )
 
-            _botoes_acao(a, texto_final)
+            if a.get("url_recuperacao"):
+                _botoes_acao(a, texto_final)
+            else:
+                # Pedido não pago não tem link de carrinho para restaurar: o
+                # checkout virou pedido e o Pix daquele pedido morreu.
+                _botoes_acao(a, texto_final, rotulo_link="", url_link="")
             if texto_final != texto:
                 st.caption("Texto editado. Os botões acima já usam a sua versão.")
 
@@ -1395,9 +1426,9 @@ if "Recuperar" in abas:
   with abas["Recuperar"]:
     st.header("Quem quase comprou")
     st.caption(
-        "Carrinhos abandonados na loja, cruzados com as cobranças da Pagar.me. "
-        "Não usa o filtro de período da barra lateral: é uma fila de trabalho, "
-        "não um relatório."
+        "Carrinhos abandonados e pedidos que ficaram sem pagamento, cruzados com "
+        "as cobranças da Pagar.me. Não usa o filtro de período da barra lateral: "
+        "é uma fila de trabalho, não um relatório."
     )
 
     if not shopify_client.configurado():
@@ -1406,7 +1437,11 @@ if "Recuperar" in abas:
             "e `SHOPIFY_CLIENT_SECRET` para esta aba funcionar."
         )
     else:
-        abandonos = db.abandonados_classificados(dias=180)
+        # Pedido criado e nunca pago não é carrinho abandonado para a Shopify,
+        # então nunca chegava aqui, e por não estar pago também não aparecia
+        # em Vendas. Entra na mesma fila, com etiqueta própria.
+        abandonos = db.abandonados_classificados(dias=180) + db.pedidos_nao_pagos(dias=180)
+        abandonos.sort(key=lambda a: a.get("criado_em") or "", reverse=True)
         if not abandonos:
             st.info("Nenhum carrinho abandonado. Use **Atualizar dados** na barra lateral.")
         else:
@@ -1417,13 +1452,15 @@ if "Recuperar" in abas:
             f1, f2 = st.columns([2, 1])
             with f1:
                 st.caption("Mostrar")
-                m1, m2, m3 = st.columns(3)
+                m1, m2, m3, m4 = st.columns(4)
                 marcadas = []
                 if m1.checkbox("Não tentou pagar", value=True, key="rec_lead"):
                     marcadas.append("Não tentou pagar")
                 if m2.checkbox("Tentou e não passou", value=True, key="rec_falhou"):
                     marcadas.append("Tentou e não passou")
-                if m3.checkbox("Já comprou", value=False, key="rec_comprou"):
+                if m3.checkbox("Gerou e não pagou", value=True, key="rec_pedido"):
+                    marcadas.append("Gerou o pedido e não pagou")
+                if m4.checkbox("Já comprou", value=False, key="rec_comprou"):
                     marcadas.append("Já comprou")
             with f2:
                 dias_max = st.selectbox(
@@ -1435,15 +1472,26 @@ if "Recuperar" in abas:
 
             leads = [a for a in janela if a["situacao"] == "Não tentou pagar"]
             falhou = [a for a in janela if a["situacao"] == "Tentou e não passou"]
+            pedido = [a for a in janela if a["situacao"] == "Gerou o pedido e não pagou"]
             comprou = [a for a in janela if a["situacao"] == "Já comprou"]
 
-            k1, k2, k3 = st.columns(3)
+            k1, k2, k3, k4 = st.columns(4)
             k1.metric("Não tentaram pagar", len(leads))
             k1.caption(md(fmt_brl(sum(a["valor"] for a in leads))) + " em carrinho")
             k2.metric("Tentaram e não passou", len(falhou))
             k2.caption("O pagamento não foi concluído")
-            k3.metric("Já compraram", len(comprou))
-            k3.caption("Não contatar. A Shopify ainda lista")
+            k3.metric("Geraram e não pagaram", len(pedido))
+            k3.caption(md(fmt_brl(sum(a["valor"] for a in pedido))) + " em pedido vencido")
+            k4.metric("Já compraram", len(comprou))
+            k4.caption("Não contatar. A Shopify ainda lista")
+
+            if pedido:
+                st.warning(
+                    f"{len(pedido)} pessoa(s) fecharam o pedido, geraram o Pix e não pagaram. "
+                    "Elas receberam o e-mail de confirmação da Shopify, que sai antes do "
+                    "pagamento, então podem achar que compraram. São a fila mais quente: "
+                    "escolheram tamanho e preencheram endereço."
+                )
 
             if comprou and "Já comprou" not in marcadas:
                 st.success(

@@ -96,6 +96,7 @@ def init_db():
             total INTEGER,
             situacao TEXT,
             cep TEXT,
+            telefone TEXT,
             raw_json TEXT
         );
 
@@ -146,8 +147,13 @@ def init_db():
     if "desconto" not in cols_ab:
         cur.execute("ALTER TABLE abandoned_checkouts ADD COLUMN desconto INTEGER DEFAULT 0")
 
-    if "cep" not in {r[1] for r in cur.execute("PRAGMA table_info(shopify_orders)")}:
+    cols_ped = {r[1] for r in cur.execute("PRAGMA table_info(shopify_orders)")}
+    if "cep" not in cols_ped:
         cur.execute("ALTER TABLE shopify_orders ADD COLUMN cep TEXT")
+    # O telefone do pedido veio depois: é o que permite chamar no WhatsApp
+    # quem gerou o pedido e não pagou.
+    if "telefone" not in cols_ped:
+        cur.execute("ALTER TABLE shopify_orders ADD COLUMN telefone TEXT")
 
     cols_op = {r[1] for r in cur.execute("PRAGMA table_info(balance_operations)")}
     if "arranjo" not in cols_op:
@@ -324,15 +330,15 @@ def upsert_pedidos(itens: List[dict]) -> int:
         cur.execute("""
             INSERT INTO shopify_orders
                 (id, numero, criado_em, email, cliente, cidade, uf, itens,
-                 cupom, total, situacao, cep, raw_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 cupom, total, situacao, cep, telefone, raw_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 numero=excluded.numero, criado_em=excluded.criado_em,
                 email=excluded.email, cliente=excluded.cliente,
                 cidade=excluded.cidade, uf=excluded.uf, itens=excluded.itens,
                 cupom=excluded.cupom, total=excluded.total,
                 situacao=excluded.situacao, cep=excluded.cep,
-                raw_json=excluded.raw_json
+                telefone=excluded.telefone, raw_json=excluded.raw_json
         """, (
             it.get("id", ""),
             it.get("name", ""),
@@ -346,6 +352,8 @@ def upsert_pedidos(itens: List[dict]) -> int:
             int(round(float(total) * 100)),
             it.get("displayFinancialStatus", ""),
             (end.get("zip") or "").strip(),
+            (c.get("phone") or end.get("phone")
+             or (it.get("billingAddress") or {}).get("phone") or "").strip(),
             json.dumps(it, ensure_ascii=False),
         ))
         n += 1
@@ -661,6 +669,77 @@ def abandonados_classificados(dias: int = 90) -> "list[dict]":
         )
         linhas.append(a)
 
+    con.close()
+    return linhas
+
+
+def pedidos_nao_pagos(dias: int = 180) -> "list[dict]":
+    """Pedido criado na loja e nunca pago: o buraco entre as duas telas.
+
+    A Shopify só chama de carrinho abandonado quem parou ANTES de fechar o
+    pedido. Quem preencheu tudo, gerou o Pix e não pagou vira pedido, então
+    some de Recuperar; e como não foi pago, some de Vendas também. É a
+    cliente mais quente que existe (escolheu tamanho, preencheu endereço,
+    chegou no pagamento) e era a única que ninguém via. O caso da Fabiana,
+    em 29/09/2026, foi o que revelou isso.
+
+    Sai da lista quem pagou depois, pelo mesmo cruzamento da aba Recuperar,
+    e quem repetiu o pedido: duas tentativas do mesmo carrinho no mesmo dia
+    são uma pessoa só, não duas.
+
+    Alcance: sem o escopo `read_all_orders` a Shopify só devolve os últimos
+    60 dias, então a fila enxerga esse período mesmo com `dias` maior. Para
+    uma fila de trabalho isso basta; pedido vencido de seis meses atrás não
+    se recupera por WhatsApp.
+    """
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+
+    cur.execute("SELECT customer_name, customer_email, status, created_at FROM charges")
+    cobrancas = [dict(r) for r in cur.fetchall()]
+    por_email, por_nome = {}, {}
+    for c in cobrancas:
+        if c["customer_email"]:
+            por_email.setdefault(c["customer_email"], []).append(c)
+        n = _normalizar(c["customer_name"])
+        if n:
+            por_nome.setdefault(n, []).append(c)
+
+    corte = (date.today() - timedelta(days=dias)).isoformat()
+    cur.execute(
+        "SELECT * FROM shopify_orders WHERE substr(criado_em,1,10) >= ?"
+        " AND upper(COALESCE(situacao,'')) NOT IN ('PAID','REFUNDED','PARTIALLY_REFUNDED')"
+        " ORDER BY criado_em DESC", (corte,)
+    )
+    linhas, vistos = [], set()
+    for r in cur.fetchall():
+        p = dict(r)
+        dia = (p["criado_em"] or "")[:10]
+        candidatas = por_email.get(p["email"]) or por_nome.get(_normalizar(p["cliente"])) or []
+        # Cobrança paga a partir do dia do pedido: ela voltou e comprou.
+        if any(c["status"] == "paid" and (c["created_at"] or "")[:10] >= dia for c in candidatas):
+            continue
+        # Mesma pessoa tentando o mesmo carrinho de novo conta uma vez só.
+        chave = (_normalizar(p["cliente"]) or p["email"], p["total"])
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        linhas.append({
+            "id": p["id"],
+            "criado_em": p["criado_em"],
+            "cliente": p["cliente"],
+            "email": p["email"],
+            "telefone": p["telefone"] or "",
+            "itens": p["itens"] or "",
+            "valor": p["total"] or 0,
+            "numero": p["numero"],
+            "cupom": p["cupom"] or "",
+            "cidade": p["cidade"] or "",
+            "pedidos_anteriores": 0,
+            "situacao": "Gerou o pedido e não pagou",
+            "situacao_loja": p["situacao"],
+        })
     con.close()
     return linhas
 
