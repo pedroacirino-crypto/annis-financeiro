@@ -2139,12 +2139,14 @@ if "A receber" in abas:
         df_ag = pd.DataFrame(agenda)
         df_ag["Data"] = pd.to_datetime(df_ag["dia"]).dt.strftime("%d/%m/%Y")
         df_ag["Valor"] = df_ag["liquido"].apply(lambda x: fmt_brl(int(x)))
-        # O acumulado parte do que já está na conta, não do zero: a pergunta
-        # é com quanto se fica depois de cada data, não quanto entra.
-        df_ag["Saldo na conta"] = (avail + df_ag["liquido"].cumsum()).apply(lambda x: fmt_brl(int(x)))
+        # Duas informações, não uma: Valor é o que entra naquele dia, Saldo
+        # previsto é o que se acumula por cima do saldo de hoje. Não é "saldo
+        # na conta" porque um saque derruba o número sem que nada tenha
+        # mudado na previsão.
+        df_ag["Saldo previsto"] = (avail + df_ag["liquido"].cumsum()).apply(lambda x: fmt_brl(int(x)))
         tabela(
-            df_ag[["Data", "Valor", "parcelas", "Saldo na conta"]].rename(columns={"parcelas": "Parcelas"}),
-            num=("Valor", "Parcelas", "Saldo na conta"),
+            df_ag[["Data", "Valor", "parcelas", "Saldo previsto"]].rename(columns={"parcelas": "Parcelas"}),
+            num=("Valor", "Parcelas", "Saldo previsto"),
         )
         graf = df_ag.copy()
         graf["Entra"] = graf["liquido"] / 100
@@ -2155,9 +2157,11 @@ if "A receber" in abas:
                 use_container_width=True,
             )
         st.caption(
-            f"Saldo na conta parte dos {md(fmt_brl(avail))} de hoje. Valores líquidos, "
-            "já descontadas taxa e antecipação. "
-            f"Tarifas pendentes de {md(fmt_brl(ar['tarifas']))} são cobradas na liquidação."
+            f"**Valor** é o que entra no dia. **Saldo previsto** soma isso aos "
+            f"{md(fmt_brl(avail))} que já estão na conta hoje, e supõe que nada "
+            "seja sacado no meio do caminho. Valores líquidos, já descontadas "
+            f"taxa e antecipação. Tarifas pendentes de {md(fmt_brl(ar['tarifas']))} "
+            "são cobradas na liquidação."
         )
 
     # Drill-down: cada parcela com a venda que a originou
@@ -2323,8 +2327,9 @@ if "Extrato" in abas:
             if previsto:
                 e5.metric("Com o previsto", fmt_brl(fechamento + total_previsto),
                           delta=fmt_brl(total_previsto),
-                          help="Saldo de hoje mais os recebíveis que ainda vão cair. "
-                               "Não entra venda que ainda não aconteceu.")
+                          help="Saldo de hoje mais os recebíveis que ainda vão cair, "
+                               "supondo que nada seja sacado. Não entra venda que "
+                               "ainda não aconteceu.")
             if abertura_global and janela.iloc[0]["id"] == todos[0]["id"]:
                 st.caption(
                     f"O saldo anterior traz {md(fmt_brl(abs(abertura_global)))} que a "
@@ -2373,7 +2378,8 @@ if "Extrato" in abas:
             st.caption(
                 f"{len(visao)} lançamentos · valores líquidos, já descontadas as taxas."
                 + (f" As {len(previsto)} primeiras linhas são previsão: recebível "
-                   "confirmado que ainda não caiu." if previsto else "")
+                   "confirmado que ainda não caiu. O saldo delas supõe que nada "
+                   "seja sacado até lá." if previsto else "")
             )
             st.download_button(
                 "Exportar CSV",
