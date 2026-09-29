@@ -2122,9 +2122,12 @@ if "A receber" in abas:
         avail = waiting = 0
 
     ar = db.compute_a_receber(recip)
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     c1.metric("Já disponível para sacar", fmt_brl(avail))
     c2.metric("Ainda a receber", fmt_brl(waiting))
+    c3.metric("Com tudo que está previsto", fmt_brl(avail + waiting),
+              help="O que já dá para sacar mais tudo que ainda vai cair, "
+                   "sem contar venda que ainda não aconteceu.")
 
     st.divider()
     st.subheader("Agenda de recebimentos")
@@ -2136,10 +2139,12 @@ if "A receber" in abas:
         df_ag = pd.DataFrame(agenda)
         df_ag["Data"] = pd.to_datetime(df_ag["dia"]).dt.strftime("%d/%m/%Y")
         df_ag["Valor"] = df_ag["liquido"].apply(lambda x: fmt_brl(int(x)))
-        df_ag["Acumulado"] = df_ag["liquido"].cumsum().apply(lambda x: fmt_brl(int(x)))
+        # O acumulado parte do que já está na conta, não do zero: a pergunta
+        # é com quanto se fica depois de cada data, não quanto entra.
+        df_ag["Saldo na conta"] = (avail + df_ag["liquido"].cumsum()).apply(lambda x: fmt_brl(int(x)))
         tabela(
-            df_ag[["Data", "Valor", "parcelas", "Acumulado"]].rename(columns={"parcelas": "Parcelas"}),
-            num=("Valor", "Parcelas", "Acumulado"),
+            df_ag[["Data", "Valor", "parcelas", "Saldo na conta"]].rename(columns={"parcelas": "Parcelas"}),
+            num=("Valor", "Parcelas", "Saldo na conta"),
         )
         graf = df_ag.copy()
         graf["Entra"] = graf["liquido"] / 100
@@ -2150,7 +2155,8 @@ if "A receber" in abas:
                 use_container_width=True,
             )
         st.caption(
-            "Valores líquidos, já descontadas taxa e antecipação. "
+            f"Saldo na conta parte dos {md(fmt_brl(avail))} de hoje. Valores líquidos, "
+            "já descontadas taxa e antecipação. "
             f"Tarifas pendentes de {md(fmt_brl(ar['tarifas']))} são cobradas na liquidação."
         )
 
@@ -2299,11 +2305,26 @@ if "Extrato" in abas:
             abertura = int(janela.iloc[0]["saldo_antes"])
             fechamento = int(janela.iloc[-1]["saldo_depois"])
 
-            e1, e2, e3, e4 = st.columns(4)
+            # O que ainda vai cair, para o extrato não parar no saldo de hoje.
+            # Só faz sentido quando a janela alcança hoje: olhando um mês
+            # fechado do passado, previsão futura não tem o que fazer ali.
+            hoje_brt = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
+            previsto = db.agenda_recebimentos(recip) if fim > hoje_brt else []
+            total_previsto = int(sum(p["liquido"] for p in previsto))
+
+            if previsto:
+                e1, e2, e3, e4, e5 = st.columns(5)
+            else:
+                e1, e2, e3, e4 = st.columns(4)
             e1.metric("Saldo em " + ini.strftime("%d/%m"), fmt_brl(abertura))
             e2.metric("Entradas", fmt_brl(entradas))
             e3.metric("Saídas", fmt_brl(saidas))
             e4.metric("Saldo final", fmt_brl(fechamento))
+            if previsto:
+                e5.metric("Com o previsto", fmt_brl(fechamento + total_previsto),
+                          delta=fmt_brl(total_previsto),
+                          help="Saldo de hoje mais os recebíveis que ainda vão cair. "
+                               "Não entra venda que ainda não aconteceu.")
             if abertura_global and janela.iloc[0]["id"] == todos[0]["id"]:
                 st.caption(
                     f"O saldo anterior traz {md(fmt_brl(abs(abertura_global)))} que a "
@@ -2322,6 +2343,22 @@ if "Extrato" in abas:
                 "Saída": visao["valor"].apply(lambda v: fmt_brl(int(v)) if v < 0 else ""),
                 "Saldo": visao["saldo_depois"].apply(lambda v: fmt_brl(int(v))),
             })
+            # Previsão por cima, na mesma ordem do resto (mais recente primeiro),
+            # com o saldo correndo a partir do fechamento de hoje.
+            if previsto:
+                corrido, futuras = fechamento, []
+                for p in previsto:
+                    corrido += int(p["liquido"])
+                    futuras.append({
+                        "Data": pd.to_datetime(p["dia"]).strftime("%d/%m/%Y"),
+                        "Descrição": f"A receber · {p['parcelas']} "
+                                     + ("parcela" if p["parcelas"] == 1 else "parcelas"),
+                        "Entrada": fmt_brl(int(p["liquido"])), "Saída": "",
+                        "Saldo": fmt_brl(corrido),
+                    })
+                linhas_ext = pd.concat(
+                    [pd.DataFrame(futuras[::-1]), linhas_ext], ignore_index=True
+                )
             # Fecha o extrato por baixo com o saldo de onde a leitura parte.
             linhas_ext = pd.concat([
                 linhas_ext,
@@ -2335,6 +2372,8 @@ if "Extrato" in abas:
             tabela(linhas_ext, num=("Entrada", "Saída", "Saldo"), altura_max=500)
             st.caption(
                 f"{len(visao)} lançamentos · valores líquidos, já descontadas as taxas."
+                + (f" As {len(previsto)} primeiras linhas são previsão: recebível "
+                   "confirmado que ainda não caiu." if previsto else "")
             )
             st.download_button(
                 "Exportar CSV",
