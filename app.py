@@ -336,7 +336,11 @@ def exigir_senha():
             _h = sorted((st.context.headers or {}).keys())
         except Exception as _e:
             _h = [f"erro: {type(_e).__name__}"]
-        st.caption(f"diag headers ({len(_h)}): {', '.join(_h) or 'nenhum'}")
+        try:
+            _su = (st.context.headers or {}).get("X-Streamlit-User", "")
+        except Exception:
+            _su = ""
+        st.caption(f"diag headers ({len(_h)}): X-Streamlit-User={_su[:120] or 'vazio'}")
         if st.session_state.get("_sessao_expirou"):
             st.caption("Sua sessão venceu ou a senha mudou. Entre de novo.")
         with st.form("entrar"):
