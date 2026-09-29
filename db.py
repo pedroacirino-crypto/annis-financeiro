@@ -744,6 +744,74 @@ def pedidos_nao_pagos(dias: int = 180) -> "list[dict]":
     return linhas
 
 
+def pedido_de_cada_cobranca() -> dict:
+    """{id da cobrança: pedido da loja}, para pôr cidade e peças ao lado do
+    dinheiro.
+
+    A Pagar.me guarda o valor, não o que foi vendido nem para onde: das
+    cobranças pagas, nenhuma tem endereço. O que a cliente levou e a cidade
+    só existem na Shopify, então as duas pontas precisam ser amarradas.
+
+    O casamento é por e-mail, com nome normalizado de reserva, dentro de dois
+    dias. O valor não serve de filtro duro porque erra dos dois lados: para
+    baixo, o total da Shopify é o preço ANTES do desconto do Pix, que o app
+    de pagamento aplica por fora (R$ 878 vira R$ 834,10); para cima, no
+    cartão parcelado a cobrança carrega os juros repassados (pedido de
+    R$ 1.266 virou cobrança de R$ 1.589,72). Então: candidato único dentro da
+    janela vence; havendo mais de um, o valor mais próximo decide.
+    """
+    import nuvem
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    cobrancas = [dict(r) for r in con.execute(
+        "SELECT id, customer_name, customer_email, amount, created_at FROM charges"
+    ).fetchall()]
+    con.close()
+
+    vistos, pedidos = set(), []
+    for p in list(nuvem.ler_pedidos()) + pedidos_para_nuvem():
+        if p["numero"] in vistos:
+            continue
+        vistos.add(p["numero"])
+        pedidos.append(p)
+
+    por_email, por_nome = {}, {}
+    for p in pedidos:
+        if p.get("email"):
+            por_email.setdefault(p["email"].strip().lower(), []).append(p)
+        n = _normalizar(p.get("cliente") or "")
+        if n:
+            por_nome.setdefault(n, []).append(p)
+
+    def dia(iso):
+        return (str(iso) or "")[:10]
+
+    saida, usados = {}, set()
+    for c in sorted(cobrancas, key=lambda c: c["created_at"] or ""):
+        cand = (por_email.get((c["customer_email"] or "").strip().lower())
+                or por_nome.get(_normalizar(c["customer_name"] or "")) or [])
+        perto = []
+        for p in cand:
+            if p["numero"] in usados:
+                continue
+            try:
+                d = abs((date.fromisoformat(dia(p["criado_em"]))
+                         - date.fromisoformat(dia(c["created_at"]))).days)
+            except Exception:
+                continue
+            if d > 2:
+                continue
+            total = p.get("total") or 0
+            perto.append((d, abs(total - c["amount"]), p))
+        if not perto:
+            continue
+        perto.sort(key=lambda x: (x[0], x[1]))
+        p = perto[0][2]
+        usados.add(p["numero"])
+        saida[c["id"]] = p
+    return saida
+
+
 def query_charges(
     date_from: str = None,
     date_to: str = None,

@@ -1025,6 +1025,16 @@ def _detalhe_cliente(c: dict):
 
 
 @st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner=False)
+def _pedido_por_cobranca() -> dict:
+    """Casamento cobrança ↔ pedido, guardado por 10 minutos: a tela redesenha
+    a cada clique e isso lê a nuvem."""
+    try:
+        return db.pedido_de_cada_cobranca()
+    except Exception:
+        return {}
+
+
 def _estoque_atual() -> dict:
     """Estoque por (produto, tamanho), direto da Shopify.
 
@@ -1646,15 +1656,32 @@ if "Vendas" in abas:
             det = df_chg.copy()
             det["valor"] = det["amount"].apply(fmt_brl)
             det["quando"] = det["created_at"].dt.strftime("%d/%m/%Y %H:%M")
+            # A Pagar.me não sabe o que foi vendido nem para onde: cidade e
+            # peças vêm do pedido da Shopify, amarrado por e-mail e data.
+            casados = _pedido_por_cobranca()
+            det["cidade"] = det["id"].map(
+                lambda i: (lambda p: f"{p['cidade']}/{p['uf']}" if p and p.get("cidade") else "")(casados.get(i))
+            )
+            det["levou"] = det["id"].map(
+                lambda i: (casados.get(i) or {}).get("itens") or ""
+            )
             det = traduzir(det, {"status": STATUS_CHG_PT, "payment_method": METODO_PT})
             tabela(
-                det[["quando", "customer_name", "valor", "status", "payment_method", "installments"]]
+                det[["quando", "customer_name", "cidade", "levou", "valor",
+                     "status", "payment_method", "installments"]]
                 .rename(columns={
-                    "quando": "Quando", "customer_name": "Cliente", "valor": "Valor",
+                    "quando": "Quando", "customer_name": "Cliente", "cidade": "Cidade",
+                    "levou": "O que levou", "valor": "Valor",
                     "status": "Situação", "payment_method": "Meio", "installments": "Parcelas",
                 }),
                 num=("Valor", "Parcelas"), altura_max=420,
             )
+            sem = sum(1 for i in det["id"] if i not in casados)
+            if sem:
+                st.caption(
+                    f"{sem} cobrança(s) sem pedido correspondente na loja: venda feita "
+                    "fora do site, ou nome e e-mail diferentes dos dois lados."
+                )
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 2: RECUPERAR: fila de trabalho dos checkouts abandonados
@@ -1834,7 +1861,8 @@ if "Clientes" in abas:
             busca = st.text_input("Buscar pelo nome ou e-mail", key="cli_busca",
                                   placeholder="comece a digitar")
         with t2:
-            ordem = st.selectbox("Ordenar por", list(ORDENS), key="cli_ordem")
+            ordem = st.selectbox("Ordenar por", list(ORDENS), key="cli_ordem",
+                                 index=list(ORDENS).index("Compra mais recente"))
 
         alvo = _normalizar_busca(busca)
         vistas = [c for c in cli
