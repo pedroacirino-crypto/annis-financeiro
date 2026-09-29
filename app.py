@@ -330,6 +330,13 @@ def exigir_senha():
     )
     _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
+        # Diagnóstico temporário: só os NOMES dos cabeçalhos que chegam ao
+        # app, nenhum valor, para saber que sinal existe para o log de acesso.
+        try:
+            _h = sorted((st.context.headers or {}).keys())
+        except Exception as _e:
+            _h = [f"erro: {type(_e).__name__}"]
+        st.caption(f"diag headers ({len(_h)}): {', '.join(_h) or 'nenhum'}")
         if st.session_state.get("_sessao_expirou"):
             st.caption("Sua sessão venceu ou a senha mudou. Entre de novo.")
         with st.form("entrar"):
