@@ -360,7 +360,12 @@ def exigir_senha():
             _nomes = sorted((st.context.cookies or {}).keys())
         except Exception as _e:
             _nomes = [f"erro: {type(_e).__name__}"]
-        st.caption(f"diag cookies: {len(_nomes)} · {', '.join(_nomes) or 'nenhum'}")
+        try:
+            _qp = dict(st.query_params)
+        except Exception:
+            _qp = {}
+        st.caption(f"diag cookies: {len(_nomes)} · {', '.join(_nomes) or 'nenhum'}"
+                   f" | params: {', '.join(f'{k}={v}' for k, v in _qp.items()) or 'nenhum'}")
         if st.session_state.get("_sessao_expirou"):
             st.caption("Sua sessão venceu ou a senha mudou. Entre de novo.")
         with st.form("entrar"):
