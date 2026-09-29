@@ -30,6 +30,25 @@ st.set_page_config(
 JANELA_SYNC = 90  # dias de extrato e recebíveis baixados a cada sincronização
 
 
+def _esquecer_derivados():
+    """Apaga o que foi calculado em cima do banco.
+
+    Sem isto, "Atualizar dados" baixava o dado novo e a tela continuava
+    mostrando o cruzamento antigo por até dez minutos: foi o que fez a cidade
+    da venda recusada seguir vazia mesmo depois da sincronização.
+    """
+    for fn in (globals().get("_pedido_por_cobranca"), globals().get("_estoque_atual")):
+        try:
+            fn.clear()
+        except Exception:
+            pass
+    try:
+        import memo
+        memo.limpar_tudo()
+    except Exception:
+        pass
+
+
 def sincronizar(ate: date, avisar=None):
     """Baixa vendas, extrato e recebíveis para o banco local.
 
@@ -485,6 +504,7 @@ if db.get_db_counts()["charges"] == 0 or _idade is None or _idade > HORAS_ATE_EN
     try:
         with st.spinner("Buscando o que entrou desde a última vez…"):
             sincronizar(date.today())
+            _esquecer_derivados()
     except Exception as _e:
         st.warning(f"Não foi possível atualizar os dados automaticamente: {_e}")
 
@@ -1478,6 +1498,7 @@ with st.sidebar:
         aviso = st.empty()
         try:
             n = sincronizar(hoje, avisar=lambda m: aviso.caption(m))
+            _esquecer_derivados()
             aviso.empty()
             st.success(
                 f"{n['vendas']} vendas · {n['operacoes']} operações · "
