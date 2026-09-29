@@ -146,6 +146,16 @@ section[data-testid="stSidebar"] > div {{ padding-top: 3.4rem; }}
 [data-testid="stHeader"]::before {{ content: ""; position: absolute; left: 1.5rem; top: 50%; transform: translateY(-50%); width: 104px; height: 23px; background: url("{LOGO_URL}") no-repeat left center / contain; filter: brightness(0) invert(1); opacity: 0.95; }}
 [data-testid="stHeader"] button, [data-testid="stHeader"] span, [data-testid="stHeader"] svg {{ color: #FFFFFF !important; fill: #FFFFFF !important; }}
 [data-testid="stSidebarCollapsedControl"] button svg, [data-testid="stSidebarCollapseButton"] svg {{ color: #FFFFFF !important; }}
+/* Enquanto o app processa, a Streamlit desenha um bonequinho correndo no
+   cabeçalho. Não dá para trocar o ícone sem recompilar a Streamlit, mas dá
+   para escondê-lo e desenhar outro no lugar do pai: um ponto de costura
+   girando, feito com borda tracejada. Combina com a marca e não vira
+   ilustração de academia. */
+[data-testid="stStatusWidgetRunningManIcon"] {{ display: none !important; }}
+[data-testid="stStatusWidgetRunningIcon"] {{ width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 1.5px dashed rgba(255,255,255,0.85); animation: annis-costura 1.6s linear infinite; }}
+@keyframes annis-costura {{ to {{ transform: rotate(360deg); }} }}
+/* O "Stop" ao lado ganha o mesmo tom do cabeçalho em vez do vermelho padrão. */
+[data-testid="stStatusWidget"] button {{ font-family: 'Poppins', sans-serif !important; font-size: 0.65rem !important; text-transform: uppercase; letter-spacing: 0.08em; }}
 /* No celular a barra lateral nasce recolhida e o Streamlit põe o botão de
    abrir no canto esquerdo do cabeçalho, em cima do logo. Empurra o logo
    para depois do botão. */
