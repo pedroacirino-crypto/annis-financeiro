@@ -591,26 +591,19 @@ def _card_recuperar(a: dict):
     url = _link_recuperacao(a.get("url_recuperacao", ""))
 
     if a["situacao"] == "Gerou o pedido e não pagou":
-        # Esta cliente acha que comprou: a Shopify manda o e-mail de
-        # confirmação quando o pedido é criado, antes do pagamento. Por isso
-        # a mensagem começa desfazendo o mal-entendido, e não oferecendo
-        # desconto. Sem link também: o Pix daquele pedido já expirou, e
-        # mandar de volta para o mesmo checkout repete o que deu errado.
+        # Curto de propósito: no caso comum a cliente sabe que não pagou, e
+        # explicar o e-mail de confirmação ou oferecer abertura de chamado
+        # levanta um problema que ela não tem. Quem reclamar de cobrança
+        # indevida recebe essa explicação na conversa, não no primeiro
+        # contato. Sem cupom, porque ela já aceitou o preço, e sem link,
+        # porque o Pix daquele pedido morreu.
         pedido = a.get("numero") or ""
         texto = (
             f"{saudacao}\n\n"
-            f"Passando para falar do seu pedido{(' ' + pedido) if pedido else ''}, "
-            f"de {produtos}.\n\n"
-            "O Pix gerado na hora da compra tem validade curta e expirou antes de o "
-            "pagamento ser concluído, então o pedido foi cancelado automaticamente e "
-            "o valor não chegou a sair da sua conta. O e-mail de confirmação é "
-            "disparado no momento em que o pedido é criado, antes do pagamento, e por "
-            "isso pode ter dado a entender que estava tudo certo.\n\n"
-            "Se você identificar alguma saída na sua conta referente a esse pedido, "
-            "me envie o comprovante que eu abro um chamado com o suporte do nosso "
-            "sistema de pagamento na mesma hora.\n\n"
-            "Se ainda quiser, consigo separar as peças e te mandar o Pix direto, sem "
-            "prazo para expirar. É só me responder por aqui. 🤎\n\n"
+            f"Seu pedido{(' ' + pedido) if pedido else ''}, de {produtos}, "
+            "ficou sem pagamento e o Pix expirou.\n\n"
+            "Se ainda quiser, te mando um novo Pix por aqui, sem prazo para "
+            "expirar. É só me responder. 🤎\n\n"
             "Com carinho,\nAnnis"
         )
         cor, rotulo = "#B8860B", "Gerou o pedido e não pagou"
