@@ -101,6 +101,7 @@ def _dados():
         "aportes": fin.aportes(), "ledger": fin.ledger_saidas(), "estoque_custo": fin.estoque_a_custo(),
         "contas_a_pagar": plano.contas_a_pagar_total(), "pedidos": fin.pedidos_pagos(),
         "fichas": fin.carregar_legado()["custo_pecas"], "a_classificar": extrato.a_classificar(),
+        "estoque_loja": fin.estoque_na_loja(),
     }
 
 
@@ -225,12 +226,17 @@ def render():
     st.header("2. Onde estamos hoje")
     st.caption(md(f"Foto de {ex.data.max():%d/%m/%Y}. O que tem para vender, o que tem para pagar."))
 
+    loja = d["estoque_loja"]
     h1, h2, h3, h4 = st.columns(4)
-    h1.metric("Estoque a preço de venda", mil(164440), help="290 peças ativas na Shopify vezes o preço de etiqueta, sem os 15 Loulou sob encomenda. A coleção nova está com 16 e 17 por variante: conferir se é contagem.")
-    h2.metric("Estoque a custo", mil(estoque_custo), help="Produção paga menos custo das peças já vendidas. Bate com a Shopify a custo de ficha (R$ 54,5 mil).")
+    h1.metric("Estoque a preço de venda", mil(loja["venda"]),
+              help=f"{loja['pecas']} peças ativas na Shopify vezes o preço de etiqueta, fora {loja['sob_encomenda']} sob encomenda. "
+                   f"A custo de ficha dá {brl(loja['custo'])}. A coleção nova está com 16 e 17 por variante: conferir se é contagem.")
+    h2.metric("Estoque a custo", mil(estoque_custo), help=f"Produção paga menos custo das peças já vendidas. A Shopify a custo de ficha dá {brl(loja['custo'])}.")
     h3.metric("Contas contratadas até dez", mil(contas_a_pagar), help="Fornecedores de produção, fotos e anúncios já contratados e não pagos. Aluguel, contador e sistema não estão aqui, estão nos fixos da projeção.")
     h4.metric("A receber da Pagar.me", mil(fluxo[fluxo.mes >= hoje].a_receber.sum()))
-    st.caption(md("Leitura direta: o estoque a preço de venda cobre as contas contratadas 5,7 vezes. O que ele não cobre sozinho é o tempo: aluguel e fixos correm enquanto ele não gira."))
+    vezes = loja["venda"] / contas_a_pagar if contas_a_pagar else 0
+    st.caption(md(f"Leitura direta: o estoque a preço de venda cobre as contas contratadas {vezes:.1f} vezes. "
+                  f"O que ele não cobre sozinho é o tempo: aluguel e fixos correm enquanto ele não gira."))
 
     # ═══════════════════════════════════════════════════════════════════════════
     st.header("3. Para onde vai")
@@ -259,9 +265,14 @@ def render():
         pr_envelh = q9.slider("Estoque que envelhece por mês (%)", 0.0, 5.0, 2.0, 0.5,
                               help="Peça que deixa de vender a preço cheio. Sai do estoque sem virar receita.") / 100
 
-    prem = plano.Premissas(receita_base=pr_receita, crescimento=pr_g, fator_reducao=pr_fator, cobertura_alvo=pr_cobertura,
-                           envelhecimento=pr_envelh, cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxas=pr_imposto,
-                           estoque_custo=estoque_custo, acumulado_historico=acumulado)
+    # O plano começa no mês seguinte ao último fechado, com o caixa e os
+    # recebíveis de verdade, não com números fixos no código.
+    prem = plano.Premissas(inicio=str(pd.Period(hoje, "M") + 1), receita_base=pr_receita, crescimento=pr_g,
+                           fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
+                           cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxas=pr_imposto,
+                           estoque_custo=estoque_custo, acumulado_historico=acumulado,
+                           caixa_inicial=max(float(fx.caixa.iloc[-1]), 0.0),
+                           a_receber_inicial=float(fluxo[fluxo.mes >= hoje].a_receber.sum()))
     res = plano.simular(prem)
     pt = res["tabela"]
     fim_horizonte = mes_curto(pt.mes.iloc[-1])
@@ -290,8 +301,16 @@ def render():
     ordem = list(dict.fromkeys(filme.rotulo))
     corte = mes_curto(hoje)
     eixo_x = alt.X("rotulo:N", sort=ordem, scale=alt.Scale(domain=ordem), title="")
-    regua_hoje = alt.Chart(pd.DataFrame({"rotulo": [corte]})).mark_rule(color=COR["neutro"], strokeDash=[4, 4]).encode(x=eixo_x)
-    zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color=COR["neutro"]).encode(y="y")
+    # Cada camada precisa do seu próprio objeto: reaproveitar o mesmo gráfico
+    # em vários layers faz o Altair mandar o dado uma vez só e os gráficos
+    # seguintes quebram com "Unrecognized data set", sem desenhar as marcas.
+    def regua_hoje():
+        return alt.Chart(pd.DataFrame({"rotulo": [corte]})).mark_rule(
+            color=COR["neutro"], strokeDash=[4, 4]).encode(x=eixo_x)
+
+    def zero():
+        return alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color=COR["neutro"]).encode(y="y")
+
     legenda_fase = alt.Legend(orient="top")
 
 
@@ -315,17 +334,17 @@ def render():
             color=alt.Color("fase:N", title="", scale=alt.Scale(domain=["Realizado", "Projetado"], range=[COR["receita"], COR["margem"]]), legend=legenda_fase),
             tooltip=["rotulo", "fase", alt.Tooltip("receita:Q", format=".1f", title="R$ mil")])
         be = alt.Chart(pd.DataFrame({"y": [breakeven_lucro / 1000]})).mark_rule(color=COR["resultado"], strokeDash=[6, 4]).encode(y="y")
-        st.altair_chart((barras + be + regua_hoje).properties(height=230), use_container_width=True)
+        st.altair_chart((barras + be + regua_hoje()).properties(height=230), use_container_width=True)
         st.caption(md(f"Tracejado vermelho: {brl(breakeven_lucro)}/mês, onde o lucro começa."))
     with f2:
         st.markdown("**Lucro do mês (competência)**")
-        st.altair_chart((barras_sinal_filme("resultado", "Lucro") + zero + regua_hoje).properties(height=230), use_container_width=True)
+        st.altair_chart((barras_sinal_filme("resultado", "Lucro") + zero() + regua_hoje()).properties(height=230), use_container_width=True)
         st.caption(md("Receita menos taxas, CMV cheio, Meta, agência e fixos. Tom mais claro é projeção."))
 
     f3, f4 = st.columns(2)
     with f3:
         st.markdown("**Fluxo de caixa do mês**")
-        st.altair_chart((barras_sinal_filme("fluxo", "Fluxo") + zero + regua_hoje).properties(height=230), use_container_width=True)
+        st.altair_chart((barras_sinal_filme("fluxo", "Fluxo") + zero() + regua_hoje()).properties(height=230), use_container_width=True)
         st.caption(md("O que entrou menos o que saiu no mês, sem aportes. Vermelho depois de hoje é mês que pede aporte."))
     with f4:
         st.markdown("**Acumulados: caixa e lucro**")
@@ -339,7 +358,7 @@ def render():
             detail="fase:N",
             tooltip=["rotulo", "serie", "fase", alt.Tooltip("valor:Q", format=".1f", title="R$ mil")],
         )
-        st.altair_chart((linhas + zero + regua_hoje).properties(height=230), use_container_width=True)
+        st.altair_chart((linhas + zero() + regua_hoje()).properties(height=230), use_container_width=True)
         st.caption(md("Caixa acumulado é tudo que a operação gerou menos gastou desde o início, sem aportes: cruzou zero, o capital voltou. "
                       "Lucro acumulado é a soma do resultado de competência desde jun/25. A distância entre os dois é o que está em estoque mais o que foi gasto antes do lançamento."))
 

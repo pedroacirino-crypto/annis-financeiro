@@ -78,6 +78,10 @@ def meta_ads() -> dict:
     nuvem_meta = dados_fin.ler_meta_ads() if dados_fin.disponivel() else {}
     return nuvem_meta or dict(META_ADS)
 
+# Peças vendidas sob encomenda: o cadastro tem estoque para a página não
+# dizer esgotado, mas elas não existem na arara.
+SOB_ENCOMENDA = r"Loulou"
+
 _TAMANHO = re.compile(r"\s*-\s*(PP|P|M|G|GG|U|\d{2})$")
 _ITEM = re.compile(r"^(\d+)x\s+(.+?)(?:\s+\(([^)]*)\))?$")
 
@@ -180,7 +184,7 @@ def ledger_saidas() -> pd.DataFrame:
         "natureza": pre.natureza, "categoria": pre.categoria, "confianca": "ok", "fonte": "planilha",
     }) if not pre.empty else pd.DataFrame()
     ex = extrato.carregar()
-    ex = ex[(ex.sentido == "saida") & (ex.natureza != "interna")]
+    ex = ex[ex.sentido == "saida"]
     ex = pd.DataFrame({
         "data": ex.data, "valor": ex.valor_abs, "contraparte": ex.contraparte,
         "natureza": ex.natureza, "categoria": ex.categoria, "confianca": ex.confianca, "fonte": "extrato",
@@ -506,7 +510,7 @@ def fluxo_de_caixa() -> pd.DataFrame:
     `caixa` soma os aportes e deve bater com o saldo da conta."""
     import extrato
     ex = extrato.carregar()
-    ent = ex[(ex.sentido == "entrada") & (ex.natureza != "interna")]
+    ent = ex[ex.sentido == "entrada"]
     ent_nat = ent.pivot_table(index="mes", columns="natureza", values="valor", aggfunc="sum").fillna(0.0) if not ent.empty else pd.DataFrame()
     led = ledger_saidas()
     sai_nat = led.pivot_table(index="mes", columns="natureza", values="valor", aggfunc="sum").fillna(0.0) if not led.empty else pd.DataFrame()
@@ -526,11 +530,19 @@ def fluxo_de_caixa() -> pd.DataFrame:
     t["recebido_site"] = col(ent_nat, "liquidacao_online")
     t["recebido_fisico"] = col(ent_nat, "venda_fisica")
     t["devolucoes"] = col(ent_nat, "devolucao")
-    t["recebido"] = t.recebido_site + t.recebido_fisico + t.devolucoes
+    # "interna" é transferência para a outra conta Stone da própria empresa e
+    # os créditos de teste de centavos: não são resultado, mas saem e entram
+    # de verdade, e sem eles o caixa não fecha com o saldo da conta.
+    t["internas"] = col(ent_nat, "interna")
+    t["recebido"] = t.recebido_site + t.recebido_fisico + t.devolucoes + t.internas
     t["a_receber"] = col(pag, "previsto")
-    for nat in ("estoque", "despesa", "capex", "imposto"):
+    # a_classificar entra no caixa como qualquer outra saída: o dinheiro saiu
+    # mesmo sem regra. Fora do caixa ela continua aparecendo em Bastidores até
+    # ganhar categoria.
+    for nat in ("estoque", "despesa", "capex", "imposto", "interna", "a_classificar"):
         t[f"saida_{nat}"] = col(sai_nat, nat)
-    t["saidas"] = t.saida_estoque + t.saida_despesa + t.saida_capex + t.saida_imposto
+    t["saidas"] = (t.saida_estoque + t.saida_despesa + t.saida_capex + t.saida_imposto
+                   + t.saida_interna + t.saida_a_classificar)
     t["aportes"] = ap_mes.reindex(meses).fillna(0.0)
     t["saldo_operacional"] = t.recebido - t.saidas
     t["acumulado_operacional"] = t.saldo_operacional.cumsum()
@@ -562,6 +574,44 @@ def payback(fluxo: pd.DataFrame):
 
 
 @memo()
+@memo()
+def estoque_na_loja() -> dict:
+    """Estoque ativo na Shopify: peças, valor a preço de etiqueta e a custo
+    de ficha. Os "sob encomenda" (Loulou) saem da conta, porque não existem
+    na arara: o cadastro tem número só para a página não dizer esgotado."""
+    import shopify_client
+    if not shopify_client.configurado():
+        return {"pecas": 0, "venda": 0.0, "custo": 0.0, "sob_encomenda": 0}
+    consulta = """query($cursor: String) { productVariants(first: 100, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes { inventoryQuantity price product { title status } } } }"""
+    custos, cursor = custo_por_ficha(), None
+    pecas = venda = custo = 0.0
+    encomenda = 0
+    try:
+        while True:
+            bloco = shopify_client._graphql(consulta, {"cursor": cursor})["productVariants"]
+            for v in bloco["nodes"]:
+                prod = v.get("product") or {}
+                if prod.get("status") != "ACTIVE":
+                    continue
+                q = max(v.get("inventoryQuantity") or 0, 0)
+                titulo = prod.get("title", "")
+                if re.search(SOB_ENCOMENDA, titulo, flags=re.I):
+                    encomenda += q
+                    continue
+                pecas += q
+                venda += q * float(v.get("price") or 0)
+                ficha = ficha_da_peca(titulo)
+                custo += q * (custos.get(ficha) or 0.0)
+            if not bloco["pageInfo"]["hasNextPage"]:
+                break
+            cursor = bloco["pageInfo"]["endCursor"]
+    except Exception:
+        return {"pecas": 0, "venda": 0.0, "custo": 0.0, "sob_encomenda": 0}
+    return {"pecas": int(pecas), "venda": venda, "custo": custo, "sob_encomenda": encomenda}
+
+
 def estoque_a_custo() -> float:
     """Produção paga menos CMV consumido: o que está na arara e no rolo, a custo."""
     led = ledger_saidas()

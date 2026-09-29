@@ -1,6 +1,6 @@
 """Carrega no Supabase o que o Pedro manda na conversa.
 
-    python carga.py extrato  caminho/Extrato.xlsx      exportação da conta Stone
+    python carga.py extrato  caminho/Extrato.csv       exportação da conta Stone (csv ou xlsx)
     python carga.py contas   caminho/contas.xlsx       planilha de contas a pagar (uma aba por mês)
     python carga.py meta     2026-09 2500              investimento em Meta de um mês
     python carga.py legado                             fichas e lançamentos pré-conta, da planilha de 2025
@@ -21,7 +21,7 @@ import financeiro
 
 
 def carregar_extrato(caminho: str) -> None:
-    cru = extrato.ler_xlsx(caminho)
+    cru = extrato.ler_arquivo(caminho)
     n = dados_fin.salvar_extrato(cru)
     print(f"extrato: {n} movimentações gravadas, de {cru.data.min():%d/%m/%Y} a {cru.data.max():%d/%m/%Y}")
     df = extrato.classificar(cru)

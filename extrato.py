@@ -43,12 +43,14 @@ INICIO_DA_CONTA = pd.Timestamp("2025-03-25")
 REGRAS_DEBITO = [
     # Produção: facção, tecido, aviamento, embalagem, frete de insumo
     (r"VIOLET COD", "estoque", "Facção", "ok"),
-    (r"CONCEPT TXTL|EXCIM|PROMEX|MIKKONOS|M ALMEIDA COMERCIO DE TECIDOS|CENTRAL MALHAS|APM MODA|NIKA SECURITIZADORA", "estoque", "Tecido", "ok"),
+    # Nika e Aliança são securitizadoras: compram o boleto do fornecedor de
+    # tecido (Eco Simple) e recebem no lugar dele.
+    (r"CONCEPT TXTL|EXCIM|PROMEX|MIKKONOS|M ALMEIDA COMERCIO DE TECIDOS|CENTRAL MALHAS|APM MODA|NIKA SECURITIZADORA|ALIANCA FINAN|ECO SIMPLE", "estoque", "Tecido", "ok"),
     (r"PAULISTANA ZIPER|PARANA AVIAMENTOS|ARMARINHOS|CARDOSO DISTRIBUIDORA|DUMA AVIAMENTOS|ALTERO|MIXMETAIS|GEMMA BIJOUX|BONOR|GM2 IMPORTACAO|XIAZHI|PALACIO DAS ESPUMAS|SHPP BRASIL", "estoque", "Aviamento", "ok"),
     (r"GRAFICA PORTO BELO|AJ FERREIRA|FM IMPRESSOS|PRINTI", "estoque", "Embalagem", "ok"),
     (r"TRANS APUCARANA|BRASPRESS", "estoque", "Frete de insumo", "ok"),
     # Marketing
-    (r"PROADZ|FACEBK", "despesa", "Ads e agência", "ok"),
+    (r"PROADZ|V60 ANUNCIOS|FACEBK", "despesa", "Ads e agência", "ok"),  # a PROADZ virou V60
     (r"PORTOSEG", "despesa", "Fatura do cartão de anúncios", "ok"),  # a Meta em si entra pelo relatório da agência
     (r"GASP ESTUDIO|YELLOW ESTUDIO|SARDI E VERCEZI|FOTO CELULA|CALDI GOMES|S FERREIRA DA SILVA PUBLICIDADES", "despesa", "Foto, vídeo e conteúdo", "ok"),
     # Eventos
@@ -62,7 +64,8 @@ REGRAS_DEBITO = [
     (r"OLIST TINY", "despesa", "Sistemas", "ok"),
     (r"CONDOMINIO|PJBANK", "despesa", "Aluguel e condomínio", "ok"),
     (r"ZOOP|SAFE2PAY|DLOCAL|PIX MARKETPLACE|PAGAR ME", "despesa", "Taxas e apps", "a confirmar"),
-    (r"KALUNGA|LJS ESTACIONAMENTOS", "despesa", "Miudezas", "ok"),
+    (r"KALUNGA|LJS ESTACIONAMENTOS|PAPELARIA|PAPEL DE PAPEL", "despesa", "Miudezas", "ok"),
+    (r"TABELIONATO|CARTORIO", "despesa", "Cartório e protesto", "ok"),
     # Imposto
     (r"MINISTERIO DA FAZENDA|DAS - SIMPLES", "imposto", "Simples Nacional", "ok"),
     (r"^CIRINO E PAGNAN", "interna", "Transferência interna", "ok"),
@@ -110,9 +113,12 @@ def _regras(sentido: str, data=None, valor=None) -> list:
 
 
 def _classificar_debito(nome: str, tipo: str, valor: float):
-    if tipo == "Transação":
-        # Débito mensal fixo sem contraparte: aluguel da maquininha.
-        return ("despesa", "Maquininha", "a confirmar")
+    # "Transação" sem contraparte é o aluguel mensal da maquininha. Com
+    # contraparte é boleto pago, e aí quem manda é o nome: no csv de
+    # setembro/26 vieram Violet, Excim, Mikkonos e o contador por esse tipo,
+    # e a regra antiga jogava todos em "Maquininha".
+    if tipo == "Transação" and (not nome or nome.lower() in ("desconhecido", "nan")):
+        return ("despesa", "Maquininha", "ok")
     for padrao, nat, cat, conf in _regras("saida"):
         if re.search(padrao, nome, flags=re.I):
             return (nat, cat, conf)
@@ -141,16 +147,26 @@ def _limpar_valor(serie: pd.Series) -> pd.Series:
             .str.replace(",", ".").str.strip().replace({"": None, "-": None, "Grátis": None}).astype(float))
 
 
-def ler_xlsx(caminho_ou_arquivo) -> pd.DataFrame:
+def ler_arquivo(caminho_ou_arquivo) -> pd.DataFrame:
     """Exportação da Stone, crua e limpa: uma linha por movimentação, sem
-    classificar. É este formato que vai para o Supabase."""
-    df = pd.read_excel(caminho_ou_arquivo)
+    classificar. É este formato que vai para o Supabase.
+
+    A Stone exporta em xlsx e em csv, com as mesmas colunas. O csv traz uma
+    coluna `Horário` a mais e o valor entre aspas com separador brasileiro,
+    que `_limpar_valor` já resolve."""
+    nome = getattr(caminho_ou_arquivo, "name", str(caminho_ou_arquivo)).lower()
+    df = (pd.read_csv(caminho_ou_arquivo, dtype=str) if nome.endswith(".csv")
+          else pd.read_excel(caminho_ou_arquivo))
     credito = df["Movimentação"] == "Crédito"
     return pd.DataFrame({
         "data": pd.to_datetime(df["Data"], format="%d/%m/%Y %H:%M"),
         "sentido": credito.map({True: "entrada", False: "saida"}),
         "tipo": df["Tipo"].astype(str),
-        "valor": _limpar_valor(df["Valor"]),
+        # A tarifa é cobrada dentro da própria movimentação (o saldo depois
+        # já vem líquido dela), então o valor que entra é o valor menos a
+        # tarifa. São poucas linhas, todas de link de pagamento em 2025,
+        # mas sem isto o caixa calculado não fecha com o saldo da conta.
+        "valor": _limpar_valor(df["Valor"]) - _limpar_valor(df["Tarifa"]).fillna(0.0),
         "contraparte": df["Origem"].where(credito, df["Destino"]).fillna("").astype(str).str.strip(),
         "documento": df["Origem Documento"].where(credito, df["Destino Documento"]).fillna("").astype(str),
         "conta_origem": df["Origem Conta"].fillna("").astype(str),
@@ -190,7 +206,7 @@ def carregar() -> pd.DataFrame:
     import dados_fin
     cru = dados_fin.ler_extrato() if dados_fin.disponivel() else pd.DataFrame()
     if cru.empty and os.path.exists(ARQUIVO):
-        cru = ler_xlsx(ARQUIVO)
+        cru = ler_arquivo(ARQUIVO)
     if cru.empty:
         return pd.DataFrame(columns=["data", "mes", "sentido", "tipo", "valor", "valor_abs", "contraparte",
                                      "natureza", "categoria", "confianca"])

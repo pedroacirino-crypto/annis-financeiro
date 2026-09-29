@@ -78,8 +78,8 @@ class Premissas:
     envelhecimento: float = 0.02         # fração do estoque que deixa de ser vendável por mês
     antecedencia: int = 2                # produz em M para vender em M+antecedencia
     prazo_recebimento: float = 0.3       # fração da receita que só cai no mês seguinte (cartão)
-    a_receber_inicial: float = 3300.0    # recebíveis da Pagar.me em 20/09
-    caixa_inicial: float = 0.0
+    a_receber_inicial: float = 0.0       # recebíveis da Pagar.me ainda por cair
+    caixa_inicial: float = 0.0           # saldo da conta no início do plano
     acumulado_historico: float = -94574.0
     compromissos: dict = field(default_factory=compromissos_pendentes)
 
