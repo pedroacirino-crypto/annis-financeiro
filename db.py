@@ -764,7 +764,7 @@ def pedido_de_cada_cobranca() -> dict:
     con = _conn()
     con.row_factory = sqlite3.Row
     cobrancas = [dict(r) for r in con.execute(
-        "SELECT id, customer_name, customer_email, amount, created_at FROM charges"
+        "SELECT id, customer_name, customer_email, amount, created_at, status FROM charges"
     ).fetchall()]
     con.close()
 
@@ -786,8 +786,14 @@ def pedido_de_cada_cobranca() -> dict:
     def dia(iso):
         return (str(iso) or "")[:10]
 
+    # A venda que deu certo escolhe primeiro. Cada pedido só pode pertencer a
+    # uma cobrança, e percorrendo por data a tentativa que falhou antes ficava
+    # com o pedido, deixando a venda paga sem cidade nem peças: era o caso de
+    # 7 das 8 vendas pagas que apareciam em branco.
+    ordem = {"paid": 0, "pending": 1, "canceled": 2, "failed": 3}
     saida, usados = {}, set()
-    for c in sorted(cobrancas, key=lambda c: c["created_at"] or ""):
+    for c in sorted(cobrancas, key=lambda c: (ordem.get(c["status"], 9),
+                                              c["created_at"] or "")):
         cand = (por_email.get((c["customer_email"] or "").strip().lower())
                 or por_nome.get(_normalizar(c["customer_name"] or "")) or [])
         perto = []

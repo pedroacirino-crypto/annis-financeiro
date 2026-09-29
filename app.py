@@ -1705,12 +1705,12 @@ if "Vendas" in abas:
                 }),
                 num=("Valor", "Parcelas"), altura_max=420,
             )
-            sem = sum(1 for i in det["id"] if i not in casados)
-            if sem:
-                st.caption(
-                    f"{sem} cobrança(s) sem pedido correspondente na loja: venda feita "
-                    "fora do site, ou nome e e-mail diferentes dos dois lados."
-                )
+            st.caption(
+                "Cidade e peças vêm do pedido da loja, e por isso a linha fica vazia "
+                "quando não existe pedido: cartão recusado não gera pedido na Shopify, "
+                "e tentativa repetida da mesma compra fica presa ao mesmo pedido, que "
+                "é mostrado só uma vez, na cobrança que valeu."
+            )
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 2: RECUPERAR: fila de trabalho dos checkouts abandonados
