@@ -4,6 +4,7 @@ Dashboard de Conciliação Financeira sobre Pagar.me
 
 import hmac
 import os
+import time
 
 import streamlit as st
 import pandas as pd
@@ -222,6 +223,71 @@ def _senha_configurada():
     return os.environ.get("APP_PASSWORD")
 
 
+# Quanto tempo o login vale sem digitar de novo. O incômodo que isto resolve:
+# o st.session_state morre a cada F5 e a cada reinício do container, e o
+# Streamlit Cloud reinicia sozinho, então a senha era pedida o dia inteiro.
+COOKIE_SESSAO = "annis_sessao"
+DIAS_DE_SESSAO = 30
+
+
+def _assinar(ate: int, senha: str) -> str:
+    """Token = validade + assinatura da validade com a senha.
+
+    A senha é a chave, nunca vai para o navegador. Trocar a senha no cofre
+    invalida todos os tokens de uma vez, que é o botão de pânico se um
+    aparelho for perdido.
+    """
+    import hashlib
+    sig = hmac.new(senha.encode(), str(ate).encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{ate}.{sig}"
+
+
+def _token_valido(token: str, senha: str) -> bool:
+    try:
+        ate, _ = (token or "").split(".", 1)
+        if int(ate) < int(time.time()):
+            return False
+    except Exception:
+        return False
+    return hmac.compare_digest(token, _assinar(int(ate), senha))
+
+
+def _gravar_cookie(token: str, segundos: int) -> None:
+    """Grava pelo componente porque o Streamlit não escreve cookie do lado do
+    servidor. O iframe vem com allow-same-origin, então o cookie nasce no
+    domínio do app e o `st.context.cookies` o enxerga na carga seguinte."""
+    import streamlit.components.v1 as componentes
+    seguro = "; secure" if not _local() else ""
+    componentes.html(
+        f"<script>document.cookie={json.dumps(COOKIE_SESSAO + '=' + token)}"
+        f"+'; path=/; max-age={segundos}; samesite=Lax{seguro}';</script>",
+        height=0,
+    )
+
+
+def _local() -> bool:
+    """Em http://localhost o cookie não pode ser `secure`, senão nem grava."""
+    try:
+        return "localhost" in (st.context.headers.get("Host") or "")
+    except Exception:
+        return False
+
+
+def sair():
+    """Esquece este navegador.
+
+    O `_ignorar_cookie` existe porque `st.context.cookies` devolve o
+    cabeçalho da conexão, que não se atualiza sem recarregar a página: sem
+    ele o rerun logo depois do logout leria o cookie antigo e entraria de
+    novo. A marca vive só nesta sessão; o cookie some de verdade.
+    """
+    st.session_state.pop("_autenticado", None)
+    st.session_state["_ignorar_cookie"] = True
+    _gravar_cookie("", 0)
+    time.sleep(0.6)
+    st.rerun()
+
+
 def exigir_senha():
     """Porta de entrada do painel.
 
@@ -243,6 +309,16 @@ def exigir_senha():
     if st.session_state.get("_autenticado"):
         return
 
+    # Sessão lembrada: o cookie assinado dispensa a senha até vencer.
+    try:
+        token = "" if st.session_state.get("_ignorar_cookie") else \
+            (st.context.cookies or {}).get(COOKIE_SESSAO, "")
+    except Exception:
+        token = ""
+    if token and _token_valido(token, esperada):
+        st.session_state["_autenticado"] = True
+        return
+
     st.markdown(
         f"<div style='text-align:center;padding:3rem 0 1rem'>"
         f"<img src='{LOGO_URL}' alt='ANNIS' style='width:150px'>"
@@ -256,10 +332,19 @@ def exigir_senha():
         with st.form("entrar"):
             senha = st.text_input("Senha", type="password", label_visibility="collapsed",
                                   placeholder="Senha de acesso")
+            lembrar = st.checkbox(f"Continuar conectada neste aparelho por {DIAS_DE_SESSAO} dias",
+                                  value=True)
             if st.form_submit_button("Entrar", use_container_width=True, type="primary"):
                 # compare_digest evita vazar o tamanho da senha pelo tempo de resposta
                 if hmac.compare_digest(senha, esperada):
                     st.session_state["_autenticado"] = True
+                    st.session_state.pop("_ignorar_cookie", None)
+                    if lembrar:
+                        segundos = DIAS_DE_SESSAO * 86400
+                        _gravar_cookie(_assinar(int(time.time()) + segundos, esperada), segundos)
+                        # O componente precisa de um instante para gravar o
+                        # cookie antes do rerun levar a página embora.
+                        time.sleep(0.6)
                     st.rerun()
                 else:
                     st.error("Senha incorreta.")
@@ -1298,6 +1383,13 @@ with st.sidebar:
         f"Local: {counts['charges']} vendas · "
         f"{counts['balance_operations']} operações · {counts['payables']} recebíveis"
     )
+
+    # Sair existe para o aparelho emprestado ou perdido: apaga o cookie deste
+    # navegador. Para derrubar todos de uma vez, troque a APP_PASSWORD no
+    # cofre, porque ela é a chave que assina os tokens.
+    st.write("")
+    if st.button("Sair", use_container_width=True):
+        sair()
 
 # ── Abas principais ──────────────────────────────────────────────────────────
 
