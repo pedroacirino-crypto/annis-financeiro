@@ -454,3 +454,80 @@ def marcar_avisado(ids: List[int]) -> int:
             f"UPDATE {TABELA_ESPERA} SET avisado_em = now() WHERE id = ANY(:ids)"
         ), {"ids": list(ids)})
     return len(ids)
+
+
+# ─── Fila de contatos: quem já foi chamada no WhatsApp ──────────────────────
+#
+# O painel não tem como saber se a mensagem foi enviada: o WhatsApp abre numa
+# janela que ele não enxerga e não devolve nada. O que fica gravado aqui é a
+# confirmação de quem está atendendo ("mandei para essa"), não uma detecção.
+#
+# Mora na nuvem porque o disco do Streamlit é apagado a cada reinício, e essa
+# é a única informação da aba que não pode ser rebaixada da Shopify nem da
+# Pagar.me: se sumir, a fila volta do zero no meio do trabalho.
+
+TABELA_CONTATOS = "contatos_feitos"
+
+
+def garantir_contatos() -> None:
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        con.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {TABELA_CONTATOS} (
+                id          TEXT PRIMARY KEY,
+                cliente     TEXT,
+                situacao    TEXT,
+                valor       BIGINT,
+                enviado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        """))
+
+
+def marcar_contato(id_: str, cliente: str = "", situacao: str = "", valor: int = 0) -> bool:
+    """Grava que a mensagem foi disparada. Idempotente: marcar de novo só
+    atualiza a data, que é o comportamento útil se a pessoa for recontatada."""
+    if not configurado() or not id_:
+        return False
+    from sqlalchemy import text
+    try:
+        garantir_contatos()
+        with _conectar().begin() as con:
+            con.execute(text(
+                f"INSERT INTO {TABELA_CONTATOS} (id, cliente, situacao, valor)"
+                f" VALUES (:id, :cliente, :situacao, :valor)"
+                f" ON CONFLICT (id) DO UPDATE SET enviado_em = now(),"
+                f" situacao = EXCLUDED.situacao"
+            ), {"id": id_, "cliente": cliente, "situacao": situacao, "valor": int(valor or 0)})
+        return True
+    except Exception:
+        return False
+
+
+def desmarcar_contato(id_: str) -> bool:
+    if not configurado() or not id_:
+        return False
+    from sqlalchemy import text
+    try:
+        garantir_contatos()
+        with _conectar().begin() as con:
+            con.execute(text(f"DELETE FROM {TABELA_CONTATOS} WHERE id = :id"), {"id": id_})
+        return True
+    except Exception:
+        return False
+
+
+def ler_contatos() -> dict:
+    """{id do cartão: data do envio}. Vazio se o banco não estiver de pé, e
+    aí a aba funciona como antes, sem esconder ninguém."""
+    if not configurado():
+        return {}
+    from sqlalchemy import text
+    try:
+        garantir_contatos()
+        with _conectar().connect() as con:
+            linhas = con.execute(text(
+                f"SELECT id, enviado_em FROM {TABELA_CONTATOS}"
+            )).mappings().all()
+        return {l["id"]: l["enviado_em"] for l in linhas}
+    except Exception:
+        return {}

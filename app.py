@@ -585,8 +585,23 @@ def _botoes_acao(a: dict, texto: str, rotulo_link: str = "Ver o carrinho",
     )
 
 
-def _card_recuperar(a: dict):
-    """Uma pessoa da fila, com o texto pronto e o link que restaura o carrinho."""
+def _dias_desde(quando) -> str:
+    """'hoje', 'ontem' ou 'há N dias', a partir de data ou datetime."""
+    try:
+        d = (date.today() - (quando.date() if hasattr(quando, "date") else
+                             date.fromisoformat(str(quando)[:10]))).days
+    except Exception:
+        return ""
+    return "hoje" if d == 0 else ("ontem" if d == 1 else f"há {d} dias")
+
+
+def _card_recuperar(a: dict, enviado_em=None):
+    """Uma pessoa da fila, com o texto pronto e o link que restaura o carrinho.
+
+    `enviado_em` é a data em que alguém clicou em "Já enviei" para esta
+    pessoa. O painel não detecta envio: o WhatsApp abre numa janela que ele
+    não enxerga. O que existe é a confirmação de quem atendeu.
+    """
     primeiro_nome = (a.get("cliente") or "").split()[0] if a.get("cliente") else ""
     saudacao = f"Oi, {primeiro_nome}! Tudo bem? 🤎" if primeiro_nome else "Oi! Tudo bem? 🤎"
     itens = a.get("itens") or ""
@@ -711,6 +726,24 @@ def _card_recuperar(a: dict):
                 _botoes_acao(a, texto_final, rotulo_link="", url_link="")
             if texto_final != texto:
                 st.caption("Texto editado. Os botões acima já usam a sua versão.")
+
+            if enviado_em:
+                e1, e2 = st.columns([3, 1])
+                e1.caption(f"Marcada como enviada {_dias_desde(enviado_em)}.")
+                if e2.button("Desfazer", key=f"desf_{a['id']}", use_container_width=True):
+                    if nuvem.desmarcar_contato(a["id"]):
+                        st.rerun()
+                    else:
+                        st.error("Não consegui gravar. O banco na nuvem não respondeu.")
+            elif st.button("Já enviei", key=f"env_{a['id']}", use_container_width=True):
+                if nuvem.marcar_contato(a["id"], a.get("cliente") or "",
+                                        a.get("situacao") or "", a.get("valor") or 0):
+                    st.rerun()
+                else:
+                    st.error(
+                        "Não consegui gravar. Sem o banco na nuvem a marcação não "
+                        "sobrevive ao reinício, então prefiro não fingir que salvou."
+                    )
 
 
 def _dia_br(iso: str) -> str:
@@ -1463,6 +1496,16 @@ if "Recuperar" in abas:
                 dias_max = st.selectbox(
                     "Abandonados nos últimos", [7, 15, 30, 60, 90, 180], index=2, key="rec_dias"
                 )
+                ver_enviadas = st.checkbox(
+                    "Mostrar já enviadas", value=False, key="rec_enviadas",
+                    help="Quem foi marcada como enviada sai da fila. Marque aqui "
+                         "para revisar ou desfazer.",
+                )
+
+            # Quem já foi chamada sai da fila para a Ana não mandar duas vezes.
+            # A marcação vem da nuvem; sem ela o dicionário é vazio e a aba se
+            # comporta como antes.
+            enviadas = nuvem.ler_contatos()
 
             corte = (date.today() - timedelta(days=dias_max)).isoformat()
             janela = [a for a in abandonos if (a["criado_em"] or "")[:10] >= corte]
@@ -1499,14 +1542,27 @@ if "Recuperar" in abas:
             st.divider()
 
             escolhidos = [a for a in janela if a["situacao"] in marcadas]
+            ja_enviadas = [a for a in escolhidos if a["id"] in enviadas]
+            if not ver_enviadas:
+                escolhidos = [a for a in escolhidos if a["id"] not in enviadas]
+
             if not marcadas:
                 st.info("Marque ao menos uma situação em **Mostrar**.")
             elif not escolhidos:
-                st.info("Ninguém nesse recorte.")
+                if ja_enviadas:
+                    st.success(
+                        f"Fila zerada. As {len(ja_enviadas)} pessoas deste recorte já "
+                        "foram marcadas como enviadas."
+                    )
+                else:
+                    st.info("Ninguém nesse recorte.")
             else:
-                st.caption(f"{len(escolhidos)} pessoas · mais recentes primeiro")
+                aviso = f"{len(escolhidos)} pessoas · mais recentes primeiro"
+                if ja_enviadas and not ver_enviadas:
+                    aviso += f" · {len(ja_enviadas)} já enviada(s), fora da fila"
+                st.caption(aviso)
                 for a in escolhidos:
-                    _card_recuperar(a)
+                    _card_recuperar(a, enviado_em=enviadas.get(a["id"]))
 
 
 # ════════════════════════════════════════════════════════════════════════════
