@@ -1015,8 +1015,7 @@ def resumo_mensal() -> "list[dict]":
     cur.execute("""
         SELECT strftime('%Y-%m', datetime(created_at, '-3 hours')) AS mes,
                SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) AS faturamento,
-               SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS vendas,
-               COUNT(*) AS tentativas
+               SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS vendas
           FROM charges
          GROUP BY mes
     """)
@@ -1034,6 +1033,18 @@ def resumo_mensal() -> "list[dict]":
     custos = {r["mes"]: dict(r) for r in cur.fetchall()}
     con.close()
 
+    # Aprovação é venda sobre compra tentada, não sobre cobrança: contar
+    # cobrança fazia cada retentativa derrubar o mês. Mesmo agrupamento da
+    # aba Vendas, pelo mês da tentativa mais recente em horário de Brasília.
+    from datetime import timedelta as _td3
+    perdidas_mes = {}
+    for p in vendas_perdidas():
+        quando = _instante(p["created_at"])
+        if not quando:
+            continue
+        mes = (quando - _td3(hours=3)).strftime("%Y-%m")
+        perdidas_mes[mes] = perdidas_mes.get(mes, 0) + 1
+
     linhas = []
     for mes in sorted(meses):
         m = meses[mes]
@@ -1041,13 +1052,17 @@ def resumo_mensal() -> "list[dict]":
         fat = m["faturamento"] or 0
         mdr = c.get("mdr") or 0
         antec = c.get("antecipacao") or 0
+        vendas = m["vendas"] or 0
+        perdidas = perdidas_mes.get(mes, 0)
+        compras = vendas + perdidas
         linhas.append({
             "mes": mes,
             "faturamento": fat,
-            "vendas": m["vendas"] or 0,
-            "tentativas": m["tentativas"] or 0,
-            "ticket": int(fat / m["vendas"]) if m["vendas"] else 0,
-            "aprovacao": (m["vendas"] / m["tentativas"] * 100) if m["tentativas"] else 0,
+            "vendas": vendas,
+            "perdidas": perdidas,
+            "tentativas": compras,
+            "ticket": int(fat / vendas) if vendas else 0,
+            "aprovacao": (vendas / compras * 100) if compras else 0,
             "custo": mdr + antec,
             "custo_pct": ((mdr + antec) / fat * 100) if fat else 0,
             "liquido": fat - mdr - antec,

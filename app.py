@@ -2578,17 +2578,19 @@ if "Histórico" in abas:
         fat = int(dfh["faturamento"].sum())
         vendas = int(dfh["vendas"].sum())
         tent = int(dfh["tentativas"].sum())
+        perd = int(dfh["perdidas"].sum())
         custo = int(dfh["custo"].sum())
         # Em duas fileiras: cinco cards numa linha só cortam os valores em reais.
         t1, t2, t3 = st.columns(3)
         t1.metric("Faturado", fmt_brl(fat))
         t1.caption(f"em {len(dfh)} meses")
         t2.metric("Vendas", f"{vendas}")
-        t2.caption(f"de {tent} tentativas")
+        t2.caption(f"de {tent} compras tentadas")
         t3.metric("Ticket médio", fmt_brl(int(fat / vendas)) if vendas else "—")
 
         t4, t5, t6 = st.columns(3)
         t4.metric("Aprovação", fmt_pct(vendas / tent * 100, 0) if tent else "—")
+        t4.caption(f"{perd} não entraram")
         t5.metric("Custo", fmt_pct(custo / fat * 100) if fat else "—")
         t5.caption(f"{md(fmt_brl(custo))} em taxas e antecipação")
         t6.metric("Líquido", fmt_brl(fat - custo))
@@ -2624,11 +2626,11 @@ if "Histórico" in abas:
         with c_dir.container(border=True):
             st.subheader("Aprovação")
             g["Aprovação"] = g["aprovacao"].round(1)
-            g["Tentativas"] = g["tentativas"]
+            g["Não entraram"] = g["perdidas"]
             g["RotAprov"] = g["aprovacao"].apply(lambda x: fmt_pct(x, 0))
             st.altair_chart(
                 barras(g, "Mês", "Aprovação", rotulo="RotAprov",
-                       tooltip=["Mês", "Aprovação", "Vendas ", "Tentativas"], altura=220),
+                       tooltip=["Mês", "Aprovação", "Vendas ", "Não entraram"], altura=220),
                 use_container_width=True,
             )
 
@@ -2639,14 +2641,14 @@ if "Histórico" in abas:
             "Faturamento": dfh["faturamento"].apply(fmt_brl),
             "Vendas": dfh["vendas"],
             "Ticket médio": dfh["ticket"].apply(fmt_brl),
-            "Tentativas": dfh["tentativas"],
+            "Não entraram": dfh["perdidas"],
             "Aprovação": dfh["aprovacao"].apply(lambda x: fmt_pct(x, 0)),
             "Custo": dfh["custo"].apply(fmt_brl),
             "Custo %": dfh["custo_pct"].apply(lambda x: fmt_pct(x)),
             "Líquido": dfh["liquido"].apply(fmt_brl),
         })
         tabela(linhas_hist,
-               num=("Faturamento", "Vendas", "Ticket médio", "Tentativas",
+               num=("Faturamento", "Vendas", "Ticket médio", "Não entraram",
                     "Aprovação", "Custo", "Custo %", "Líquido"))
         st.download_button(
             "Exportar CSV",
@@ -2655,10 +2657,12 @@ if "Histórico" in abas:
             mime="text/csv",
         )
         st.caption(
-            "Faturamento e ticket consideram apenas cobranças pagas. Custo é a "
-            "soma de taxa e antecipação dos recebíveis dessas vendas. Meses "
-            "anteriores à primeira sincronização de recebíveis aparecem com "
-            "custo zerado."
+            "Faturamento e ticket consideram apenas cobranças pagas. Aprovação é "
+            "venda sobre compra tentada, com o mesmo agrupamento da aba Vendas: "
+            "quem tentou duas vezes conta uma, e quem falhou e pagou em seguida "
+            "não conta como perda. Custo é a soma de taxa e antecipação dos "
+            "recebíveis dessas vendas. Meses anteriores à primeira sincronização "
+            "de recebíveis aparecem com custo zerado."
         )
 
 
