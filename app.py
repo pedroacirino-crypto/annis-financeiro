@@ -114,6 +114,9 @@ MARROM_CLARO = "#7F6040"
 LINHA = "#E8DACB"
 CREME = "#FFF6F0"
 LOGO_URL = "https://annis.store/cdn/shop/files/Artboard_1_copy_6.png"
+# Endereço público do painel, usado para montar o atalho de acesso. O app
+# não consegue ler a URL de cima sozinho: ele roda dentro de um iframe.
+ENDERECO_APP = "https://annis-financeiro-vzk7lcvic78hfk7s8rngdw.streamlit.app"
 
 # Cupom de recuperação, lido de Descontos no admin da loja. Só é aplicado a
 # quem abandonou sem tentar pagar, ver _card_recuperar. Se o código mudar ou
@@ -223,19 +226,26 @@ def _senha_configurada():
     return os.environ.get("APP_PASSWORD")
 
 
-# Quanto tempo o login vale sem digitar de novo. O incômodo que isto resolve:
-# o st.session_state morre a cada F5 e a cada reinício do container, e o
-# Streamlit Cloud reinicia sozinho, então a senha era pedida o dia inteiro.
-COOKIE_SESSAO = "annis_sessao"
+# Quanto tempo o atalho de acesso vale sem digitar a senha de novo. O
+# incômodo que isto resolve: o st.session_state morre a cada F5 e a cada
+# reinício do container, e o Streamlit Cloud reinicia sozinho.
+#
+# Por que na URL e não em cookie: medido em 29/09/2026, o proxy da Streamlit
+# Cloud **descarta o cabeçalho Cookie** antes de entregar ao app, e
+# `st.context.cookies` vem sempre vazio em produção (na máquina local vem
+# certo, que foi o que me enganou na primeira tentativa). A query string é o
+# único canal que atravessa, e o console repassa o parâmetro da URL de cima
+# para o iframe do app, então o atalho sobrevive ao F5.
+PARAM_SESSAO = "s"
 DIAS_DE_SESSAO = 30
 
 
 def _assinar(ate: int, senha: str) -> str:
     """Token = validade + assinatura da validade com a senha.
 
-    A senha é a chave, nunca vai para o navegador. Trocar a senha no cofre
-    invalida todos os tokens de uma vez, que é o botão de pânico se um
-    aparelho for perdido.
+    A senha é a chave e nunca aparece no token. Trocar a APP_PASSWORD no
+    cofre invalida todos os atalhos de uma vez, que é o botão de pânico se
+    um link vazar.
     """
     import hashlib
     sig = hmac.new(senha.encode(), str(ate).encode(), hashlib.sha256).hexdigest()[:32]
@@ -252,58 +262,24 @@ def _token_valido(token: str, senha: str) -> bool:
     return hmac.compare_digest(token, _assinar(int(ate), senha))
 
 
-def _gravar_cookie(token: str, segundos: int) -> None:
-    """Grava pelo componente porque o Streamlit não escreve cookie do lado do
-    servidor. O iframe vem com allow-same-origin, então o cookie nasce no
-    domínio do app e o `st.context.cookies` o enxerga na carga seguinte."""
-    import streamlit.components.v1 as componentes
-    seguro = "; secure" if not _local() else ""
-    componentes.html(
-        f"<script>document.cookie={json.dumps(COOKIE_SESSAO + '=' + token)}"
-        f"+'; path=/; max-age={segundos}; samesite=Lax{seguro}';</script>",
-        height=0,
-    )
-
-
-def _local() -> bool:
-    """Em http://localhost o cookie não pode ser `secure`, senão nem grava."""
+def _guardar_token(esperada: str) -> None:
+    """Põe o token na URL, de onde ele sobrevive ao recarregar."""
+    token = _assinar(int(time.time()) + DIAS_DE_SESSAO * 86400, esperada)
+    st.session_state["_token"] = token
     try:
-        return "localhost" in (st.context.headers.get("Host") or "")
+        st.query_params[PARAM_SESSAO] = token
     except Exception:
-        return False
-
-
-def _manter_sessao(esperada: str) -> None:
-    """Grava (ou renova) o cookie na primeira tela já autenticada.
-
-    Antes isto ficava dentro do formulário, logo antes do `st.rerun()`, e
-    funcionava na máquina local mas não em produção: o rerun troca a página
-    antes de o componente chegar ao navegador e rodar o script, e o cookie
-    nunca nascia. Aqui a tela não vai a lugar nenhum, então a escrita
-    acontece. De quebra, cada sessão nova empurra a validade para a frente.
-    """
-    if st.session_state.get("_cookie_gravado") or st.session_state.get("_ignorar_cookie"):
-        return
-    if not st.session_state.get("_lembrar", True):
-        return
-    segundos = DIAS_DE_SESSAO * 86400
-    _gravar_cookie(_assinar(int(time.time()) + segundos, esperada), segundos)
-    st.session_state["_cookie_gravado"] = True
+        pass
 
 
 def sair():
-    """Esquece este navegador.
-
-    O `_ignorar_cookie` existe porque `st.context.cookies` devolve o
-    cabeçalho da conexão, que não se atualiza sem recarregar a página: sem
-    ele o rerun logo depois do logout leria o cookie antigo e entraria de
-    novo. A marca vive só nesta sessão; o cookie some de verdade.
-    """
-    st.session_state.pop("_autenticado", None)
-    st.session_state.pop("_cookie_gravado", None)
-    st.session_state["_ignorar_cookie"] = True
-    _gravar_cookie("", 0)
-    time.sleep(0.8)
+    """Esquece este navegador: tira o token da URL e da sessão."""
+    for chave in ("_autenticado", "_token"):
+        st.session_state.pop(chave, None)
+    try:
+        del st.query_params[PARAM_SESSAO]
+    except Exception:
+        pass
     st.rerun()
 
 
@@ -326,21 +302,22 @@ def exigir_senha():
         st.stop()
 
     if st.session_state.get("_autenticado"):
-        _manter_sessao(esperada)
+        # Mantém o token na URL mesmo se algo o tiver apagado no caminho.
+        if st.session_state.get("_token") and not st.query_params.get(PARAM_SESSAO):
+            try:
+                st.query_params[PARAM_SESSAO] = st.session_state["_token"]
+            except Exception:
+                pass
         return
 
-    # Sessão lembrada: o cookie assinado dispensa a senha até vencer.
-    try:
-        token = "" if st.session_state.get("_ignorar_cookie") else \
-            (st.context.cookies or {}).get(COOKIE_SESSAO, "")
-    except Exception:
-        token = ""
+    # Atalho de acesso: token assinado na URL dispensa a senha até vencer.
+    token = st.query_params.get(PARAM_SESSAO) or ""
     if token and _token_valido(token, esperada):
         st.session_state["_autenticado"] = True
-        _manter_sessao(esperada)
+        st.session_state["_token"] = token
         return
     if token:
-        # Cookie presente e recusado: venceu, ou a senha foi trocada no cofre.
+        # Token presente e recusado: venceu, ou a senha mudou no cofre.
         st.session_state["_sessao_expirou"] = True
 
     st.markdown(
@@ -353,19 +330,6 @@ def exigir_senha():
     )
     _, meio, _ = st.columns([1, 1.4, 1])
     with meio:
-        # Diagnóstico temporário: só os NOMES dos cookies que chegaram ao
-        # servidor, nenhum valor. Serve para saber se o proxy da Streamlit
-        # Cloud entrega o cabeçalho Cookie para o app.
-        try:
-            _nomes = sorted((st.context.cookies or {}).keys())
-        except Exception as _e:
-            _nomes = [f"erro: {type(_e).__name__}"]
-        try:
-            _qp = dict(st.query_params)
-        except Exception:
-            _qp = {}
-        st.caption(f"diag cookies: {len(_nomes)} · {', '.join(_nomes) or 'nenhum'}"
-                   f" | params: {', '.join(f'{k}={v}' for k, v in _qp.items()) or 'nenhum'}")
         if st.session_state.get("_sessao_expirou"):
             st.caption("Sua sessão venceu ou a senha mudou. Entre de novo.")
         with st.form("entrar"):
@@ -377,9 +341,9 @@ def exigir_senha():
                 # compare_digest evita vazar o tamanho da senha pelo tempo de resposta
                 if hmac.compare_digest(senha, esperada):
                     st.session_state["_autenticado"] = True
-                    st.session_state["_lembrar"] = lembrar
-                    st.session_state.pop("_ignorar_cookie", None)
                     st.session_state.pop("_sessao_expirou", None)
+                    if lembrar:
+                        _guardar_token(esperada)
                     st.rerun()
                 else:
                     st.error("Senha incorreta.")
@@ -1422,19 +1386,18 @@ with st.sidebar:
     # Sair existe para o aparelho emprestado ou perdido: apaga o cookie deste
     # navegador. Para derrubar todos de uma vez, troque a APP_PASSWORD no
     # cofre, porque ela é a chave que assina os tokens.
-    # Diz em que pé está a sessão lembrada. Serve para a Ana e serve para
-    # diagnóstico: "lembrada" prova que a escrita e a leitura funcionam,
-    # "não está lembrando" mostra qual das duas falhou sem precisar de log.
-    try:
-        _tem_cookie = bool((st.context.cookies or {}).get(COOKIE_SESSAO))
-    except Exception:
-        _tem_cookie = False
-    if _tem_cookie:
-        st.caption(f"Sessão lembrada neste aparelho por {DIAS_DE_SESSAO} dias.")
-    elif st.session_state.get("_cookie_gravado"):
-        st.caption("Sessão marcada para ser lembrada. Recarregue para confirmar.")
-    else:
-        st.caption("Este aparelho não está lembrando a sessão.")
+    # O atalho vive na URL, então o caminho seguro é o favorito do navegador.
+    # Sem isto o token some na primeira vez que alguém digitar o endereço
+    # limpo, e a senha volta a ser pedida sem explicação.
+    if st.session_state.get("_token"):
+        with st.expander(f"Atalho de acesso · {DIAS_DE_SESSAO} dias"):
+            st.caption(
+                "Salve este endereço nos favoritos e entre por ele: não pede senha. "
+                "Quem tiver o link entra, então não compartilhe. Trocar a APP_PASSWORD "
+                "no cofre derruba todos os atalhos de uma vez."
+            )
+            st.code(f"{ENDERECO_APP}/?{PARAM_SESSAO}={st.session_state['_token']}",
+                    language=None)
 
     if st.button("Sair", use_container_width=True):
         sair()
