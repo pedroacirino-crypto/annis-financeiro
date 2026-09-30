@@ -155,7 +155,13 @@ def simular(p: Premissas) -> dict:
             caixa = 0.0
         total_aportes += aporte
 
-        resultado = d - taxas - cmv_total - ads - p.fixos
+        # Compromisso entra no resultado, não só no caixa: é custo contratado
+        # do mês como qualquer outro. Sem ele, a projeção da página dava
+        # lucro de R$ 1.259 em out/26 e a coluna do orçado dava prejuízo de
+        # R$ 475 para o mesmo mês, R$ 1.734 de diferença, que era justamente
+        # a parcela de foto contratada. O Pedro perguntou em 30/09/2026 se
+        # os números batiam entre si; não batiam.
+        resultado = d - taxas - cmv_total - ads - p.fixos - compromisso_mes
         linhas.append({
             "mes": str(m), "receita": d, "recebido": recebido, "taxas": taxas, "ads": ads,
             "fixos": p.fixos, "producao": producao, "compromissos": compromisso_mes,
