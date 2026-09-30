@@ -50,7 +50,7 @@ REGRAS_DEBITO = [
     (r"GRAFICA PORTO BELO|AJ FERREIRA|FM IMPRESSOS|PRINTI", "estoque", "Embalagem", "ok"),
     (r"TRANS APUCARANA|BRASPRESS", "estoque", "Frete de insumo", "ok"),
     # Marketing
-    (r"PROADZ|V60 ANUNCIOS|FACEBK", "despesa", "Ads e agência", "ok"),  # a PROADZ virou V60
+    (r"PROADZ|V60 ANUNCIOS|FACEBK", "despesa", "Ads e agência", "ok"),  # mesma agência, nome e CNPJ novos desde 09/2026
     (r"PORTOSEG", "despesa", "Fatura do cartão de anúncios", "ok"),  # a Meta em si entra pelo relatório da agência
     (r"GASP ESTUDIO|YELLOW ESTUDIO|SARDI E VERCEZI|FOTO CELULA|CALDI GOMES|S FERREIRA DA SILVA PUBLICIDADES", "despesa", "Foto, vídeo e conteúdo", "ok"),
     # Eventos

@@ -16,6 +16,8 @@ Tabelas, todas com prefixo `fin_`:
   fin_contas_a_pagar     provisões: contas contratadas e ainda não pagas
   fin_regras             regras de classificação do extrato com nome de
                          pessoa física, que não podem ir para o Git público
+  fin_fatura_cartao      linhas das faturas dos cartões das sócias: o extrato
+                         só mostra o reembolso, a fatura mostra no que foi
 
 Sem conexão configurada, tudo devolve vazio e os módulos caem nos arquivos
 locais em `legado/`, que é como se trabalha nesta máquina.
@@ -107,7 +109,23 @@ def garantir() -> None:
                 observacao  TEXT,
                 carregado_em TIMESTAMPTZ NOT NULL DEFAULT now()
             )"""))
+        con.execute(text(_SQL_FATURA))
     _tabelas_garantidas = True
+
+
+_SQL_FATURA = """
+    CREATE TABLE IF NOT EXISTS fin_fatura_cartao (
+        id             TEXT PRIMARY KEY,
+        fatura         TEXT NOT NULL,
+        data           DATE NOT NULL,
+        cartao         TEXT NOT NULL,
+        estabelecimento TEXT NOT NULL,
+        valor          DOUBLE PRECISION NOT NULL,
+        parcela        TEXT,
+        natureza       TEXT NOT NULL,
+        categoria      TEXT,
+        carregado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"""
 
 
 def _id(*partes) -> str:
@@ -260,3 +278,33 @@ def resumo() -> dict:
         "contas_em": cap.em.iloc[0] if not cap.empty else None,
         "meta_ate": meta.ate.iloc[0] if not meta.empty else None,
     }
+
+
+# ─── Faturas de cartão ──────────────────────────────────────────────────────
+
+def salvar_fatura_cartao(df: pd.DataFrame, substituir_faturas: bool = True) -> int:
+    """Linhas de fatura. A chave é o conteúdo, então subir a mesma fatura
+    duas vezes não duplica. Por padrão limpa antes as faturas presentes no
+    arquivo, para correção de transcrição não deixar linha órfã."""
+    from sqlalchemy import text
+    garantir()
+    if substituir_faturas and not df.empty:
+        with nuvem._conectar().begin() as con:
+            for fat in sorted(df.fatura.unique()):
+                con.execute(text("DELETE FROM fin_fatura_cartao WHERE fatura = :f"), {"f": fat})
+    linhas = [{"id": _id(r.fatura, r.data, r.cartao, r.estabelecimento, round(r.valor, 2), r.parcela),
+               "fatura": r.fatura, "data": pd.Timestamp(r.data).date(), "cartao": str(r.cartao),
+               "estabelecimento": r.estabelecimento, "valor": float(r.valor),
+               "parcela": None if pd.isna(r.parcela) else str(r.parcela),
+               "natureza": r.natureza, "categoria": r.categoria}
+              for r in df.itertuples(index=False)]
+    return _upsert("fin_fatura_cartao", linhas, "id")
+
+
+@memo()
+def ler_fatura_cartao() -> pd.DataFrame:
+    df = _ler("SELECT fatura, data, cartao, estabelecimento, valor, parcela, natureza, categoria "
+              "FROM fin_fatura_cartao ORDER BY fatura, data")
+    if not df.empty:
+        df["data"] = pd.to_datetime(df["data"])
+    return df

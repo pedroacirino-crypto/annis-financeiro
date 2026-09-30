@@ -5,6 +5,7 @@
     python carga.py meta     2026-09 2500              investimento em Meta de um mês
     python carga.py legado                             fichas e lançamentos pré-conta, da planilha de 2025
     python carga.py regras                             regras de classificação com nome de pessoa (legado/regras.json)
+    python carga.py fatura   legado/faturas_cartao.csv linhas das faturas dos cartões das sócias
     python carga.py resumo                             o que tem lá e até quando
 
 Roda na máquina do Pedro, com o .env apontando para o banco. Nada disso vai
@@ -74,6 +75,21 @@ def carregar_legado() -> None:
     print("meta ads (histórico da agência):", dados_fin.salvar_meta_ads(financeiro.META_ADS))
 
 
+def carregar_fatura(caminho: str) -> None:
+    """A fatura diz no que o reembolso à sócia foi gasto. O extrato da Stone
+    só mostra a transferência, e sem isso tudo vira 'outras no cartão'."""
+    df = pd.read_csv(caminho)
+    n = dados_fin.salvar_fatura_cartao(df)
+    print(f"faturas: {n} linhas gravadas, {df.fatura.nunique()} faturas")
+    for fat, g in df.groupby("fatura"):
+        annis = g[g.natureza.isin(["despesa", "estoque"])]
+        print(f"  {fat}: Annis R$ {annis.valor.sum():,.2f}"
+              f" | fora R$ {g[g.natureza == 'pessoal'].valor.sum():,.2f}")
+    annis = df[df.natureza.isin(["despesa", "estoque"])]
+    for cat, v in annis.groupby("categoria").valor.sum().sort_values(ascending=False).items():
+        print(f"    {cat[:40]:40s} R$ {v:,.2f}")
+
+
 def carregar_regras() -> None:
     import json
     with open(extrato.ARQUIVO_REGRAS, encoding="utf-8") as f:
@@ -96,6 +112,8 @@ def main(argv):
         carregar_legado()
     elif cmd == "regras":
         carregar_regras()
+    elif cmd == "fatura":
+        carregar_fatura(argv[2])
     else:
         r = dados_fin.resumo()
         print(f"extrato: {r['extrato_linhas']} linhas, até {r['extrato_ate']}")
