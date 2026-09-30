@@ -283,6 +283,114 @@ def _abater_devolucoes(pagamentos: pd.DataFrame) -> pd.DataFrame:
     return pagamentos.drop(index=cancelar)
 
 
+# Fatura do cartão das sócias: o extrato da Stone só mostra a transferência
+# para a sócia, e ela não é a despesa. Em 11/08/2026 a fatura da Ana era de
+# R$ 1.999,85; a empresa mandou R$ 730 para ela e a Isa depositou R$ 1.270,
+# cada uma bancando metade. O painel registrava R$ 800 de "cartão das
+# sócias" em agosto quando a despesa real tinha sido R$ 1.999,85, no mês
+# errado e sem categoria. Confirmado pelo Pedro em 30/09/2026.
+#
+# A conversão roda só aqui, no PnL. A classificação do extrato fica como
+# está: no caixa a transferência é saída de verdade e o depósito da sócia é
+# aporte de verdade, e mexer nisso quebraria a conferência com o saldo da
+# conta e o total de aportes.
+
+_TITULARES = {"Ana": r"ANA CAROLINE", "Isa": r"ISABELA"}
+
+
+@memo()
+def faturas_cartao() -> pd.DataFrame:
+    """Linhas das faturas, do Supabase ou do arquivo local."""
+    import os
+    try:
+        import dados_fin
+        if dados_fin.disponivel():
+            df = dados_fin.ler_fatura_cartao()
+            if not df.empty:
+                return df
+    except Exception:
+        pass
+    caminho = os.path.join("legado", "faturas_cartao.csv")
+    if not os.path.exists(caminho):
+        return pd.DataFrame()
+    df = pd.read_csv(caminho)
+    df["data"] = pd.to_datetime(df["data"])
+    return df
+
+
+@memo()
+def compras_no_cartao() -> pd.DataFrame:
+    """Uma linha por compra, não por parcela, pelo mês em que foi comprada.
+
+    Parcelado é uma compra só: o aviamento de 25/08 em 3x de R$ 372,68 é
+    R$ 1.118,04 de estoque em agosto, não três pedaços em três meses. A
+    parcela que falta chegar não muda nada, porque o valor cheio já sai de
+    'n/m' vezes o valor da parcela; por isso a linha é contada uma vez só,
+    na primeira parcela que aparecer.
+    """
+    fat = faturas_cartao()
+    if fat.empty:
+        return pd.DataFrame(columns=["mes", "titular", "estabelecimento", "valor", "natureza", "categoria"])
+    fat = fat[fat.natureza.isin(["despesa", "estoque"])].copy()
+    fat["parcelas"] = (fat.parcela.fillna("").astype(str)
+                       .str.extract(r"/(\d+)")[0].astype(float).fillna(1.0))
+    fat["ordem"] = (fat.parcela.fillna("").astype(str)
+                    .str.extract(r"^(\d+)/")[0].astype(float).fillna(1.0))
+    fat = fat[fat.ordem == 1]                      # a compra conta uma vez
+    fat["valor"] = fat.valor * fat.parcelas        # valor cheio da compra
+    fat["mes"] = fat.data.dt.strftime("%Y-%m")
+    return fat[["mes", "titular", "estabelecimento", "valor", "natureza", "categoria"]]
+
+
+@memo()
+def meses_com_fatura() -> dict:
+    """{titular: meses de vencimento cujas faturas já foram transcritas}.
+
+    O recorte é por vencimento porque é ele que casa com o reembolso: a
+    fatura que venceu em agosto foi a que a empresa ajudou a pagar em
+    agosto. Mês sem fatura carregada continua no modelo antigo.
+    """
+    fat = faturas_cartao()
+    if fat.empty:
+        return {}
+    return {t: set(g.fatura.unique()) for t, g in fat.groupby("titular")}
+
+
+def _trocar_reembolso_por_fatura(desp: pd.DataFrame) -> pd.DataFrame:
+    """Onde a fatura foi transcrita, a despesa é a linha dela.
+
+    Sai a transferência para a sócia naquele mês de vencimento, que é
+    reembolso e não despesa, e entram as compras da fatura pelo mês em que
+    foram feitas. Mês sem fatura carregada não é tocado: continua com a
+    estimativa antiga, senão o resultado melhoraria por falta de dado.
+
+    Meta não entra por aqui: a fonte dele continua sendo o relatório da
+    agência, que cobre o histórico inteiro, enquanto a fatura cobre só os
+    meses transcritos. Entrasse pelos dois, contaria duas vezes.
+    """
+    cobertos = meses_com_fatura()
+    if not cobertos:
+        return desp
+    fora = pd.Series(False, index=desp.index)
+    for titular, meses in cobertos.items():
+        padrao = _TITULARES.get(titular)
+        if not padrao:
+            continue
+        fora |= ((desp.categoria == CATEGORIA_CARTAO)
+                 & desp.contraparte.str.contains(padrao, case=False, na=False)
+                 & desp.mes.isin(meses))
+    desp = desp[~fora]
+    compras = compras_no_cartao()
+    novas = compras[(compras.natureza == "despesa") & (compras.categoria != "Meta Ads")]
+    if novas.empty:
+        return desp
+    return pd.concat([desp, pd.DataFrame({
+        "data": pd.NaT, "valor": novas.valor.values, "contraparte": novas.estabelecimento.values,
+        "natureza": "despesa", "categoria": novas.categoria.values, "confianca": "ok",
+        "fonte": "fatura", "mes": novas.mes.values,
+    })], ignore_index=True)
+
+
 def fim_dos_custos():
     """Última data com saída registrada. Depois dela o PnL está cego."""
     import extrato
@@ -534,7 +642,7 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     # Competência, não caixa: mensalidade no mês do serviço e devolução de
     # fornecedor abatendo a despesa dele. O fluxo de caixa continua pelo
     # extrato cru, que é o que fecha com o saldo da conta.
-    desp = _competencia_dos_contratos(_abater_devolucoes(desp))
+    desp = _trocar_reembolso_por_fatura(_competencia_dos_contratos(_abater_devolucoes(desp)))
     # `_abater_devolucoes` roda aqui e em estoque_a_custo, nunca dentro de
     # ledger_saidas: no fluxo de caixa a devolução entra como entrada, e
     # abater dos dois lados quebraria a conferência com o saldo da conta.
@@ -716,8 +824,12 @@ def estoque_a_custo() -> float:
     SHPP. No caixa a devolução já entra como entrada, por isso ela não pode
     ser abatida no `ledger_saidas`, que é o que fecha com o saldo da conta."""
     led = _abater_devolucoes(ledger_saidas())
+    # Tecido e aviamento comprados no cartão da sócia não passam pelo
+    # extrato da Stone, só pela fatura. São estoque igual ao resto.
+    compras = compras_no_cartao()
+    no_cartao = float(compras[compras.natureza == "estoque"].valor.sum()) if not compras.empty else 0.0
     t = pnl_competencia()["tabela"]
-    return float(led[led.natureza == "estoque"].valor.sum() - t.cmv.sum())
+    return float(led[led.natureza == "estoque"].valor.sum() + no_cartao - t.cmv.sum())
 
 
 def projetar(fluxo: pd.DataFrame, meses: int, receita_liquida_mensal: float,

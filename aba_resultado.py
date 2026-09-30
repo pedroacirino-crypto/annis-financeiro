@@ -221,6 +221,22 @@ def render():
         dc.index = [mes_curto(m) for m in dc.index]
         dc = dc.loc[:, (dc != 0).any()]
         st.dataframe(dc.map(lambda v: brl(v) if v else ""), width="stretch")
+        com_fatura = fin.meses_com_fatura()
+        if com_fatura:
+            quem = ", ".join(f"{t} ({len(m)} faturas)" for t, m in sorted(com_fatura.items()))
+            st.caption(
+                f"Cartão das sócias: onde a fatura foi transcrita a despesa é a linha dela, "
+                f"e a transferência à sócia sai daqui porque é reembolso, não custo. "
+                f"Transcrito até agora: {quem}. Nos meses sem fatura a linha "
+                "**Outras no cartão das sócias** ainda é estimativa: o que sobrou do "
+                "reembolso depois de tirar o Meta do relatório da agência."
+            )
+        else:
+            st.caption(
+                "**Outras no cartão das sócias** é estimativa: o que sobrou do reembolso "
+                "depois de tirar o Meta. Carregue as faturas com `carga.py fatura` para "
+                "saber no que foi."
+            )
 
     # ═══════════════════════════════════════════════════════════════════════════
     st.header("2. Onde estamos hoje")

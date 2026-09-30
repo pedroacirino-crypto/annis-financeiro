@@ -117,6 +117,7 @@ _SQL_FATURA = """
     CREATE TABLE IF NOT EXISTS fin_fatura_cartao (
         id             TEXT PRIMARY KEY,
         fatura         TEXT NOT NULL,
+        titular        TEXT NOT NULL,
         data           DATE NOT NULL,
         cartao         TEXT NOT NULL,
         estabelecimento TEXT NOT NULL,
@@ -293,7 +294,7 @@ def salvar_fatura_cartao(df: pd.DataFrame, substituir_faturas: bool = True) -> i
             for fat in sorted(df.fatura.unique()):
                 con.execute(text("DELETE FROM fin_fatura_cartao WHERE fatura = :f"), {"f": fat})
     linhas = [{"id": _id(r.fatura, r.data, r.cartao, r.estabelecimento, round(r.valor, 2), r.parcela),
-               "fatura": r.fatura, "data": pd.Timestamp(r.data).date(), "cartao": str(r.cartao),
+               "fatura": r.fatura, "titular": r.titular, "data": pd.Timestamp(r.data).date(), "cartao": str(r.cartao),
                "estabelecimento": r.estabelecimento, "valor": float(r.valor),
                "parcela": None if pd.isna(r.parcela) else str(r.parcela),
                "natureza": r.natureza, "categoria": r.categoria}
@@ -303,7 +304,7 @@ def salvar_fatura_cartao(df: pd.DataFrame, substituir_faturas: bool = True) -> i
 
 @memo()
 def ler_fatura_cartao() -> pd.DataFrame:
-    df = _ler("SELECT fatura, data, cartao, estabelecimento, valor, parcela, natureza, categoria "
+    df = _ler("SELECT fatura, titular, data, cartao, estabelecimento, valor, parcela, natureza, categoria "
               "FROM fin_fatura_cartao ORDER BY fatura, data")
     if not df.empty:
         df["data"] = pd.to_datetime(df["data"])
