@@ -36,8 +36,14 @@ def _esquecer_derivados():
     Sem isto, "Atualizar dados" baixava o dado novo e a tela continuava
     mostrando o cruzamento antigo por até dez minutos: foi o que fez a cidade
     da venda recusada seguir vazia mesmo depois da sincronização.
+
+    A aba Resultado entra aqui porque o cache dela dura uma hora e sobrevive
+    a publicação nova: em 30/09/2026 a correção da competência subiu e a
+    tabela continuou mostrando a agência zerada em agosto, porque `_dados`
+    guardava o PnL calculado pelo código antigo.
     """
-    for fn in (globals().get("_pedido_por_cobranca"), globals().get("_estoque_atual")):
+    for fn in (globals().get("_pedido_por_cobranca"), globals().get("_estoque_atual"),
+               getattr(aba_resultado, "_dados", None)):
         try:
             fn.clear()
         except Exception:
