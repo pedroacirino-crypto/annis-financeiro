@@ -102,7 +102,11 @@ class Premissas:
     a_receber_inicial: float = 0.0       # recebíveis da Pagar.me ainda por cair
     caixa_inicial: float = 0.0           # saldo da conta no início do plano
     acumulado_historico: float = -94574.0
-    compromissos: dict = field(default_factory=compromissos_pendentes)
+    # Vazio de propósito: desde 30/09/2026 o compromisso contratado é
+    # alocado na categoria de despesa dele e já está dentro de `fixos`.
+    # Somar aqui de novo contaria duas vezes. A função continua existindo
+    # para o painel mostrar quanto há de conta contratada.
+    compromissos: dict = field(default_factory=dict)
 
 
 def simular(p: Premissas) -> dict:

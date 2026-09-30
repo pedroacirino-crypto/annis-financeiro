@@ -313,12 +313,6 @@ def render():
         vis = vis.rename(columns={vis.columns[0]: "Mês"})
         dproj = dict(fin.despesas_projetadas())
         dproj["Meta Ads"] = orc.get("(-) Meta e agência", 0.0) - dproj.get("Ads e agência", 0.0)
-        # Compromisso contratado entra como linha própria, senão a soma desta
-        # tabela não bate com a linha Despesas da tabela de caixa nem com
-        # "Demais despesas" do PnL, que já o incluem.
-        comp = plano.compromissos_pendentes().get(corrente, 0.0)
-        if comp:
-            dproj["Compromissos contratados"] = comp
         mtd_desp = pnl["despesas_por_categoria"]
         mtd_desp = mtd_desp.loc[corrente] if corrente in mtd_desp.index else None
         l_orc = {"Mês": f"{mes_curto(corrente)} orçado"}

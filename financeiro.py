@@ -553,42 +553,86 @@ def receita_base() -> float:
 # o resto vai por média aparada. O que é pontual de verdade, como cartório e
 # seguro incêndio, cai para zero na apara, e por isso existe a linha de
 # pontuais: sem ela a projeção esqueceria uma classe inteira de gasto.
-_DESP_CONTRATO = ("Ads e agência", "Aluguel e condomínio", "Contador", "Sistemas")
+_DESP_CONTRATO = ("Ads e agência", "Aluguel e condomínio", "Contador", "Sistemas", "Maquininha")
 _DESP_VOLUME = ("Frete e entrega",)
+_MIN_RECORRENTE = 4 / 6   # aparece em pelo menos 4 dos 6 meses para valer como recorrente
 
 
 @memo()
 def despesas_projetadas() -> dict:
-    """Projeção de despesa por categoria, com Meta de fora (ela vem do plano)."""
+    """Projeção de despesa por categoria. Meta fica de fora, vem do plano.
+
+    Três coisas que o Pedro corrigiu em 30/09/2026 e que valem para sempre:
+
+    1. **Mês sem lançamento não é custo zero.** A matriz preenche vazio com
+       zero, e a média tratava "não veio a cobrança" como "não custou". O
+       aluguel da maquininha, R$ 109 fixos, virava R$ 82 porque dois meses
+       sem cobrança entraram como zero na conta.
+    2. **Contrato não se calcula por média**: vale o último valor visto.
+    3. **Compromisso contratado se aloca na categoria dele**, não vira
+       linha separada nem média de pontuais. O que não está contratado e
+       não é recorrente simplesmente não existe na projeção.
+    """
     dc = pnl_competencia()["despesas_por_categoria"]
     fim = mes_fechado()
-    u = dc.loc[[m for m in dc.index if str(pd.Period(fim, "M") - 5) <= m <= fim]]
+    meses = [m for m in dc.index if str(pd.Period(fim, "M") - 5) <= m <= fim]
+    u = dc.loc[meses]
     if u.empty:
         return {}
     t = pnl_competencia()["tabela"]
     ult = t[t.mes == fim]
     ped_ult = float(ult.pedidos.iloc[0]) if not ult.empty else 0.0
     ped_proj = (_abrir_receita(receita_partida(), 0.0) or {}).get("Pedidos no site", ped_ult)
-    saida, zerados = {}, []
+
+    saida = {}
     for c in u.columns:
         if c == "Meta Ads":
             continue
         s = u[c]
+        presentes = s[s != 0]
+        if len(presentes) / len(s) < _MIN_RECORRENTE:
+            continue            # ocasional: só existe se estiver contratado
         if c in _DESP_CONTRATO:
-            v = float(s.iloc[-1])
+            v = float(presentes.iloc[-1])
         elif c in _DESP_VOLUME:
             v = float(s.iloc[-1]) / ped_ult * ped_proj if ped_ult else float(s.iloc[-1])
         else:
-            v = _aparada(s)
-        if round(v, 2) <= 0:
-            zerados.append(c)
-        else:
+            v = _aparada(presentes)     # só os meses em que houve, sem os vazios
+        if round(v, 2) > 0:
             saida[c] = v
-    if zerados:
-        # O que cada categoria pontual não projeta sozinha, projetado junto.
-        pontuais = _aparada(u[zerados].sum(axis=1))
-        if round(pontuais, 2) > 0:
-            saida["Pontuais (média histórica)"] = pontuais
+
+    # Compromisso contratado manda na categoria dele: se existe boleto para
+    # o mês, ele é o número, não a estimativa.
+    for categoria, valor in compromissos_por_categoria(mes_corrente()).items():
+        saida[categoria] = valor
+    return saida
+
+
+@memo()
+def compromissos_por_categoria(mes: str) -> dict:
+    """Contas contratadas do mês, já classificadas na categoria de despesa.
+
+    Usa as regras de planilha, que ficam no Supabase porque a planilha
+    chama fornecedor por apelido. O que for produção ou agência não entra:
+    já está no CMV e nos fixos.
+    """
+    import re
+    import dados_fin
+    df = dados_fin.ler_contas_a_pagar() if dados_fin.disponivel() else pd.DataFrame()
+    if df.empty:
+        return {}
+    import extrato
+    regras = [r for r in extrato.regras_externas() if r.get("sentido") == "planilha"]
+    pend = df[(df.situacao.fillna("").str.upper() != "PAGO")
+              & (df.data.dt.strftime("%Y-%m") == mes)]
+    saida = {}
+    for r in pend.itertuples(index=False):
+        for regra in regras:
+            if re.search(regra["padrao"], str(r.descricao), re.I):
+                if regra["natureza"] == "estoque" or regra["categoria"] == "Ads e agência":
+                    break       # já modelado no CMV ou nos fixos
+                saida[regra["categoria"]] = saida.get(regra["categoria"], 0.0) + float(r.valor)
+                break
     return saida
 
 
@@ -597,9 +641,9 @@ def caixa_orcado(mes: str) -> dict:
     """A linha do fluxo de caixa projetado, nas colunas da tabela de caixa.
 
     A taxa da Pagar.me não é saída: ela já vem descontada do que liquida.
-    Por isso Site entra líquido dela, como no realizado, e o que sobra de
-    imposto vai na coluna própria. A identidade fecha: Site mais fora do
-    site, menos estoque, despesa e imposto, dá o saldo do mês do plano.
+    Por isso Site entra líquido dela, como no realizado, e o imposto vai na
+    coluna própria. A identidade fecha: Site mais fora do site, menos
+    estoque, despesa e imposto, dá o saldo do mês do plano.
     """
     import plano
     m = premissas_medidas()
