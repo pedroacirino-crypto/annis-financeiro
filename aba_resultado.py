@@ -344,15 +344,18 @@ def render():
         (fim_dado - pd.offsets.MonthBegin(1)).strftime("%Y-%m")
     linha_base = t[t.mes == mes_base]
     base_real = float(linha_base.receita_liquida.iloc[0]) if not linha_base.empty else 20000.0
-    base_slider = int(round(base_real / 500) * 500)
+    # O primeiro mês projetado é a âncora já crescida: `plano.simular` toma
+    # `receita_base` como o próprio mês, sem aplicar crescimento nele.
+    partida = fin.receita_partida()
+    base_slider = int(round(partida / 100) * 100)
 
     with st.expander("Premissas", expanded=False):
         st.caption("Arraste e a página inteira recalcula. Os valores iniciais vêm dos últimos 6 meses.")
         q1, q2, q3, q4 = st.columns(4)
         pr_receita = float(q1.slider(f"Receita líquida em {mes_curto(primeiro_projetado)} (R$)",
-                                     5000, 40000, base_slider, 500,
-                                     help=f"Parte do último mês fechado, {mes_curto(mes_base)}, "
-                                          f"que deu {brl(base_real)}."))
+                                     5000, 40000, base_slider, 100,
+                                     help=f"Âncora: {mes_curto(mes_base)} fechou em {brl(base_real)}. "
+                                          f"Aqui ele já vem crescido pela taxa do modelo."))
         pr_g = q2.slider("Crescimento ao mês (%)", -10.0, 30.0, 10.5, 0.5, help="Ajuste log-linear de abr a set/26.") / 100
         pr_fator = q3.slider("Fator de redução do crescimento", 0.0, 1.0, 0.8, 0.05,
                              help="g no mês t = g × fator^t. Com 0,8 a receita converge para 1,7x a inicial; com 0,9, para 2,6x.")

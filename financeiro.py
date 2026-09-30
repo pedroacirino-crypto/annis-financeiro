@@ -530,10 +530,25 @@ def mes_corrente() -> str:
 
 @memo()
 def receita_base() -> float:
-    """Receita líquida do último mês fechado: o ponto de partida da projeção."""
+    """Receita líquida do último mês fechado: a âncora da projeção."""
     t = pnl_competencia()["tabela"]
     linha = t[t.mes == mes_fechado()]
     return float(linha.receita_liquida.iloc[0]) if not linha.empty else 20000.0
+
+
+@memo()
+def receita_partida() -> float:
+    """Receita do primeiro mês projetado: a âncora já crescida.
+
+    `plano.simular` usa `receita_base` como o próprio primeiro mês da
+    projeção, sem crescimento nenhum. Ancorando no último mês fechado, isso
+    fazia outubro sair idêntico a setembro na receita líquida, centavo por
+    centavo, enquanto todas as outras linhas mudavam. Com a base antiga de
+    R$ 20 mil no braço o defeito existia igual e não aparecia, porque
+    R$ 20 mil não era mês nenhum. O Pedro viu em 30/09/2026.
+    """
+    import plano
+    return receita_base() * (1 + plano.Premissas().crescimento)
 
 
 def orcamento_do_mes(mes: str, premissas=None) -> dict:
@@ -546,7 +561,7 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     onde ela aparece no realizado.
     """
     import plano
-    p = premissas or plano.Premissas(inicio=mes_corrente(), receita_base=receita_base())
+    p = premissas or plano.Premissas(inicio=mes_corrente(), receita_base=receita_partida())
     sim = plano.simular(p)
     linha = sim["tabela"][sim["tabela"].mes == mes]
     if linha.empty:
