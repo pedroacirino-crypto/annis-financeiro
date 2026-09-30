@@ -363,8 +363,11 @@ def render():
                                        help="Quanto se quer ter em estoque, a custo, em meses de CMV. Hoje são uns 8. Acima do alvo produz-se menos, na proporção do excesso."))
         q5, q6, q7, q8 = st.columns(4)
         pr_cmv = q5.slider("CMV médio (% da receita)", 20.0, 70.0, 41.4, 0.5) / 100
-        pr_ads = q6.slider("Meta (% da receita)", 0.0, 40.0, 12.5, 0.5,
-                           help="Só a mídia, que escala com a venda. Relatórios da agência: R$ 10,5 mil nos últimos 6 meses para R$ 83,6 mil de receita, 12,5%. A agência é fixa e está nos fixos.") / 100
+        meta_site = fin.meta_por_site() * 100
+        pr_ads = q6.slider("Meta (% da receita líquida do site)", 0.0, 40.0, round(meta_site, 1), 0.5,
+                           help=f"Só a mídia, indexada à venda do site, que é o que o anúncio puxa. "
+                                f"Em {mes_curto(mes_base)} foi {meta_site:.1f}%, e a eficiência vem "
+                                "melhorando: era 28% em março. A agência é fixa e está nos fixos.") / 100
         pr_fixos = float(q7.slider("Fixos por mês (R$)", 0, 15000, 7600, 100,
                                    help="Aluguel 2,8 mil, agência PROADZ 1,8 mil, pessoas 1,3 mil, foto 0,7 mil, frete, contador, sistemas."))
         pr_imposto = q8.slider("Taxas e imposto (% da receita)", 0.0, 20.0, 7.4, 0.1, help="Pagar.me mais Simples a 2,64%.") / 100
@@ -377,6 +380,7 @@ def render():
     prem = plano.Premissas(inicio=str(pd.Period(hoje, "M") + 1), receita_base=pr_receita, crescimento=pr_g,
                            fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
                            cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxas=pr_imposto,
+                           share_fisica=fin._proporcoes().get("fisica", 0.331),
                            estoque_custo=estoque_custo, acumulado_historico=acumulado,
                            caixa_inicial=max(float(fx.caixa.iloc[-1]), 0.0),
                            a_receber_inicial=float(fluxo[fluxo.mes >= hoje].a_receber.sum()))

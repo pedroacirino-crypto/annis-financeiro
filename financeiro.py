@@ -537,6 +537,28 @@ def receita_base() -> float:
 
 
 @memo()
+def meta_por_site() -> float:
+    """Meta como fração da receita do site, no último mês fechado.
+
+    Anúncio puxa venda de site, e a eficiência vem melhorando com
+    trajetória clara: 27,8%, 28,2%, 21,2%, 14,4%, 15,4%, 18,8%, 14,2% e
+    9,4% em setembro sobre a receita cheia. Média sobre trajetória é o erro
+    que já cometi no ticket e no desconto de Pix, então aqui também vale o
+    mês fechado.
+    """
+    meta = meta_ads().get(mes_fechado())
+    t = pnl_competencia()["tabela"]
+    linha = t[t.mes == mes_fechado()]
+    if meta is None or linha.empty:
+        return 0.125
+    # Sobre a receita do site já líquida de desconto e estorno, que é como o
+    # plano trabalha. Medir sobre a bruta e aplicar sobre a líquida, como eu
+    # fiz na primeira tentativa, encolhe o investimento sem querer.
+    base = float(linha.receita_site_liquida.iloc[0])
+    return float(meta) / base if base else 0.125
+
+
+@memo()
 def receita_partida() -> float:
     """Receita do primeiro mês projetado: a âncora já crescida.
 
@@ -561,7 +583,10 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     onde ela aparece no realizado.
     """
     import plano
-    p = premissas or plano.Premissas(inicio=mes_corrente(), receita_base=receita_partida())
+    prop = _proporcoes()
+    p = premissas or plano.Premissas(
+        inicio=mes_corrente(), receita_base=receita_partida(),
+        ads=meta_por_site(), share_fisica=prop.get("fisica", 0.331))
     sim = plano.simular(p)
     linha = sim["tabela"][sim["tabela"].mes == mes]
     if linha.empty:
