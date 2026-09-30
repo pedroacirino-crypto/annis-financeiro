@@ -536,6 +536,44 @@ def receita_base() -> float:
     return float(linha.receita_liquida.iloc[0]) if not linha.empty else 20000.0
 
 
+# Toda premissa que sai de dado vive aqui e é medida a cada leitura. Antes
+# disso metade delas era constante digitada em 20/09/2026 e a outra metade
+# vinha do banco, no mesmo painel, e ninguém via a diferença: o crescimento
+# ainda dizia 10,5% quando o mesmo ajuste já dava 13,6%, e o CMV dizia 41,4%
+# quando o medido era 43,8%. O Pedro perguntou o que fazer para eu não
+# esquecer de atualizar; a resposta é não deixar número para esquecer.
+#
+# `regra` diz de onde cada uma sai, e existem só duas:
+#   aparada  média dos 6 meses fechados sem o maior e o menor, para o que
+#            oscila sem direção
+#   M-1      último mês fechado, para o que tem trajetória ou mudou de
+#            regime, onde média apaga o movimento
+@memo()
+def premissas_medidas() -> dict:
+    """Todas as premissas que saem de dado, com a regra de cada uma."""
+    import numpy as np
+    t = pnl_competencia()["tabela"]
+    fim = mes_fechado()
+    u = t[(t.mes >= str(pd.Period(fim, "M") - 5)) & (t.mes <= fim)]
+    prop = _proporcoes()
+    if u.empty:
+        return {}
+    crescimento = float(np.polyfit(range(len(u)), np.log(u.receita_liquida.replace(0, pd.NA).ffill().values), 1)[0])
+    return {
+        "receita_base": (receita_partida(), "M-1 crescido", "receita do primeiro mês projetado"),
+        "crescimento": (crescimento, "ajuste 6m", "crescimento log-linear da receita líquida"),
+        "cmv": (_aparada(u.cmv / u.receita_liquida), "aparada", "CMV sobre receita líquida"),
+        "taxas": (_aparada(u.taxas / u.receita_liquida) + IMPOSTO_PADRAO, "aparada", "Pagar.me mais Simples"),
+        "ads": (meta_por_site(), "M-1", "Meta sobre receita líquida do site"),
+        "share_fisica": (prop.get("fisica", 0.0), "aparada", "maquininha e Pix direto na receita"),
+        "ticket": (prop.get("ticket", 0.0), "M-1", "ticket médio do site"),
+        "maq_na_fisica": (prop.get("maq_na_fisica", 0.0), "M-1", "maquininha dentro da venda física"),
+        "desconto": (prop.get("desconto", 0.0), "M-1", "desconto de Pix sobre a receita do site"),
+        "estornos": (prop.get("estornos", 0.0), "aparada", "estornos sobre a receita do site"),
+        "cmv_site": (prop.get("cmv_site", 0.0), "aparada", "fatia do site no CMV"),
+    }
+
+
 @memo()
 def meta_por_site() -> float:
     """Meta como fração da receita do site, no último mês fechado.
@@ -583,10 +621,11 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     onde ela aparece no realizado.
     """
     import plano
-    prop = _proporcoes()
+    m = premissas_medidas()
     p = premissas or plano.Premissas(
-        inicio=mes_corrente(), receita_base=receita_partida(),
-        ads=meta_por_site(), share_fisica=prop.get("fisica", 0.331))
+        inicio=mes_corrente(), receita_base=m["receita_base"][0],
+        crescimento=m["crescimento"][0], cmv=m["cmv"][0], taxas=m["taxas"][0],
+        ads=m["ads"][0], share_fisica=m["share_fisica"][0])
     sim = plano.simular(p)
     linha = sim["tabela"][sim["tabela"].mes == mes]
     if linha.empty:

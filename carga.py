@@ -148,7 +148,19 @@ def congelar_orcamento(mes: str) -> None:
         return
     n = dados_fin.salvar_orcamento(mes, linhas)
     print(f"orçamento de {mes} congelado, {n} linhas.\n")
+    _mostrar_premissas()
     _conferir_orcamento(linhas)
+
+
+def _mostrar_premissas() -> None:
+    """Toda premissa medida, com a regra. Se alguma estiver com cara de
+    velha, é aqui que aparece antes de virar orçamento congelado."""
+    import financeiro
+    print(f"  {'premissa':16s} {'regra':14s} {'medido':>10s}   o que é")
+    for k, (v, regra, desc) in financeiro.premissas_medidas().items():
+        valor = f"{v * 100:.1f}%" if v < 1 else f"{v:,.0f}"
+        print(f"  {k:16s} {regra:14s} {valor:>10s}   {desc}")
+    print()
 
 
 # Toda linha projetada é comparada com o último mês fechado, e o que se

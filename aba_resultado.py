@@ -349,20 +349,28 @@ def render():
     partida = fin.receita_partida()
     base_slider = int(round(partida / 100) * 100)
 
+    med = fin.premissas_medidas()
     with st.expander("Premissas", expanded=False):
-        st.caption("Arraste e a página inteira recalcula. Os valores iniciais vêm dos últimos 6 meses.")
+        st.caption(
+            "Arraste e a página inteira recalcula. **Nenhum valor inicial é digitado**: "
+            "todos saem do dado, e a regra de cada um aparece embaixo. "
+            "O que sobra em número fixo é decisão de negócio, não medição: "
+            "estoque alvo, envelhecimento, fator de redução e fixos."
+        )
         q1, q2, q3, q4 = st.columns(4)
         pr_receita = float(q1.slider(f"Receita líquida em {mes_curto(primeiro_projetado)} (R$)",
                                      5000, 40000, base_slider, 100,
                                      help=f"Âncora: {mes_curto(mes_base)} fechou em {brl(base_real)}. "
                                           f"Aqui ele já vem crescido pela taxa do modelo."))
-        pr_g = q2.slider("Crescimento ao mês (%)", -10.0, 30.0, 10.5, 0.5, help="Ajuste log-linear de abr a set/26.") / 100
+        pr_g = q2.slider("Crescimento ao mês (%)", -10.0, 30.0, round(med["crescimento"][0] * 100, 1), 0.5,
+                         help=f"Ajuste log-linear da receita líquida nos 6 meses fechados até {mes_curto(mes_base)}.") / 100
         pr_fator = q3.slider("Fator de redução do crescimento", 0.0, 1.0, 0.8, 0.05,
                              help="g no mês t = g × fator^t. Com 0,8 a receita converge para 1,7x a inicial; com 0,9, para 2,6x.")
         pr_cobertura = float(q4.slider("Estoque alvo (meses de venda)", 1.0, 8.0, 3.0, 0.5,
                                        help="Quanto se quer ter em estoque, a custo, em meses de CMV. Hoje são uns 8. Acima do alvo produz-se menos, na proporção do excesso."))
         q5, q6, q7, q8 = st.columns(4)
-        pr_cmv = q5.slider("CMV médio (% da receita)", 20.0, 70.0, 41.4, 0.5) / 100
+        pr_cmv = q5.slider("CMV médio (% da receita)", 20.0, 70.0, round(med["cmv"][0] * 100, 1), 0.5,
+                           help="Média aparada dos 6 meses fechados, sem o maior e o menor.") / 100
         meta_site = fin.meta_por_site() * 100
         pr_ads = q6.slider("Meta (% da receita líquida do site)", 0.0, 40.0, round(meta_site, 1), 0.5,
                            help=f"Só a mídia, indexada à venda do site, que é o que o anúncio puxa. "
@@ -377,6 +385,17 @@ def render():
 
     # O plano começa no mês seguinte ao último fechado, com o caixa e os
     # recebíveis de verdade, não com números fixos no código.
+        regras = pd.DataFrame(
+            [{"Premissa": d, "Regra": r,
+              "Medido": (f"{v * 100:.1f}%" if v < 1 else brl(v))}
+             for _, (v, r, d) in med.items()])
+        tabela(regras, num=["Medido"], titulo="Premissas medidas")
+        st.caption(
+            "**aparada**: média dos 6 meses fechados sem o maior e o menor, para o que "
+            "oscila sem direção. **M-1**: último mês fechado, para o que tem trajetória "
+            "ou mudou de regime, onde a média apagaria o movimento."
+        )
+
     prem = plano.Premissas(inicio=str(pd.Period(hoje, "M") + 1), receita_base=pr_receita, crescimento=pr_g,
                            fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
                            cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxas=pr_imposto,
