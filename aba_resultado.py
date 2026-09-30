@@ -197,7 +197,8 @@ def render():
             linhas[rotulo] = [brl(tot) if dinheiro else str(int(tot))] + [brl(v) if dinheiro else str(int(v)) for v in b[col]]
         wide = pd.DataFrame(linhas, index=["Total"] + [mes_curto(m) for m in b.index]).T
         wide.loc["Margem bruta %"] = [pct(mb)] + [pct(a / r) if r else "" for a, r in zip(b.margem_bruta, b.receita_liquida)]
-        st.dataframe(wide, width="stretch", height=(len(LINHAS_PNL) + 2) * 35 + 40)
+        vis = wide.reset_index().rename(columns={"index": ""})
+        tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560)
         if pnl["cobertura_cmv"] < 0.999:
             faltam = ", ".join(f"{k} ({v})" for k, v in pnl["pecas_sem_custo"].items())
             st.caption(md(f"CMV do site cobre {pct(pnl['cobertura_cmv'])} das peças; sem ficha: {faltam}. "
@@ -213,7 +214,7 @@ def render():
             "recebeu R$ 7.358; janeiro vendeu R$ 2.666 e recebeu R$ 8.223, "
             "porque o resto de dezembro caiu lá."
         )
-        st.dataframe(pd.DataFrame({
+        cx = pd.DataFrame({
             "Mês": fx_vis.mes.map(mes_curto),
             "Site": fx_vis.recebido_site.map(brl),
             "Fora do site": fx_vis.recebido_fisico.map(brl),
@@ -224,7 +225,8 @@ def render():
             "Saldo do mês": fx_vis.saldo_operacional.map(brl),
             "Aportes": fx_vis.aportes.map(lambda v: brl(v) if v else ""),
             "Caixa": fx_vis.caixa.map(brl),
-        }), width="stretch", hide_index=True, height=min(38 * (len(fx_vis) + 1), 520))
+        })
+        tabela(cx, num=[c for c in cx.columns if c != "Mês"], altura_max=520)
 
     with st.expander("Tabela: despesas por categoria"):
         dc = pnl["despesas_por_categoria"]
