@@ -36,6 +36,24 @@ def carregar_extrato(caminho: str) -> None:
 
 
 def carregar_contas(caminho: str) -> None:
+    """Aceita o xlsx exportado (uma aba por mês) ou um csv com mes,dia,...
+
+    Depois de gravar, confere: toda linha marcada PAGO tem que ter saído da
+    conta pelo mesmo valor. Antes de 30/09/2026 isso não era conferido, e o
+    Pedro perguntou, com razão, como eu usava o valor da planilha sem olhar
+    se batia com o banco.
+    """
+    if caminho.lower().endswith(".csv"):
+        df = pd.read_csv(caminho)
+        todas = pd.DataFrame({
+            "data": pd.to_datetime(df.mes + "-" + df.dia.astype(str).str.zfill(2)),
+            "descricao": df.descricao.astype(str).str.strip(),
+            "valor": df.valor.astype(float),
+            "situacao": df.situacao.fillna("").astype(str).str.strip().str.upper(),
+            "observacao": df.observacao.fillna("").astype(str),
+        })
+        _gravar_contas(todas)
+        return
     xls = pd.ExcelFile(caminho)
     partes = []
     for aba in xls.sheet_names:
@@ -52,12 +70,28 @@ def carregar_contas(caminho: str) -> None:
             "situacao": df["SITUAÇÃO"].fillna("").astype(str).str.strip().str.upper() if "SITUAÇÃO" in df else "",
             "observacao": df.iloc[:, 4].fillna("").astype(str) if df.shape[1] > 4 else "",
         }))
-    todas = pd.concat(partes, ignore_index=True)
+    _gravar_contas(pd.concat(partes, ignore_index=True))
+
+
+def _gravar_contas(todas: pd.DataFrame) -> None:
+    import financeiro
     n = dados_fin.salvar_contas_a_pagar(todas, substituir=True)
     pend = todas[todas.situacao != "PAGO"]
     print(f"contas a pagar: {n} linhas gravadas (substituindo as anteriores). Pendentes: {len(pend)}, R$ {pend.valor.sum():,.2f}")
     for m, v in pend.groupby(pend.data.dt.strftime("%Y-%m")).valor.sum().items():
         print(f"  {m}: R$ {v:,.2f}")
+
+    import memo
+    memo.limpar_tudo()
+    conf = financeiro.conferir_contas_pagas()
+    if conf.empty:
+        return
+    faltando = conf[~conf.saiu_da_conta]
+    print(f"\n  conferência: {len(conf) - len(faltando)} de {len(conf)} linhas PAGO casaram com o extrato")
+    if not faltando.empty:
+        print(f"  sem saída correspondente na conta ({len(faltando)} linhas, R$ {faltando.valor.sum():,.2f}):")
+        for r in faltando.itertuples(index=False):
+            print(f"    {r.data:%d/%m/%Y}  {str(r.descricao)[:36]:36s} R$ {r.valor:>10,.2f}")
 
 
 def carregar_meta(mes: str, valor: str) -> None:

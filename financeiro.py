@@ -69,6 +69,7 @@ META_ADS = {
     "2026-09": 2500.00 * 20 / 30,
 }
 CATEGORIA_CARTAO = "Pagas no cartão das sócias (anúncios, aluguel, outras)"
+CATEGORIA_FATURA = "Fatura do cartão de anúncios"
 
 
 @memo()
@@ -379,6 +380,13 @@ def _trocar_reembolso_por_fatura(desp: pd.DataFrame) -> pd.DataFrame:
         fora |= ((desp.categoria == CATEGORIA_CARTAO)
                  & desp.contraparte.str.contains(padrao, case=False, na=False)
                  & desp.mes.isin(meses))
+    # A fatura às vezes a empresa paga direto, sem passar pela sócia: em
+    # 11/09/2026 saíram R$ 3.793,16 para a Portoseg, que é exatamente a soma
+    # dos dois cartões daquela fatura (374,25 + 3.418,91). Pagando direto, a
+    # empresa cobriu também R$ 572,30 de coisa pessoal. Onde a fatura está
+    # transcrita, a despesa vem dela e esse pagamento vira caixa.
+    meses_todos = set().union(*cobertos.values())
+    fora |= (desp.categoria == CATEGORIA_FATURA) & desp.mes.isin(meses_todos)
     desp = desp[~fora]
     compras = compras_no_cartao()
     novas = compras[(compras.natureza == "despesa") & (compras.categoria != "Meta Ads")]
@@ -389,6 +397,60 @@ def _trocar_reembolso_por_fatura(desp: pd.DataFrame) -> pd.DataFrame:
         "natureza": "despesa", "categoria": novas.categoria.values, "confianca": "ok",
         "fonte": "fatura", "mes": novas.mes.values,
     })], ignore_index=True)
+
+
+@memo()
+def conferir_contas_pagas(dias: int = 7) -> pd.DataFrame:
+    """Cada linha marcada PAGO na planilha saiu mesmo da conta?
+
+    A planilha de contas a pagar era usada só para o futuro, e as linhas
+    já pagas passavam sem conferência nenhuma. Foi o Pedro quem apontou, em
+    30/09/2026: se um valor está errado na planilha e ninguém compara com o
+    extrato, o erro atravessa o painel inteiro sem fazer barulho.
+
+    Casa por valor exato dentro de uma janela de dias, porque a data da
+    planilha é o vencimento e o Pix sai perto dele, não nele.
+    """
+    import dados_fin
+    cp = dados_fin.ler_contas_a_pagar() if dados_fin.disponivel() else pd.DataFrame()
+    if cp.empty:
+        return pd.DataFrame()
+    pagas = cp[cp.situacao.fillna("").str.upper() == "PAGO"].copy()
+    if pagas.empty:
+        return pd.DataFrame()
+    ex = dados_fin.ler_extrato()
+    saidas = ex[ex.valor < 0].copy() if not ex.empty else pd.DataFrame(columns=["data", "valor", "contraparte"])
+    saidas["abs"] = saidas.valor.abs().round(2)
+    saidas["dia"] = saidas.data.dt.normalize()
+    janela = pd.Timedelta(days=dias)
+    linhas, usados = [], set()
+    for r in pagas.itertuples(index=False):
+        alvo = round(float(r.valor), 2)
+        perto = saidas[(saidas.dia >= r.data.normalize() - janela)
+                       & (saidas.dia <= r.data.normalize() + janela)
+                       & (~saidas.index.isin(usados))]
+        # Uma linha da planilha consome um pagamento só: sem o head(1), a
+        # Violet de 1.074,80 de 01/09 e a de 04/09 casavam com a mesma linha
+        # e sobrava a outra sem par.
+        casou = perto[perto["abs"] == alvo].head(1)
+        # A planilha traz uma linha onde a conta teve duas: o boleto do Eco
+        # Simple de 08/09 saiu em dois pagamentos à Nika, 1.222,36 e 644,76,
+        # que somam o 1.867,12 da planilha.
+        if casou.empty:
+            for dia, g in perto.groupby("dia"):
+                if len(g) > 1 and round(g["abs"].sum(), 2) == alvo:
+                    casou = g
+                    break
+        achou = not casou.empty
+        if achou:
+            usados.update(casou.index)
+        linhas.append({
+            "data": r.data, "descricao": r.descricao, "valor": alvo,
+            "saiu_da_conta": achou,
+            "quando_saiu": casou.dia.iloc[0] if achou else pd.NaT,
+            "para_quem": " + ".join(casou.contraparte.astype(str).str[:28]) if achou else "",
+        })
+    return pd.DataFrame(linhas)
 
 
 def fim_dos_custos():
@@ -653,7 +715,7 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     meta = pd.Series(meta_ads(), name="Meta Ads")
     desp_cat = desp_cat.reindex(sorted(set(desp_cat.index) | set(meta.index))).fillna(0.0)
     # A fatura Porto também é pagamento de Meta já contada pelo relatório.
-    fatura = desp_cat.pop("Fatura do cartão de anúncios") if "Fatura do cartão de anúncios" in desp_cat else 0.0
+    fatura = desp_cat.pop(CATEGORIA_FATURA) if CATEGORIA_FATURA in desp_cat else 0.0
     cartao = (desp_cat[CATEGORIA_CARTAO] if CATEGORIA_CARTAO in desp_cat else pd.Series(0.0, index=desp_cat.index)) + fatura
     meta = meta.reindex(desp_cat.index).fillna(0.0)
     desp_cat["Meta Ads"] = meta
