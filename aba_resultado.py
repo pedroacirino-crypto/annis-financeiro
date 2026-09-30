@@ -414,9 +414,12 @@ def render():
                            help=f"Só a mídia, indexada à venda do site, que é o que o anúncio puxa. "
                                 f"Em {mes_curto(mes_base)} foi {meta_site:.1f}%, e a eficiência vem "
                                 "melhorando: era 28% em março. A agência é fixa e está nos fixos.") / 100
-        pr_fixos = float(q7.slider("Fixos por mês (R$)", 0, 15000, 7600, 100,
-                                   help="Aluguel 2,8 mil, agência PROADZ 1,8 mil, pessoas 1,3 mil, foto 0,7 mil, frete, contador, sistemas."))
-        pr_imposto = q8.slider("Taxas e imposto (% da receita)", 0.0, 20.0, 7.4, 0.1, help="Pagar.me mais Simples a 2,64%.") / 100
+        pr_fixos = float(q7.slider("Fixos por mês (R$)", 0, 15000, int(round(med["fixos"][0] / 100) * 100), 100,
+                                   help="Soma da projeção por categoria, que está na tabela de despesas: "
+                                        "contrato pelo último valor, frete por pedido, o resto por média "
+                                        "dos meses em que houve."))
+        pr_imposto = q8.slider("Taxas e imposto (% da receita)", 0.0, 20.0, round(med["taxas"][0] * 100, 1), 0.1,
+                               help="Medido: Pagar.me nos seis meses fechados mais Simples a 2,64%.") / 100
         q9, _, _, _ = st.columns(4)
         pr_envelh = q9.slider("Estoque que envelhece por mês (%)", 0.0, 5.0, 2.0, 0.5,
                               help="Peça que deixa de vender a preço cheio. Sai do estoque sem virar receita.") / 100
@@ -437,7 +440,8 @@ def render():
     prem = plano.Premissas(inicio=str(pd.Period(hoje, "M") + 1), receita_base=pr_receita, crescimento=pr_g,
                            fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
                            cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxas=pr_imposto,
-                           share_fisica=fin._proporcoes().get("fisica", 0.331),
+                           share_fisica=med["share_fisica"][0],
+                           prazo_recebimento=med["prazo_recebimento"][0],
                            estoque_custo=estoque_custo, acumulado_historico=acumulado,
                            caixa_inicial=max(float(fx.caixa.iloc[-1]), 0.0),
                            a_receber_inicial=float(fluxo[fluxo.mes >= hoje].a_receber.sum()))
