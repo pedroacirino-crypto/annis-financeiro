@@ -548,6 +548,93 @@ def receita_base() -> float:
 #            oscila sem direção
 #   M-1      último mês fechado, para o que tem trajetória ou mudou de
 #            regime, onde média apaga o movimento
+# Categorias de despesa e a regra de cada uma. Contrato mensal vai pelo mês
+# fechado, porque é o valor vigente; o que escala com volume vai por pedido;
+# o resto vai por média aparada. O que é pontual de verdade, como cartório e
+# seguro incêndio, cai para zero na apara, e por isso existe a linha de
+# pontuais: sem ela a projeção esqueceria uma classe inteira de gasto.
+_DESP_CONTRATO = ("Ads e agência", "Aluguel e condomínio", "Contador", "Sistemas")
+_DESP_VOLUME = ("Frete e entrega",)
+
+
+@memo()
+def despesas_projetadas() -> dict:
+    """Projeção de despesa por categoria, com Meta de fora (ela vem do plano)."""
+    dc = pnl_competencia()["despesas_por_categoria"]
+    fim = mes_fechado()
+    u = dc.loc[[m for m in dc.index if str(pd.Period(fim, "M") - 5) <= m <= fim]]
+    if u.empty:
+        return {}
+    t = pnl_competencia()["tabela"]
+    ult = t[t.mes == fim]
+    ped_ult = float(ult.pedidos.iloc[0]) if not ult.empty else 0.0
+    ped_proj = (_abrir_receita(receita_partida(), 0.0) or {}).get("Pedidos no site", ped_ult)
+    saida, zerados = {}, []
+    for c in u.columns:
+        if c == "Meta Ads":
+            continue
+        s = u[c]
+        if c in _DESP_CONTRATO:
+            v = float(s.iloc[-1])
+        elif c in _DESP_VOLUME:
+            v = float(s.iloc[-1]) / ped_ult * ped_proj if ped_ult else float(s.iloc[-1])
+        else:
+            v = _aparada(s)
+        if round(v, 2) <= 0:
+            zerados.append(c)
+        else:
+            saida[c] = v
+    if zerados:
+        # O que cada categoria pontual não projeta sozinha, projetado junto.
+        pontuais = _aparada(u[zerados].sum(axis=1))
+        if round(pontuais, 2) > 0:
+            saida["Pontuais (média histórica)"] = pontuais
+    return saida
+
+
+@memo()
+def caixa_orcado(mes: str) -> dict:
+    """A linha do fluxo de caixa projetado, nas colunas da tabela de caixa.
+
+    A taxa da Pagar.me não é saída: ela já vem descontada do que liquida.
+    Por isso Site entra líquido dela, como no realizado, e o que sobra de
+    imposto vai na coluna própria. A identidade fecha: Site mais fora do
+    site, menos estoque, despesa e imposto, dá o saldo do mês do plano.
+    """
+    import plano
+    m = premissas_medidas()
+    if not m:
+        return {}
+    p = plano.Premissas(
+        inicio=mes_corrente(), receita_base=m["receita_base"][0], crescimento=m["crescimento"][0],
+        cmv=m["cmv"][0], taxas=m["taxas"][0], ads=m["ads"][0], share_fisica=m["share_fisica"][0],
+        fixos=m["fixos"][0], prazo_recebimento=m["prazo_recebimento"][0],
+        estoque_custo=estoque_a_custo(), caixa_inicial=max(_caixa_hoje(), 0.0))
+    sim = plano.simular(p)
+    linha = sim["tabela"][sim["tabela"].mes == mes]
+    if linha.empty:
+        return {}
+    r = linha.iloc[0]
+    fisica = float(r.receita) * p.share_fisica
+    imposto = float(r.receita) * IMPOSTO_PADRAO
+    return {
+        "Site": float(r.recebido) - fisica - (float(r.taxas) - imposto),
+        "Fora do site": fisica,
+        "Estoque": -float(r.producao),
+        "Despesas": -(float(r.ads) + float(r.fixos) + float(r.compromissos)),
+        "Imposto": -imposto,
+        "Saldo do mês": float(r.fluxo),
+        "Aportes": float(r.aporte),
+        "Caixa": float(r.caixa),
+    }
+
+
+def _caixa_hoje() -> float:
+    fx = fluxo_de_caixa()
+    real = fx[~fx.futuro]
+    return float(real.caixa.iloc[-1]) if not real.empty else 0.0
+
+
 @memo()
 def premissas_medidas() -> dict:
     """Todas as premissas que saem de dado, com a regra de cada uma."""
@@ -571,7 +658,31 @@ def premissas_medidas() -> dict:
         "desconto": (prop.get("desconto", 0.0), "M-1", "desconto de Pix sobre a receita do site"),
         "estornos": (prop.get("estornos", 0.0), "aparada", "estornos sobre a receita do site"),
         "cmv_site": (prop.get("cmv_site", 0.0), "aparada", "fatia do site no CMV"),
+        "fixos": (sum(despesas_projetadas().values()), "por categoria",
+                  "despesas fora Meta, somadas da projeção por categoria"),
+        "prazo_recebimento": (_prazo_recebimento() * (1 - prop.get("fisica", 0.0)), "aparada",
+                              "fatia da receita que só cai no mês seguinte"),
     }
+
+
+@memo()
+def _prazo_recebimento() -> float:
+    """Fatia do líquido da Pagar.me que cai depois do mês da venda.
+
+    A premissa do plano dizia 30%. Medido nos recebíveis contra a data da
+    venda, os seis meses fechados dão 18,6%: com antecipação automática
+    quase tudo liquida em sete dias, e só a última semana do mês atravessa.
+    """
+    import db
+    try:
+        linhas = db.recebimento_atrasado()
+    except Exception:
+        return 0.186
+    fim = mes_fechado()
+    u = [r for r in linhas if str(pd.Period(fim, "M") - 5) <= r["mes"] <= fim and r["liquido"]]
+    if not u:
+        return 0.186
+    return _aparada(pd.Series([r["cai_depois"] / r["liquido"] for r in u]))
 
 
 @memo()
@@ -625,7 +736,8 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     p = premissas or plano.Premissas(
         inicio=mes_corrente(), receita_base=m["receita_base"][0],
         crescimento=m["crescimento"][0], cmv=m["cmv"][0], taxas=m["taxas"][0],
-        ads=m["ads"][0], share_fisica=m["share_fisica"][0])
+        ads=m["ads"][0], share_fisica=m["share_fisica"][0],
+        fixos=m["fixos"][0], prazo_recebimento=m["prazo_recebimento"][0])
     sim = plano.simular(p)
     linha = sim["tabela"][sim["tabela"].mes == mes]
     if linha.empty:

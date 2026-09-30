@@ -229,6 +229,11 @@ div[data-testid="stDialog"] div[role="dialog"] .tbl-wrap {{ max-height:78vh !imp
 .tbl .presa0 {{ right:0; }}
 .tbl .presa1 {{ right:8.5rem; border-left:1px solid {LINHA}; }}
 .tbl tbody tr:hover td.presa {{ background:#FFF3EA; }}
+/* Linhas presas embaixo, para a tabela em que o mês é linha. */
+.tbl td.presaL {{ position:sticky; z-index:2; background:#FFF8F2; }}
+.tbl td.presaL0 {{ bottom:0; }}
+.tbl td.presaL1 {{ bottom:2.35rem; border-top:1px solid {LINHA}; }}
+.tbl td.presaL.presa {{ z-index:3; }}
 .tbl tbody tr:last-child td {{ border-bottom:none; }}
 .tbl tbody tr:hover td {{ background:#FFFBF7; }}
 .tbl tbody tr:hover td:first-child {{ background:#FFFBF7; }}

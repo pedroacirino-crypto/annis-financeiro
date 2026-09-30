@@ -30,7 +30,7 @@ def _tela_cheia(titulo: str, html: str):
     st.markdown(html, unsafe_allow_html=True)
 
 
-def tabela(df, num=(), altura_max=None, titulo="Tabela", fixas_direita=0):
+def tabela(df, num=(), altura_max=None, titulo="Tabela", fixas_direita=0, fixas_baixo=0):
     """Tabela em HTML no padrão da marca.
 
     O st.dataframe desenha num canvas com grade em volta de cada célula, não
@@ -58,12 +58,19 @@ def tabela(df, num=(), altura_max=None, titulo="Tabela", fixas_direita=0):
         f'<th class="{classe(c, i)}">{_html.escape(str(c))}</th>'
         for i, c in enumerate(df.columns)
     )
+    # Linhas presas embaixo: nas tabelas em que o mês é linha, o mês corrente
+    # fica parado no rodapé enquanto o histórico rola por cima.
+    n_lin = len(df)
+    presas_lin = {n_lin - 1 - i: i for i in range(min(fixas_baixo, n_lin))}
     corpo = []
-    for _, linha in df.iterrows():
+    for n_r, (_, linha) in enumerate(df.iterrows()):
         celulas = []
         for i, c in enumerate(df.columns):
             v = "" if pd.isna(linha[c]) else str(linha[c])
-            cls = classe(c, i, "neg" if (c in num and v.strip().startswith("-")) else "")
+            base = "neg" if (c in num and v.strip().startswith("-")) else ""
+            if n_r in presas_lin:
+                base = (base + f" presaL presaL{presas_lin[n_r]}").strip()
+            cls = classe(c, i, base)
             celulas.append(f'<td class="{cls}">{_html.escape(v)}</td>' if cls
                            else f"<td>{_html.escape(v)}</td>")
         corpo.append("<tr>" + "".join(celulas) + "</tr>")

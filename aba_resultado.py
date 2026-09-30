@@ -270,28 +270,72 @@ def render():
             "recebeu R$ 7.358; janeiro vendeu R$ 2.666 e recebeu R$ 8.223, "
             "porque o resto de dezembro caiu lá."
         )
+        cx_hist = fx_vis[fx_vis.mes <= fin.mes_fechado()]
         cx = pd.DataFrame({
-            "Mês": fx_vis.mes.map(mes_curto),
-            "Site": fx_vis.recebido_site.map(brl),
-            "Fora do site": fx_vis.recebido_fisico.map(brl),
-            "Estoque": fx_vis.saida_estoque.map(lambda v: brl(-v) if v else ""),
-            "Despesas": fx_vis.saida_despesa.map(lambda v: brl(-v) if v else ""),
-            "Imposto": fx_vis.saida_imposto.map(lambda v: brl(-v) if v else ""),
-            "Estrutura": fx_vis.saida_capex.map(lambda v: brl(-v) if v else ""),
-            "Saldo do mês": fx_vis.saldo_operacional.map(brl),
-            "Aportes": fx_vis.aportes.map(lambda v: brl(v) if v else ""),
-            "Caixa": fx_vis.caixa.map(brl),
+            "Mês": cx_hist.mes.map(mes_curto),
+            "Site": cx_hist.recebido_site.map(brl),
+            "Fora do site": cx_hist.recebido_fisico.map(brl),
+            "Estoque": cx_hist.saida_estoque.map(lambda v: brl(-v) if v else ""),
+            "Despesas": cx_hist.saida_despesa.map(lambda v: brl(-v) if v else ""),
+            "Imposto": cx_hist.saida_imposto.map(lambda v: brl(-v) if v else ""),
+            "Estrutura": cx_hist.saida_capex.map(lambda v: brl(-v) if v else ""),
+            "Saldo do mês": cx_hist.saldo_operacional.map(brl),
+            "Aportes": cx_hist.aportes.map(lambda v: brl(v) if v else ""),
+            "Caixa": cx_hist.caixa.map(brl),
         })
-        tabela(cx, num=[c for c in cx.columns if c != "Mês"], altura_max=520, titulo="Caixa mês a mês")
+        # Mesma dupla do PnL: o mês corrente sai do meio e vira orçado e
+        # realizado até hoje, presos na direita.
+        cxo = fin.caixa_orcado(corrente)
+        cxm = fx[fx.mes == corrente]
+        linha_orc = {"Mês": f"{mes_curto(corrente)} orçado",
+                     **{k: brl(v) for k, v in cxo.items()}}
+        linha_mtd = {"Mês": rot_mtd}
+        if not cxm.empty:
+            r = cxm.iloc[0]
+            linha_mtd.update({
+                "Site": brl(r.recebido_site), "Fora do site": brl(r.recebido_fisico),
+                "Estoque": brl(-r.saida_estoque) if r.saida_estoque else "",
+                "Despesas": brl(-r.saida_despesa) if r.saida_despesa else "",
+                "Imposto": brl(-r.saida_imposto) if r.saida_imposto else "",
+                "Estrutura": brl(-r.saida_capex) if r.saida_capex else "",
+                "Saldo do mês": brl(r.saldo_operacional),
+                "Aportes": brl(r.aportes) if r.aportes else "", "Caixa": brl(r.caixa)})
+        cx = pd.concat([cx, pd.DataFrame([linha_orc, linha_mtd])], ignore_index=True).fillna("")
+        tabela(cx, num=[c for c in cx.columns if c != "Mês"], altura_max=520,
+               titulo="Caixa mês a mês", fixas_baixo=2)
 
     with st.expander("Tabela: despesas por categoria"):
         dc = pnl["despesas_por_categoria"]
-        dc = dc.loc[[m for m in dc.index if m in meses_vis and dc.loc[m].sum() > 0]]
+        dc = dc.loc[[m for m in dc.index if m in meses_vis and m <= fechado and dc.loc[m].sum() > 0]]
         dc.index = [mes_curto(m) for m in dc.index]
         dc = dc.loc[:, (dc != 0).any()]
         vis = dc.map(lambda v: brl(v) if v else "").reset_index()
         vis = vis.rename(columns={vis.columns[0]: "Mês"})
-        tabela(vis, num=[c for c in vis.columns if c != "Mês"], altura_max=520, titulo="Despesas por categoria")
+        dproj = dict(fin.despesas_projetadas())
+        dproj["Meta Ads"] = orc.get("(-) Meta e agência", 0.0) - dproj.get("Ads e agência", 0.0)
+        # Compromisso contratado entra como linha própria, senão a soma desta
+        # tabela não bate com a linha Despesas da tabela de caixa nem com
+        # "Demais despesas" do PnL, que já o incluem.
+        comp = plano.compromissos_pendentes().get(corrente, 0.0)
+        if comp:
+            dproj["Compromissos contratados"] = comp
+        mtd_desp = pnl["despesas_por_categoria"]
+        mtd_desp = mtd_desp.loc[corrente] if corrente in mtd_desp.index else None
+        l_orc = {"Mês": f"{mes_curto(corrente)} orçado"}
+        l_mtd = {"Mês": rot_mtd}
+        for c in vis.columns:
+            if c == "Mês":
+                continue
+            l_orc[c] = brl(dproj[c]) if dproj.get(c) else ""
+            l_mtd[c] = brl(mtd_desp[c]) if mtd_desp is not None and c in mtd_desp and mtd_desp[c] else ""
+        novas = [c for c in dproj if c not in vis.columns and dproj[c]]
+        for c in novas:
+            vis[c] = ""
+            l_orc[c] = brl(dproj[c])
+            l_mtd[c] = ""
+        vis = pd.concat([vis, pd.DataFrame([l_orc, l_mtd])], ignore_index=True).fillna("")
+        tabela(vis, num=[c for c in vis.columns if c != "Mês"], altura_max=520,
+               titulo="Despesas por categoria", fixas_baixo=2)
         com_fatura = fin.meses_com_fatura()
         if com_fatura:
             quem = ", ".join(f"{t} ({len(m)} faturas)" for t, m in sorted(com_fatura.items()))

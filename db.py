@@ -1437,3 +1437,29 @@ def vendas_perdidas(date_from: str = None, date_to: str = None) -> "list[dict]":
                       "primeira_em": g["primeira"]["created_at"]})
     saida.sort(key=lambda r: r["created_at"] or "", reverse=True)
     return saida
+
+
+def recebimento_atrasado() -> "list[dict]":
+    """Por mês de venda, quanto do líquido só caiu no mês seguinte.
+
+    Serve para medir o prazo de recebimento em vez de arbitrá-lo: com
+    antecipação automática quase tudo liquida em sete dias, e só a última
+    semana do mês atravessa.
+    """
+    con = _conn()
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    cur.execute("""
+        SELECT strftime('%Y-%m', datetime(c.created_at, '-3 hours')) AS mes,
+               SUM(p.amount - p.fee - COALESCE(p.anticipation_fee, 0)) / 100.0 AS liquido,
+               SUM(CASE WHEN strftime('%Y-%m', datetime(p.payment_date, '-3 hours'))
+                         > strftime('%Y-%m', datetime(c.created_at, '-3 hours'))
+                   THEN p.amount - p.fee - COALESCE(p.anticipation_fee, 0) ELSE 0 END) / 100.0
+                 AS cai_depois
+          FROM payables p JOIN charges c ON c.id = p.charge_id
+         WHERE c.status = 'paid'
+         GROUP BY mes ORDER BY mes
+    """)
+    linhas = [dict(r) for r in cur.fetchall()]
+    con.close()
+    return linhas
