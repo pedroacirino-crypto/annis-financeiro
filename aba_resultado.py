@@ -382,50 +382,59 @@ def render():
         (fim_dado - pd.offsets.MonthBegin(1)).strftime("%Y-%m")
     linha_base = t[t.mes == mes_base]
     base_real = float(linha_base.receita_liquida.iloc[0]) if not linha_base.empty else 20000.0
-    # O primeiro mês projetado é a âncora já crescida: `plano.simular` toma
-    # `receita_base` como o próprio mês, sem aplicar crescimento nele.
-    partida = fin.receita_partida()
-    base_slider = int(round(partida / 100) * 100)
 
     med = fin.premissas_medidas()
     with st.expander("Premissas", expanded=False):
         st.caption(
-            "Arraste e a página inteira recalcula. **Nenhum valor inicial é digitado**: "
-            "todos saem do dado, e a regra de cada um aparece embaixo. "
-            "O que sobra em número fixo é decisão de negócio, não medição: "
-            "estoque alvo, envelhecimento, fator de redução e fixos."
+            "Campo de digitar, não barra: com passo de arredondamento o gráfico e a "
+            "coluna do orçado mostravam números diferentes para o mesmo mês. "
+            "**Nenhum valor inicial é digitado por mim**, todos saem do dado, e a regra "
+            "de cada um está na tabela abaixo. O que sobra em número fixo é decisão de "
+            "negócio, não medição: estoque alvo, envelhecimento e fator de redução."
         )
         q1, q2, q3, q4 = st.columns(4)
-        pr_receita = float(q1.slider(f"Receita líquida em {mes_curto(primeiro_projetado)} (R$)",
-                                     5000, 40000, base_slider, 100,
-                                     help=f"Âncora: {mes_curto(mes_base)} fechou em {brl(base_real)}. "
-                                          f"Aqui ele já vem crescido pela taxa do modelo."))
-        pr_g = q2.slider("Crescimento ao mês (%)", -10.0, 30.0, round(med["crescimento"][0] * 100, 1), 0.5,
-                         help=f"Ajuste log-linear da receita líquida nos 6 meses fechados até {mes_curto(mes_base)}.") / 100
-        pr_fator = q3.slider("Fator de redução do crescimento", 0.0, 1.0, 0.8, 0.05,
-                             help="g no mês t = g × fator^t. Com 0,8 a receita converge para 1,7x a inicial; com 0,9, para 2,6x.")
-        pr_cobertura = float(q4.slider("Estoque alvo (meses de venda)", 1.0, 8.0, 3.0, 0.5,
-                                       help="Quanto se quer ter em estoque, a custo, em meses de CMV. Hoje são uns 8. Acima do alvo produz-se menos, na proporção do excesso."))
+        pr_receita = float(q1.number_input(
+            f"Receita líquida em {mes_curto(primeiro_projetado)} (R$)",
+            min_value=0.0, value=float(med["receita_base"][0]), step=100.0, format="%.2f",
+            help=f"Âncora: {mes_curto(mes_base)} fechou em {brl(base_real)}. "
+                 f"Aqui ele já vem crescido pela taxa do modelo."))
+        pr_g = q2.number_input(
+            "Crescimento ao mês (%)", min_value=-50.0, max_value=100.0,
+            value=float(med["crescimento"][0] * 100), step=0.5, format="%.2f",
+            help=f"Ajuste log-linear da receita líquida nos 6 meses fechados até {mes_curto(mes_base)}.") / 100
+        pr_fator = float(q3.number_input(
+            "Fator de redução do crescimento", min_value=0.0, max_value=1.0, value=0.8, step=0.05, format="%.2f",
+            help="g no mês t = g × fator^t. Com 0,8 a receita converge para 1,7x a inicial; com 0,9, para 2,6x."))
+        pr_cobertura = float(q4.number_input(
+            "Estoque alvo (meses de venda)", min_value=0.5, max_value=12.0, value=3.0, step=0.5, format="%.1f",
+            help="Quanto se quer ter em estoque, a custo, em meses de CMV. Hoje são uns 8. "
+                 "Acima do alvo produz-se menos, na proporção do excesso."))
         q5, q6, q7, q8 = st.columns(4)
-        pr_cmv = q5.slider("CMV médio (% da receita)", 20.0, 70.0, round(med["cmv"][0] * 100, 1), 0.5,
-                           help="Média aparada dos 6 meses fechados, sem o maior e o menor.") / 100
-        meta_site = fin.meta_por_site() * 100
-        pr_ads = q6.slider("Meta (% da receita líquida do site)", 0.0, 40.0, round(meta_site, 1), 0.5,
-                           help=f"Só a mídia, indexada à venda do site, que é o que o anúncio puxa. "
-                                f"Em {mes_curto(mes_base)} foi {meta_site:.1f}%, e a eficiência vem "
-                                "melhorando: era 28% em março. A agência é fixa e está nos fixos.") / 100
-        pr_fixos = float(q7.slider("Fixos por mês (R$)", 0, 15000, int(round(med["fixos"][0] / 100) * 100), 100,
-                                   help="Soma da projeção por categoria, que está na tabela de despesas: "
-                                        "contrato pelo último valor, frete por pedido, o resto por média "
-                                        "dos meses em que houve."))
-        pr_imposto = q8.slider("Taxas e imposto (% da receita)", 0.0, 20.0, round(med["taxas"][0] * 100, 1), 0.1,
-                               help="Medido: Pagar.me nos seis meses fechados mais Simples a 2,64%.") / 100
+        pr_cmv = q5.number_input(
+            "CMV médio (% da receita)", min_value=0.0, max_value=100.0,
+            value=float(med["cmv"][0] * 100), step=0.5, format="%.2f",
+            help="Média aparada dos 6 meses fechados, sem o maior e o menor.") / 100
+        meta_site = med["ads"][0] * 100
+        pr_ads = q6.number_input(
+            "Meta (% da receita líquida do site)", min_value=0.0, max_value=100.0,
+            value=float(meta_site), step=0.5, format="%.2f",
+            help=f"Só a mídia, indexada à venda do site, que é o que o anúncio puxa. "
+                 f"Em {mes_curto(mes_base)} foi {meta_site:.1f}%, e a eficiência vem "
+                 "melhorando: era 28% em março. A agência é fixa e está nos fixos.") / 100
+        pr_fixos = float(q7.number_input(
+            "Fixos por mês (R$)", min_value=0.0, value=float(med["fixos"][0]), step=100.0, format="%.2f",
+            help="Soma da projeção por categoria, que está na tabela de despesas: "
+                 "contrato pelo último valor, frete por pedido, o resto por média "
+                 "dos meses em que houve."))
+        pr_imposto = q8.number_input(
+            "Taxas e imposto (% da receita)", min_value=0.0, max_value=50.0,
+            value=float(med["taxas"][0] * 100), step=0.1, format="%.2f",
+            help="Medido: Pagar.me nos seis meses fechados mais Simples a 2,64%.") / 100
         q9, _, _, _ = st.columns(4)
-        pr_envelh = q9.slider("Estoque que envelhece por mês (%)", 0.0, 5.0, 2.0, 0.5,
-                              help="Peça que deixa de vender a preço cheio. Sai do estoque sem virar receita.") / 100
+        pr_envelh = q9.number_input(
+            "Estoque que envelhece por mês (%)", min_value=0.0, max_value=20.0, value=2.0, step=0.5, format="%.1f",
+            help="Peça que deixa de vender a preço cheio. Sai do estoque sem virar receita.") / 100
 
-    # O plano começa no mês seguinte ao último fechado, com o caixa e os
-    # recebíveis de verdade, não com números fixos no código.
         regras = pd.DataFrame(
             [{"Premissa": d, "Regra": r,
               "Medido": (f"{v * 100:.1f}%" if v < 1 else brl(v))}
