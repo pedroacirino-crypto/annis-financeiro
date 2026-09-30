@@ -6,6 +6,7 @@
     python carga.py legado                             fichas e lançamentos pré-conta, da planilha de 2025
     python carga.py regras                             regras de classificação com nome de pessoa (legado/regras.json)
     python carga.py fatura   legado/faturas_cartao.csv linhas das faturas dos cartões das sócias
+    python carga.py rateio   legado/rateios.csv        pagamento que é duas coisas (aluguel com seguro dentro)
     python carga.py resumo                             o que tem lá e até quando
 
 Roda na máquina do Pedro, com o .env apontando para o banco. Nada disso vai
@@ -124,6 +125,17 @@ def carregar_fatura(caminho: str) -> None:
         print(f"    {cat[:40]:40s} R$ {v:,.2f}")
 
 
+def carregar_rateio(caminho: str) -> None:
+    """Um pagamento que é duas coisas. Sem isso o seguro incêndio dentro do
+    boleto do aluguel de setembro fazia parecer que o aluguel tinha subido
+    23%, que foi a conclusão errada de 30/09/2026."""
+    df = pd.read_csv(caminho)
+    print("rateios:", dados_fin.salvar_rateios(df))
+    for r in df.itertuples(index=False):
+        print(f"  {r.data} {r.contraparte}: de R$ {r.valor_total:,.2f} saem "
+              f"R$ {r.valor_parte:,.2f} para {r.categoria_parte}")
+
+
 def carregar_regras() -> None:
     import json
     with open(extrato.ARQUIVO_REGRAS, encoding="utf-8") as f:
@@ -148,6 +160,8 @@ def main(argv):
         carregar_regras()
     elif cmd == "fatura":
         carregar_fatura(argv[2])
+    elif cmd == "rateio":
+        carregar_rateio(argv[2])
     else:
         r = dados_fin.resumo()
         print(f"extrato: {r['extrato_linhas']} linhas, até {r['extrato_ate']}")

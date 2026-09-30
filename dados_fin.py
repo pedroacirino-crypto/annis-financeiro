@@ -18,6 +18,8 @@ Tabelas, todas com prefixo `fin_`:
                          pessoa física, que não podem ir para o Git público
   fin_fatura_cartao      linhas das faturas dos cartões das sócias: o extrato
                          só mostra o reembolso, a fatura mostra no que foi
+  fin_rateios            pagamento que é duas coisas: o boleto do aluguel de
+                         setembro tinha o seguro incêndio dentro
 
 Sem conexão configurada, tudo devolve vazio e os módulos caem nos arquivos
 locais em `legado/`, que é como se trabalha nesta máquina.
@@ -110,6 +112,7 @@ def garantir() -> None:
                 carregado_em TIMESTAMPTZ NOT NULL DEFAULT now()
             )"""))
         con.execute(text(_SQL_FATURA))
+        con.execute(text(_SQL_RATEIO))
     _tabelas_garantidas = True
 
 
@@ -126,6 +129,19 @@ _SQL_FATURA = """
         natureza       TEXT NOT NULL,
         categoria      TEXT,
         carregado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"""
+
+
+_SQL_RATEIO = """
+    CREATE TABLE IF NOT EXISTS fin_rateios (
+        id              TEXT PRIMARY KEY,
+        data            DATE NOT NULL,
+        contraparte     TEXT NOT NULL,
+        valor_total     DOUBLE PRECISION NOT NULL,
+        valor_parte     DOUBLE PRECISION NOT NULL,
+        categoria_parte TEXT NOT NULL,
+        natureza_parte  TEXT NOT NULL,
+        observacao      TEXT
     )"""
 
 
@@ -306,6 +322,30 @@ def salvar_fatura_cartao(df: pd.DataFrame, substituir_faturas: bool = True) -> i
 def ler_fatura_cartao() -> pd.DataFrame:
     df = _ler("SELECT fatura, titular, data, cartao, estabelecimento, valor, parcela, natureza, categoria "
               "FROM fin_fatura_cartao ORDER BY fatura, data")
+    if not df.empty:
+        df["data"] = pd.to_datetime(df["data"])
+    return df
+
+
+# ─── Rateios ────────────────────────────────────────────────────────────────
+
+def salvar_rateios(df: pd.DataFrame) -> int:
+    df = df.copy()
+    for c in ("valor_total", "valor_parte"):
+        df[c] = df[c].astype(float)
+    linhas = [{"id": _id(r.data, r.contraparte, round(float(r.valor_total), 2), round(float(r.valor_parte), 2)),
+               "data": pd.Timestamp(r.data).date(), "contraparte": r.contraparte,
+               "valor_total": float(r.valor_total), "valor_parte": float(r.valor_parte),
+               "categoria_parte": r.categoria_parte, "natureza_parte": r.natureza_parte,
+               "observacao": "" if pd.isna(r.observacao) else str(r.observacao)}
+              for r in df.itertuples(index=False)]
+    return _upsert("fin_rateios", linhas, "id")
+
+
+@memo()
+def ler_rateios() -> pd.DataFrame:
+    df = _ler("SELECT data, contraparte, valor_total, valor_parte, categoria_parte, "
+              "natureza_parte, observacao FROM fin_rateios ORDER BY data")
     if not df.empty:
         df["data"] = pd.to_datetime(df["data"])
     return df

@@ -192,7 +192,57 @@ def ledger_saidas() -> pd.DataFrame:
     })
     t = pd.concat([pre, ex], ignore_index=True).sort_values("data").reset_index(drop=True)
     t["mes"] = t.data.dt.strftime("%Y-%m")
-    return t
+    return _aplicar_rateios(t)
+
+
+@memo()
+def _rateios() -> pd.DataFrame:
+    """Pagamento que é duas coisas: o boleto do aluguel de 15/09/2026 saiu
+    R$ 2.615,43 e tinha R$ 435,38 de seguro incêndio dentro, pontual. Sem
+    separar, a leitura vira "o aluguel subiu 23%", que foi a conclusão
+    errada que eu tirei em 30/09/2026 e o Pedro corrigiu."""
+    import os
+    try:
+        import dados_fin
+        if dados_fin.disponivel():
+            df = dados_fin.ler_rateios()
+            if not df.empty:
+                return df
+    except Exception:
+        pass
+    caminho = os.path.join("legado", "rateios.csv")
+    if not os.path.exists(caminho):
+        return pd.DataFrame()
+    df = pd.read_csv(caminho)
+    df["data"] = pd.to_datetime(df["data"])
+    return df
+
+
+def _aplicar_rateios(t: pd.DataFrame) -> pd.DataFrame:
+    """Separa a parte em linha própria e desconta do original.
+
+    O total não muda, só a categoria de um pedaço, por isso o caixa e todas
+    as conferências continuam batendo.
+    """
+    r = _rateios()
+    if r.empty or t.empty:
+        return t
+    novas = []
+    for p in r.itertuples(index=False):
+        alvo = t[(t.data.dt.normalize() == pd.Timestamp(p.data).normalize())
+                 & t.contraparte.str.contains(p.contraparte, case=False, na=False)
+                 & (t.valor.round(2) == round(float(p.valor_total), 2))]
+        if alvo.empty:
+            continue
+        i = alvo.index[0]
+        t.loc[i, "valor"] = round(t.loc[i, "valor"] - float(p.valor_parte), 2)
+        linha = t.loc[i].to_dict()
+        linha.update({"valor": float(p.valor_parte), "categoria": p.categoria_parte,
+                      "natureza": p.natureza_parte})
+        novas.append(linha)
+    if not novas:
+        return t
+    return pd.concat([t, pd.DataFrame(novas)], ignore_index=True).sort_values("data").reset_index(drop=True)
 
 
 # Fornecedor de contrato mensal: a despesa é do mês do serviço, não do mês em
