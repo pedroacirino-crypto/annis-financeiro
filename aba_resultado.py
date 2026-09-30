@@ -22,7 +22,7 @@ import streamlit as st
 import extrato
 import financeiro as fin
 import plano
-from ui import tabela
+from ui import tabela, versao_publicada
 
 
 COR = {"receita": "#1f5fa8", "margem": "#7fb3e6", "resultado": "#c0392b", "caixa": "#2e7d32",
@@ -93,9 +93,14 @@ def grafico_barras_sinal(df, coluna, rotulo, altura=220):
 
 
 @st.cache_data(ttl=3600, show_spinner="Montando o resultado…")
-def _dados():
-    """Tudo que é pesado, uma vez por hora. Carga nova no Supabase aparece na
-    próxima hora ou depois de um reboot."""
+def _dados(versao: str = ""):
+    """Tudo que é pesado, uma vez por hora.
+
+    `versao` entra só para compor a chave do cache: publicação nova troca o
+    commit, o cache vira outro e o dado velho não sobrevive ao deploy. Sem
+    isso, em 30/09/2026 a aba quebrou em produção porque o PnL guardado era
+    do código antigo e não tinha a coluna que a tela nova pedia.
+    """
     pnl = fin.pnl_competencia()
     return {
         "pnl": pnl, "fluxo": fin.fluxo_de_caixa(), "extrato": extrato.carregar(),
@@ -111,7 +116,7 @@ def render():
         st.error("Sem extrato e fichas: carregue com `carga.py` no Supabase, ou deixe os arquivos em `legado/`.")
         return
     hoje = datetime.now().strftime("%Y-%m")
-    d = _dados()
+    d = _dados(versao_publicada())
     pnl = d["pnl"]
     t = pnl["tabela"]
     fluxo = d["fluxo"]
@@ -193,6 +198,8 @@ def render():
         b = base.set_index("mes")
         linhas = {}
         for rotulo, col, dinheiro in LINHAS_PNL:
+            if col not in b:
+                continue
             tot = b[col].sum()
             linhas[rotulo] = [brl(tot) if dinheiro else str(int(tot))] + [brl(v) if dinheiro else str(int(v)) for v in b[col]]
         wide = pd.DataFrame(linhas, index=["Total"] + [mes_curto(m) for m in b.index]).T

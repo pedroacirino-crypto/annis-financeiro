@@ -17,7 +17,7 @@ import db
 import nuvem
 import pagarme_client
 import shopify_client
-from ui import tabela
+from ui import tabela, versao_publicada
 
 # Precisa ser o primeiro comando Streamlit do arquivo.
 st.set_page_config(
@@ -239,33 +239,6 @@ def _segredo(nome: str):
     except Exception:
         pass
     return os.environ.get(nome)
-
-
-def versao_publicada() -> str:
-    """Commit que está rodando, lido do .git que a Streamlit Cloud clona.
-
-    Existe para eu conseguir conferir o que foi publicado sem passar pela
-    senha. Sem isto eu ficava adivinhando se um deploy tinha entrado, e
-    cheguei a dizer que o Pedro estava vendo versão velha sem ter como
-    saber. Aparece discreto na tela de entrada.
-    """
-    import pathlib
-    try:
-        raiz = pathlib.Path(__file__).resolve().parent / ".git"
-        cabeca = (raiz / "HEAD").read_text().strip()
-        if cabeca.startswith("ref:"):
-            alvo = raiz / cabeca.split(" ", 1)[1].strip()
-            if alvo.exists():
-                return alvo.read_text().strip()[:7]
-            pacotes = (raiz / "packed-refs").read_text().splitlines()
-            ref = cabeca.split(" ", 1)[1].strip()
-            for linha in pacotes:
-                if linha.endswith(" " + ref):
-                    return linha.split(" ", 1)[0][:7]
-            return "?"
-        return cabeca[:7]
-    except Exception:
-        return "?"
 
 
 def _senha_configurada():
