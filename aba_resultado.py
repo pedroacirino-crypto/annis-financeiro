@@ -172,11 +172,12 @@ def render():
 
     LINHAS_PNL = [
         ("Pedidos no site", "pedidos", False),
+        ("Receita bruta", "receita_bruta", True),
         ("Receita do site (Shopify)", "receita_site", True),
-        ("(-) Desconto Pix", "desconto_pix", True),
-        ("(-) Estornos", "estornos", True),
         ("Maquininha (líquido de MDR)", "receita_maquininha", True),
         ("Pix direto e link", "receita_pix_direto", True),
+        ("(-) Desconto Pix", "desconto_pix", True),
+        ("(-) Estornos", "estornos", True),
         ("Receita líquida", "receita_liquida", True),
         ("(-) Taxas Pagar.me", "taxas", True),
         ("(-) Imposto", "imposto", True),
@@ -203,6 +204,15 @@ def render():
                           f"Fora do site o CMV é estimado com a proporção do site, {pct(pnl['razao_cmv'])}."))
 
     with st.expander("Tabela: caixa mês a mês"):
+        st.caption(
+            "Esta tabela é **caixa**: o dia em que o dinheiro entrou ou saiu da "
+            "conta. **Site** é o que a Pagar.me liquidou, já sem taxa e sem "
+            "antecipação, e o cartão cai sete dias depois da venda. Por isso "
+            "ela não bate com a aba Histórico, que é **venda**: valor cheio, no "
+            "dia em que foi vendida. Dezembro de 2025 vendeu R$ 10.954 e "
+            "recebeu R$ 7.358; janeiro vendeu R$ 2.666 e recebeu R$ 8.223, "
+            "porque o resto de dezembro caiu lá."
+        )
         st.dataframe(pd.DataFrame({
             "Mês": fx_vis.mes.map(mes_curto),
             "Site": fx_vis.recebido_site.map(brl),
@@ -313,9 +323,13 @@ def render():
     emenda = hist.tail(1).assign(fase="Projetado", receita=float("nan"), resultado=float("nan"), fluxo=float("nan"))
     filme = pd.concat([hist, emenda, fut], ignore_index=True)
     filme["rotulo"] = filme.mes.map(mes_curto)
+    # O eixo fica em R$ mil porque é o que cabe, mas o tooltip mostra o valor
+    # inteiro: "20,7" não serve para conferir nada, e era o que aparecia.
     for c in ("receita", "resultado", "fluxo", "acumulado_operacional"):
+        filme[c + "_brl"] = filme[c].map(brl)
         filme[c] = filme[c] / 1000
     filme["lucro_acumulado"] = filme.resultado.fillna(0).cumsum()
+    filme["lucro_acumulado_brl"] = (filme.lucro_acumulado * 1000).map(brl)
     filme.loc[filme.fase == "Projetado", "lucro_acumulado"] = filme.loc[filme.fase == "Projetado", "lucro_acumulado"]
     ordem = list(dict.fromkeys(filme.rotulo))
     corte = mes_curto(hoje)
@@ -341,7 +355,7 @@ def render():
         return alt.Chart(g).mark_bar().encode(
             x=eixo_x, y=alt.Y(f"{coluna}:Q", title=f"{titulo} (R$ mil)"),
             color=alt.Color("classe:N", scale=escala, legend=None),
-            tooltip=["rotulo", "fase", alt.Tooltip(f"{coluna}:Q", format=".1f", title="R$ mil")],
+            tooltip=["rotulo", "fase", alt.Tooltip(f"{coluna}_brl:N", title=titulo)],
         )
 
 
@@ -351,7 +365,7 @@ def render():
         barras = alt.Chart(filme.dropna(subset=["receita"])).mark_bar().encode(
             x=eixo_x, y=alt.Y("receita:Q", title="R$ mil"),
             color=alt.Color("fase:N", title="", scale=alt.Scale(domain=["Realizado", "Projetado"], range=[COR["receita"], COR["margem"]]), legend=legenda_fase),
-            tooltip=["rotulo", "fase", alt.Tooltip("receita:Q", format=".1f", title="R$ mil")])
+            tooltip=["rotulo", "fase", alt.Tooltip("receita_brl:N", title="Receita líquida")])
         be = alt.Chart(pd.DataFrame({"y": [breakeven_lucro / 1000]})).mark_rule(color=COR["resultado"], strokeDash=[6, 4]).encode(y="y")
         st.altair_chart((barras + be + regua_hoje()).properties(height=230), use_container_width=True)
         st.caption(md(f"Tracejado vermelho: {brl(breakeven_lucro)}/mês, onde o lucro começa."))
@@ -369,6 +383,7 @@ def render():
         st.markdown("**Acumulados: caixa e lucro**")
         g = filme[["rotulo", "fase", "acumulado_operacional", "lucro_acumulado"]].melt(["rotulo", "fase"], var_name="serie", value_name="valor")
         g["serie"] = g.serie.map({"acumulado_operacional": "Caixa acumulado", "lucro_acumulado": "Lucro acumulado"})
+        g["valor_brl"] = (g.valor * 1000).map(brl)
         g["traco"] = g.fase
         linhas = alt.Chart(g).mark_line(point=True).encode(
             x=eixo_x, y=alt.Y("valor:Q", title="R$ mil"),

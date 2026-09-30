@@ -787,6 +787,10 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     t["receita_maquininha"] = fis["maquininha"].reindex(meses).fillna(0.0) if not fis.empty else z
     t["receita_pix_direto"] = fis["pix"].reindex(meses).fillna(0.0) if not fis.empty else z
     t["receita_fisica"] = t.receita_maquininha + t.receita_pix_direto
+    # Bruta é tudo que foi vendido antes de tirar desconto de Pix e estorno.
+    # A maquininha já entra líquida de MDR porque é assim que o dinheiro
+    # aparece no extrato: não existe a venda cheia dela em lugar nenhum.
+    t["receita_bruta"] = t.receita_site + t.receita_fisica
     t["receita_liquida"] = t.receita_site_liquida + t.receita_fisica
     t["taxas"] = (taxas["mdr"].reindex(meses).fillna(0.0) + taxas["antecipacao"].reindex(meses).fillna(0.0)) if not taxas.empty else z
     if not est.empty:
