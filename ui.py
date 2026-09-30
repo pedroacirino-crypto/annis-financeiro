@@ -30,7 +30,7 @@ def _tela_cheia(titulo: str, html: str):
     st.markdown(html, unsafe_allow_html=True)
 
 
-def tabela(df, num=(), altura_max=None, titulo="Tabela"):
+def tabela(df, num=(), altura_max=None, titulo="Tabela", fixas_direita=0):
     """Tabela em HTML no padrão da marca.
 
     O st.dataframe desenha num canvas com grade em volta de cada célula, não
@@ -40,23 +40,32 @@ def tabela(df, num=(), altura_max=None, titulo="Tabela"):
     """
     import html as _html
 
+    # As últimas colunas podem ficar paradas na direita, como a primeira fica
+    # na esquerda: é onde mora o mês que está correndo, e ele não pode sumir
+    # quando se rola o histórico.
+    n_col = len(df.columns)
+    presas = {n_col - 1 - i: i for i in range(min(fixas_direita, n_col - 1))}
+
+    def classe(c, i, base=""):
+        partes = [base] if base else []
+        if c in num:
+            partes.append("num")
+        if i in presas:
+            partes.append(f"presa presa{presas[i]}")
+        return " ".join(partes)
+
     cab = "".join(
-        f'<th class="num">{_html.escape(str(c))}</th>' if c in num
-        else f"<th>{_html.escape(str(c))}</th>"
-        for c in df.columns
+        f'<th class="{classe(c, i)}">{_html.escape(str(c))}</th>'
+        for i, c in enumerate(df.columns)
     )
     corpo = []
     for _, linha in df.iterrows():
         celulas = []
-        for c in df.columns:
+        for i, c in enumerate(df.columns):
             v = "" if pd.isna(linha[c]) else str(linha[c])
-            classe = "num" if c in num else ""
-            if classe and v.strip().startswith("-"):
-                classe += " neg"
-            celulas.append(
-                f'<td class="{classe}">{_html.escape(v)}</td>' if classe
-                else f"<td>{_html.escape(v)}</td>"
-            )
+            cls = classe(c, i, "neg" if (c in num and v.strip().startswith("-")) else "")
+            celulas.append(f'<td class="{cls}">{_html.escape(v)}</td>' if cls
+                           else f"<td>{_html.escape(v)}</td>")
         corpo.append("<tr>" + "".join(celulas) + "</tr>")
 
     def montar(limite):

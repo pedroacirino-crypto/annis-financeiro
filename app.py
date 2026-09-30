@@ -222,6 +222,13 @@ div[data-testid="stDialog"] div[role="dialog"] .tbl-wrap {{ max-height:78vh !imp
    a tabela larga vira adivinhação, some o mês da linha e o nome da coluna. */
 .tbl tbody td:first-child {{ position:sticky; left:0; z-index:1; background:#FFFFFF; border-right:1px solid {LINHA}; }}
 .tbl thead th:first-child {{ z-index:3; left:0; border-right:1px solid {LINHA}; }}
+/* Colunas presas na direita: o mês que está correndo não some ao rolar. */
+.tbl td.presa, .tbl th.presa {{ position:sticky; background:#FFF8F2; min-width:8.5rem; }}
+.tbl td.presa {{ z-index:1; }}
+.tbl th.presa {{ z-index:3; }}
+.tbl .presa0 {{ right:0; }}
+.tbl .presa1 {{ right:8.5rem; border-left:1px solid {LINHA}; }}
+.tbl tbody tr:hover td.presa {{ background:#FFF3EA; }}
 .tbl tbody tr:last-child td {{ border-bottom:none; }}
 .tbl tbody tr:hover td {{ background:#FFFBF7; }}
 .tbl tbody tr:hover td:first-child {{ background:#FFFBF7; }}

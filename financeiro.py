@@ -503,6 +503,89 @@ def conferir_contas_pagas(dias: int = 7) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
+# A projeção anda: hoje ela começa no mês que vem, e quando esse mês chegar
+# ela passa a começar no seguinte. Para o mês corrente ter contra o que ser
+# comparado, a projeção dele é congelada antes de começar. As linhas abaixo
+# são as que o plano produz; as que ele não produz (receita por canal, CMV
+# separado por site e físico) ficam vazias em vez de inventadas.
+@memo()
+def mes_fechado() -> str:
+    """Último mês com dado até o fim. Mês só fecha quando o extrato alcança
+    o último dia dele; antes disso a receita ainda está pela metade e não
+    serve de base para nada."""
+    import calendar
+    fim = fim_dos_custos()
+    if fim is None:
+        return datetime.now().strftime("%Y-%m")
+    ultimo = calendar.monthrange(fim.year, fim.month)[1]
+    return fim.strftime("%Y-%m") if fim.day >= ultimo else \
+        (fim - pd.offsets.MonthBegin(1)).strftime("%Y-%m")
+
+
+@memo()
+def mes_corrente() -> str:
+    """O mês que está acontecendo, que é o seguinte ao último fechado."""
+    return str(pd.Period(mes_fechado(), "M") + 1)
+
+
+@memo()
+def receita_base() -> float:
+    """Receita líquida do último mês fechado: o ponto de partida da projeção."""
+    t = pnl_competencia()["tabela"]
+    linha = t[t.mes == mes_fechado()]
+    return float(linha.receita_liquida.iloc[0]) if not linha.empty else 20000.0
+
+
+def orcamento_do_mes(mes: str, premissas=None) -> dict:
+    """Projeção de um mês nas linhas do PnL, para congelar.
+
+    O plano trabalha com receita líquida, CMV, mídia e fixos. A separação
+    entre taxa da Pagar.me e Simples sai da própria premissa: os 7,4% são
+    4,76% de taxa mais 2,64% de imposto. A agência de R$ 1.800 está dentro
+    dos fixos do plano e aqui sai de lá para a linha de marketing, que é
+    onde ela aparece no realizado.
+    """
+    import plano
+    p = premissas or plano.Premissas(inicio=mes_corrente(), receita_base=receita_base())
+    sim = plano.simular(p)
+    linha = sim["tabela"][sim["tabela"].mes == mes]
+    if linha.empty:
+        return {}
+    r = linha.iloc[0]
+    receita = float(r.receita)
+    imposto = receita * IMPOSTO_PADRAO
+    taxas = receita * p.taxas - imposto
+    cmv = float(r.cmv_competencia)
+    agencia = 1800.0
+    marketing = float(r.ads) + agencia
+    outras = float(r.fixos) - agencia + float(r.compromissos)
+    return {
+        "Receita líquida": receita,
+        "(-) Taxas Pagar.me": taxas,
+        "(-) Imposto": imposto,
+        "(-) CMV": cmv,
+        "Margem bruta": receita - taxas - imposto - cmv,
+        "(-) Meta e agência": marketing,
+        "(-) Demais despesas": outras,
+        "Resultado": receita - taxas - imposto - cmv - marketing - outras,
+    }
+
+
+@memo()
+def orcamentos() -> dict:
+    """{mes: {linha: valor}} do que já foi congelado."""
+    try:
+        import dados_fin
+        if not dados_fin.disponivel():
+            return {}
+        df = dados_fin.ler_orcamento()
+    except Exception:
+        return {}
+    if df.empty:
+        return {}
+    return {m: dict(zip(g.linha, g.valor)) for m, g in df.groupby("mes")}
+
+
 def fim_dos_custos():
     """Última data com saída registrada. Depois dela o PnL está cego."""
     import extrato

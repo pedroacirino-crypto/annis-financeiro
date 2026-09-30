@@ -7,6 +7,7 @@
     python carga.py regras                             regras de classificação com nome de pessoa (legado/regras.json)
     python carga.py fatura   legado/faturas_cartao.csv linhas das faturas dos cartões das sócias
     python carga.py rateio   legado/rateios.csv        pagamento que é duas coisas (aluguel com seguro dentro)
+    python carga.py orcamento 2026-10                  congela a projeção do mês, para comparar com o realizado
     python carga.py resumo                             o que tem lá e até quando
 
 Roda na máquina do Pedro, com o .env apontando para o banco. Nada disso vai
@@ -136,6 +137,21 @@ def carregar_rateio(caminho: str) -> None:
               f"R$ {r.valor_parte:,.2f} para {r.categoria_parte}")
 
 
+def congelar_orcamento(mes: str) -> None:
+    """Congela a projeção do mês com as premissas padrão. A projeção anda
+    sozinha conforme os meses passam; sem congelar, o mês corrente não tem
+    contra o que ser comparado."""
+    import financeiro
+    linhas = financeiro.orcamento_do_mes(mes)
+    if not linhas:
+        print(f"o plano não alcança {mes}")
+        return
+    n = dados_fin.salvar_orcamento(mes, linhas)
+    print(f"orçamento de {mes} congelado, {n} linhas:")
+    for k, v in linhas.items():
+        print(f"  {k:24s} R$ {v:>10,.2f}")
+
+
 def carregar_regras() -> None:
     import json
     with open(extrato.ARQUIVO_REGRAS, encoding="utf-8") as f:
@@ -162,6 +178,8 @@ def main(argv):
         carregar_fatura(argv[2])
     elif cmd == "rateio":
         carregar_rateio(argv[2])
+    elif cmd == "orcamento":
+        congelar_orcamento(argv[2])
     else:
         r = dados_fin.resumo()
         print(f"extrato: {r['extrato_linhas']} linhas, até {r['extrato_ate']}")

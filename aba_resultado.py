@@ -188,6 +188,7 @@ def render():
         ("(-) Imposto", "imposto", True),
         ("(-) CMV do site", "cmv_site", True),
         ("(-) CMV fora do site (estimado)", "cmv_fisico_estimado", True),
+        ("(-) CMV total", "cmv", True),
         ("Margem bruta", "margem_bruta", True),
         ("(-) Meta e agência", "marketing", True),
         ("(-) Demais despesas", "despesas_outras", True),
@@ -195,7 +196,13 @@ def render():
     ]
 
     with st.expander("Tabela: PnL por competência"):
+        # O histórico vai até o último mês fechado; o mês que está correndo
+        # sai do meio e vira duas colunas fixas na direita, orçado e até
+        # hoje, para não ser lido como mês inteiro.
+        fechado = fin.mes_fechado()
+        corrente = fin.mes_corrente()
         b = base.set_index("mes")
+        b = b.loc[[m for m in b.index if m <= fechado]]
         linhas = {}
         for rotulo, col, dinheiro in LINHAS_PNL:
             if col not in b:
@@ -204,8 +211,44 @@ def render():
             linhas[rotulo] = [brl(tot) if dinheiro else str(int(tot))] + [brl(v) if dinheiro else str(int(v)) for v in b[col]]
         wide = pd.DataFrame(linhas, index=["Total"] + [mes_curto(m) for m in b.index]).T
         wide.loc["Margem bruta %"] = [pct(mb)] + [pct(a / r) if r else "" for a, r in zip(b.margem_bruta, b.receita_liquida)]
+
+        # Orçado: projeção congelada antes do mês começar. Realizado: o que
+        # já entrou até hoje. Linha que o plano não projeta fica vazia em
+        # vez de inventada.
+        orc = fin.orcamentos().get(corrente, {})
+        mtd = t[t.mes == corrente]
+        dia = ex.data.max().day if ex.data.max().strftime("%Y-%m") == corrente else 0
+        # O plano projeta o CMV inteiro, sem separar site de físico: ele vai
+        # para a linha do total, e as duas de detalhe ficam vazias no orçado.
+        de_para = {"(-) CMV total": "(-) CMV"}
+        campos = dict((r, c) for r, c, _ in LINHAS_PNL)
+        col_orc, col_mtd = [], []
+        for rotulo in wide.index:
+            campo = campos.get(rotulo)
+            if rotulo == "Margem bruta %":
+                r_orc, m_orc = orc.get("Receita líquida"), orc.get("Margem bruta")
+                col_orc.append(pct(m_orc / r_orc) if r_orc else "")
+                col_mtd.append(pct(mtd.margem_bruta.iloc[0] / mtd.receita_liquida.iloc[0])
+                               if not mtd.empty and float(mtd.receita_liquida.iloc[0]) else "")
+                continue
+            v_orc = orc.get(de_para.get(rotulo, rotulo))
+            col_orc.append(brl(v_orc) if v_orc is not None else "")
+            col_mtd.append(brl(float(mtd[campo].iloc[0]))
+                           if campo and not mtd.empty and campo in mtd else "")
+        rot_orc = f"{mes_curto(corrente)} orçado"
+        rot_mtd = f"{mes_curto(corrente)} até dia {dia}" if dia else f"{mes_curto(corrente)} até hoje"
+        wide[rot_orc] = col_orc
+        wide[rot_mtd] = col_mtd
+
         vis = wide.reset_index().rename(columns={"index": ""})
-        tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560, titulo="PnL por competência")
+        tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560,
+               titulo="PnL por competência", fixas_direita=2)
+        st.caption(md(
+            f"As duas últimas colunas são o mês que está correndo e ficam paradas enquanto o resto rola. "
+            f"**{rot_orc}** é a projeção congelada em "
+            f"{'hoje' if not orc else ''}{pd.Timestamp.now():%d/%m/%Y}, feita antes do mês começar, e não se mexe mais. "
+            f"**{rot_mtd}** é mês pela metade: não compare com coluna de mês fechado. "
+            "Linha vazia no orçado é linha que o plano não projeta, como receita por canal."))
         if pnl["cobertura_cmv"] < 0.999:
             faltam = ", ".join(f"{k} ({v})" for k, v in pnl["pecas_sem_custo"].items())
             st.caption(md(f"CMV do site cobre {pct(pnl['cobertura_cmv'])} das peças; sem ficha: {faltam}. "

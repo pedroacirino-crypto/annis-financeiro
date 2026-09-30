@@ -20,6 +20,8 @@ Tabelas, todas com prefixo `fin_`:
                          só mostra o reembolso, a fatura mostra no que foi
   fin_rateios            pagamento que é duas coisas: o boleto do aluguel de
                          setembro tinha o seguro incêndio dentro
+  fin_orcamento          projeção congelada de um mês, linha a linha do PnL,
+                         para o mês corrente ter contra o que ser comparado
 
 Sem conexão configurada, tudo devolve vazio e os módulos caem nos arquivos
 locais em `legado/`, que é como se trabalha nesta máquina.
@@ -113,6 +115,7 @@ def garantir() -> None:
             )"""))
         con.execute(text(_SQL_FATURA))
         con.execute(text(_SQL_RATEIO))
+        con.execute(text(_SQL_ORCAMENTO))
     _tabelas_garantidas = True
 
 
@@ -142,6 +145,16 @@ _SQL_RATEIO = """
         categoria_parte TEXT NOT NULL,
         natureza_parte  TEXT NOT NULL,
         observacao      TEXT
+    )"""
+
+
+_SQL_ORCAMENTO = """
+    CREATE TABLE IF NOT EXISTS fin_orcamento (
+        mes          TEXT NOT NULL,
+        linha        TEXT NOT NULL,
+        valor        DOUBLE PRECISION NOT NULL,
+        congelado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (mes, linha)
     )"""
 
 
@@ -348,4 +361,28 @@ def ler_rateios() -> pd.DataFrame:
               "natureza_parte, observacao FROM fin_rateios ORDER BY data")
     if not df.empty:
         df["data"] = pd.to_datetime(df["data"])
+    return df
+
+
+# ─── Orçamento ──────────────────────────────────────────────────────────────
+
+def salvar_orcamento(mes: str, linhas: dict) -> int:
+    """Congela a projeção de um mês. Substitui a anterior daquele mês: se o
+    Pedro mexer nas premissas e congelar de novo, vale a última."""
+    from sqlalchemy import text
+    garantir()
+    dados = [{"mes": mes, "linha": k, "valor": float(v)} for k, v in linhas.items()]
+    with nuvem._conectar().begin() as con:
+        con.execute(text("DELETE FROM fin_orcamento WHERE mes = :m"), {"m": mes})
+        if dados:
+            con.execute(text("INSERT INTO fin_orcamento (mes, linha, valor) "
+                             "VALUES (:mes, :linha, :valor)"), dados)
+    import memo as _m
+    _m.limpar_tudo()
+    return len(dados)
+
+
+@memo()
+def ler_orcamento() -> pd.DataFrame:
+    df = _ler("SELECT mes, linha, valor, congelado_em FROM fin_orcamento ORDER BY mes, linha")
     return df

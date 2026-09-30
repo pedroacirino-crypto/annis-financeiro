@@ -46,16 +46,36 @@ _FIXOS_NA_PLANILHA = r"aluguel|condom|koyashiki|contabil|olist|correios|simples"
 
 @memo()
 def compromissos_pendentes() -> dict:
-    """Contas contratadas e não pagas, por mês, fora do que já é fixo.
-    Supabase primeiro; sem ele, o número local de 20/09/2026."""
-    import re
+    """Contas contratadas e não pagas, por mês, que o modelo ainda não cobre.
+
+    Só entra aqui o que a simulação não prevê por outro caminho, senão o
+    mesmo real é contado duas vezes. Em 30/09/2026 outubro tinha
+    R$ 11.827,97 de compromisso, dos quais R$ 8.293,97 eram tecido, bolsa,
+    vestido e facção, que já estão no CMV, e R$ 1.800 eram a agência, que
+    já está nos fixos. Dez mil reais duplicados num mês só, e o resultado
+    projetado de outubro caía de -R$ 1,3 mil para -R$ 11,4 mil por causa
+    disso.
+
+    Três filtros: fixo recorrente pelo nome na descrição, e produção e
+    agência pelas regras de planilha, que ficam no Supabase porque usam
+    apelido de pessoa.
+    """
     import dados_fin
     df = dados_fin.ler_contas_a_pagar() if dados_fin.disponivel() else pd.DataFrame()
     if df.empty:
         return dict(COMPROMISSOS_LOCAL)
     pend = df[(df.situacao.fillna("").str.upper() != "PAGO")
               & ~df.descricao.str.contains(_FIXOS_NA_PLANILHA, case=False, regex=True)]
+    for padrao in _ja_no_modelo():
+        pend = pend[~pend.descricao.str.contains(padrao, case=False, regex=True, na=False)]
     return pend.groupby(pend.data.dt.strftime("%Y-%m"))["valor"].sum().to_dict()
+
+
+@memo()
+def _ja_no_modelo() -> list:
+    """Padrões de descrição da planilha que a simulação já cobre."""
+    import extrato
+    return [r["padrao"] for r in extrato.regras_externas() if r.get("sentido") == "planilha"]
 
 
 def contas_a_pagar_total() -> float:
