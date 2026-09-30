@@ -194,6 +194,95 @@ def ledger_saidas() -> pd.DataFrame:
     return t
 
 
+# Fornecedor de contrato mensal: a despesa é do mês do serviço, não do mês em
+# que o Pix saiu. Sem isso, conta que atrasa deixa um mês zerado e dobra o
+# seguinte. Aconteceu duas vezes: a agência foi paga em 23/07/2026 e só de
+# novo em 01/09, então agosto ficou sem agência nenhuma e setembro apareceu
+# com R$ 3.600; e o sistema Olist pulou setembro de 2025 e pagou duas vezes
+# em outubro. Cada um desses buracos estraga a margem dos dois meses.
+_CONTRATOS_MENSAIS = [
+    ("agência",    r"PROADZ|V60 ANUNCIOS"),
+    ("aluguel",    r"PJBANK|SUPERLOGICA"),
+    ("condomínio", r"CONDOMINIO"),
+    ("contador",   r"KOYASHIKI"),
+    ("sistema",    r"OLIST"),
+]
+
+
+def _contrato(nome: str) -> str:
+    """Qual contrato mensal é este fornecedor, ou vazio se nenhum.
+
+    Casa por padrão porque o mesmo contrato troca de nome no extrato:
+    PROADZ virou V60, Koyashiki aparece como 'KOYASHIKI & CIA' e como
+    'Grupo Koyashiki', e o condomínio ora vem com sublinhado ora com espaço.
+    """
+    import re
+    for chave, padrao in _CONTRATOS_MENSAIS:
+        if re.search(padrao, nome or "", re.I):
+            return chave
+    return ""
+
+
+def _meses_entre(de: str, ate: str) -> list:
+    saida, m = [], de
+    while m <= ate:
+        saida.append(m)
+        ano, mm = int(m[:4]), int(m[5:7])
+        m = f"{ano + 1}-01" if mm == 12 else f"{ano}-{mm + 1:02d}"
+    return saida
+
+
+def _competencia_dos_contratos(pagamentos: pd.DataFrame) -> pd.DataFrame:
+    """Move cada mensalidade para o mês a que ela se refere.
+
+    Uma mensalidade por mês: do primeiro ao último mês do contrato, o
+    pagamento mais antigo cobre o mês mais antigo. Assim o Pix de 01/09 vira
+    a mensalidade de agosto, que tinha ficado vazia, e o de 28/09 fica em
+    setembro.
+
+    Conserva o total: nenhum real é criado nem sumido, só muda de mês. Se o
+    contrato tiver mais ou menos pagamentos do que meses, o que significa
+    mês pulado de verdade ou cobrança dobrada, fica pelo mês do pagamento e
+    nada é inventado. O que não é contrato mensal passa direto.
+    """
+    pagamentos = pagamentos.copy()
+    pagamentos["contrato"] = pagamentos.contraparte.map(_contrato)
+    linhas = [pagamentos[pagamentos.contrato == ""]]
+    for _, grupo in pagamentos[pagamentos.contrato != ""].groupby("contrato"):
+        grupo = grupo.sort_values("data")
+        meses = _meses_entre(grupo.mes.iloc[0], grupo.mes.iloc[-1])
+        if len(meses) == len(grupo):
+            grupo = grupo.assign(mes=meses)
+        linhas.append(grupo)
+    return pd.concat(linhas, ignore_index=True).drop(columns=["contrato"])
+
+
+def _abater_devolucoes(pagamentos: pd.DataFrame) -> pd.DataFrame:
+    """Devolução de fornecedor abate a despesa dele, não vira receita.
+
+    São R$ 3.226,62 desde o começo, o maior deles a duplicata de R$ 1.800
+    da agência em 08/09/2025, paga duas vezes e estornada no mesmo dia. Sem
+    abater, setembro de 2025 aparecia com R$ 3.600 de agência. No fluxo de
+    caixa a devolução já entra como entrada, por isso o caixa sempre fechou.
+    """
+    import extrato
+    ex = extrato.carregar()
+    dev = ex[(ex.natureza == "devolucao") & (ex.categoria == "Devolução de fornecedor")]
+    if dev.empty:
+        return pagamentos
+    pagamentos = pagamentos.reset_index(drop=True)
+    cancelar = set()
+    for d in dev.itertuples(index=False):
+        iguais = pagamentos[(~pagamentos.index.isin(cancelar))
+                            & (pagamentos.valor.round(2) == round(d.valor_abs, 2))
+                            & (pagamentos.data <= d.data)
+                            & (pagamentos.contraparte.str.slice(0, 6)
+                               == (d.contraparte or "")[:6])]
+        if not iguais.empty:
+            cancelar.add(iguais.index[-1])      # o pagamento mais próximo
+    return pagamentos.drop(index=cancelar)
+
+
 def fim_dos_custos():
     """Última data com saída registrada. Depois dela o PnL está cego."""
     import extrato
@@ -442,6 +531,13 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
 
     led = ledger_saidas()
     desp = led[led.natureza == "despesa"]
+    # Competência, não caixa: mensalidade no mês do serviço e devolução de
+    # fornecedor abatendo a despesa dele. O fluxo de caixa continua pelo
+    # extrato cru, que é o que fecha com o saldo da conta.
+    desp = _competencia_dos_contratos(_abater_devolucoes(desp))
+    # `_abater_devolucoes` roda aqui e em estoque_a_custo, nunca dentro de
+    # ledger_saidas: no fluxo de caixa a devolução entra como entrada, e
+    # abater dos dois lados quebraria a conferência com o saldo da conta.
     desp_cat = desp.groupby(["mes", "categoria"])["valor"].sum().unstack(fill_value=0.0)
     # Meta entra pelo relatório da agência e sai, até onde der, do reembolso
     # às sócias do mesmo mês, que é por onde ela foi paga. O que sobrar no
@@ -613,8 +709,13 @@ def estoque_na_loja() -> dict:
 
 
 def estoque_a_custo() -> float:
-    """Produção paga menos CMV consumido: o que está na arara e no rolo, a custo."""
-    led = ledger_saidas()
+    """Produção paga menos CMV consumido: o que está na arara e no rolo, a custo.
+
+    Devolução de fornecedor abate a compra: tecido devolvido não está no
+    rolo. São R$ 886,91 desde o começo, entre Mikkonos, Bonor, Paulistana e
+    SHPP. No caixa a devolução já entra como entrada, por isso ela não pode
+    ser abatida no `ledger_saidas`, que é o que fecha com o saldo da conta."""
+    led = _abater_devolucoes(ledger_saidas())
     t = pnl_competencia()["tabela"]
     return float(led[led.natureza == "estoque"].valor.sum() - t.cmv.sum())
 
