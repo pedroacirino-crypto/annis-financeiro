@@ -27,6 +27,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+import ui as _ui
+_ui.reiniciar()   # chave estável para o botão de tela cheia das tabelas
+
 
 JANELA_SYNC = 90  # dias de extrato e recebíveis baixados a cada sincronização
 
@@ -207,7 +210,11 @@ section[data-testid="stSidebar"] {{ background: #FFFFFF; border-right: 1px solid
 [data-testid="stCaptionContainer"] p {{ color: {MARROM_CLARO}; font-size: 0.78rem; }}
 hr {{ border-color: rgba(104,56,10,0.15); }}
 [data-testid="stDataFrame"] {{ border: 1px solid rgba(104,56,10,0.12); border-radius: 2px; }}
+.tbl-box {{ position:relative; }}
 .tbl-wrap {{ background:#FFFFFF; border:1px solid rgba(104,56,10,0.12); border-radius:2px; overflow:auto; }}
+/* O diálogo de tela cheia ocupa quase a janela inteira, senão não vale a pena. */
+div[data-testid="stDialog"] div[role="dialog"] {{ width:96vw !important; max-width:96vw !important; height:92vh !important; max-height:92vh !important; }}
+div[data-testid="stDialog"] div[role="dialog"] .tbl-wrap {{ max-height:78vh !important; }}
 .tbl {{ width:100%; border-collapse:collapse; font-family:'Poppins',sans-serif; font-size:0.82rem; }}
 .tbl thead th {{ position:sticky; top:0; z-index:2; background:#FFFFFF; text-align:left; font-weight:400; font-size:0.62rem; text-transform:uppercase; letter-spacing:0.1em; color:{MARROM_CLARO}; padding:0.85rem 0.9rem 0.5rem; border-bottom:1px solid {LINHA}; white-space:nowrap; }}
 .tbl tbody td {{ padding:0.6rem 0.9rem; border-bottom:1px solid rgba(232,218,203,0.55); color:#4A2C0F; white-space:nowrap; }}

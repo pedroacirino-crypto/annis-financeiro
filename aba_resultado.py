@@ -205,7 +205,7 @@ def render():
         wide = pd.DataFrame(linhas, index=["Total"] + [mes_curto(m) for m in b.index]).T
         wide.loc["Margem bruta %"] = [pct(mb)] + [pct(a / r) if r else "" for a, r in zip(b.margem_bruta, b.receita_liquida)]
         vis = wide.reset_index().rename(columns={"index": ""})
-        tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560)
+        tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560, titulo="PnL por competência")
         if pnl["cobertura_cmv"] < 0.999:
             faltam = ", ".join(f"{k} ({v})" for k, v in pnl["pecas_sem_custo"].items())
             st.caption(md(f"CMV do site cobre {pct(pnl['cobertura_cmv'])} das peças; sem ficha: {faltam}. "
@@ -233,7 +233,7 @@ def render():
             "Aportes": fx_vis.aportes.map(lambda v: brl(v) if v else ""),
             "Caixa": fx_vis.caixa.map(brl),
         })
-        tabela(cx, num=[c for c in cx.columns if c != "Mês"], altura_max=520)
+        tabela(cx, num=[c for c in cx.columns if c != "Mês"], altura_max=520, titulo="Caixa mês a mês")
 
     with st.expander("Tabela: despesas por categoria"):
         dc = pnl["despesas_por_categoria"]
@@ -242,7 +242,7 @@ def render():
         dc = dc.loc[:, (dc != 0).any()]
         vis = dc.map(lambda v: brl(v) if v else "").reset_index()
         vis = vis.rename(columns={vis.columns[0]: "Mês"})
-        tabela(vis, num=[c for c in vis.columns if c != "Mês"], altura_max=520)
+        tabela(vis, num=[c for c in vis.columns if c != "Mês"], altura_max=520, titulo="Despesas por categoria")
         com_fatura = fin.meses_com_fatura()
         if com_fatura:
             quem = ", ".join(f"{t} ({len(m)} faturas)" for t, m in sorted(com_fatura.items()))
@@ -282,11 +282,28 @@ def render():
                "amortecida para não virar exponencial. Com o estoque alto se produz menos, e a produção volta ao ritmo cheio conforme ele desce. "
                "Parte do estoque envelhece a cada mês.")
 
+    # O ponto de partida da projeção é o último mês fechado, não um número
+    # escolhido na mão: senão a projeção nasce descolada do que acabou de
+    # acontecer. Mês só conta como fechado quando o extrato alcança o último
+    # dia dele; antes disso a receita ainda está incompleta e puxaria a base
+    # para baixo.
+    import calendar
+    primeiro_projetado = str(pd.Period(hoje, "M") + 1)
+    fim_dado = ex.data.max()
+    ultimo_dia = calendar.monthrange(fim_dado.year, fim_dado.month)[1]
+    mes_base = fim_dado.strftime("%Y-%m") if fim_dado.day >= ultimo_dia else \
+        (fim_dado - pd.offsets.MonthBegin(1)).strftime("%Y-%m")
+    linha_base = t[t.mes == mes_base]
+    base_real = float(linha_base.receita_liquida.iloc[0]) if not linha_base.empty else 20000.0
+    base_slider = int(round(base_real / 500) * 500)
+
     with st.expander("Premissas", expanded=False):
         st.caption("Arraste e a página inteira recalcula. Os valores iniciais vêm dos últimos 6 meses.")
         q1, q2, q3, q4 = st.columns(4)
-        pr_receita = float(q1.slider("Receita líquida em out/26 (R$)", 5000, 40000, 20000, 500,
-                                     help="Ponto de partida escolhido pelo Pedro: o patamar de agosto."))
+        pr_receita = float(q1.slider(f"Receita líquida em {mes_curto(primeiro_projetado)} (R$)",
+                                     5000, 40000, base_slider, 500,
+                                     help=f"Parte do último mês fechado, {mes_curto(mes_base)}, "
+                                          f"que deu {brl(base_real)}."))
         pr_g = q2.slider("Crescimento ao mês (%)", -10.0, 30.0, 10.5, 0.5, help="Ajuste log-linear de abr a set/26.") / 100
         pr_fator = q3.slider("Fator de redução do crescimento", 0.0, 1.0, 0.8, 0.05,
                              help="g no mês t = g × fator^t. Com 0,8 a receita converge para 1,7x a inicial; com 0,9, para 2,6x.")

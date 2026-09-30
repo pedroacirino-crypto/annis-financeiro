@@ -8,8 +8,29 @@ copiar e não dá para conferir de fora. Movido para cá em 30/09/2026.
 import pandas as pd
 import streamlit as st
 
+def reiniciar():
+    """Zera a contagem de tabelas do run. A chave do botão de tela cheia
+    precisa ser a mesma em todo run, senão o Streamlit não reconhece o
+    clique; o contador global sozinho cresceria para sempre."""
+    st.session_state["_tbl_n"] = {}
 
-def tabela(df, num=(), altura_max=None):
+
+def _chave(df) -> str:
+    import hashlib
+    base = hashlib.sha1(("|".join(map(str, df.columns)) + str(len(df))).encode()).hexdigest()[:8]
+    n = st.session_state.setdefault("_tbl_n", {})
+    n[base] = n.get(base, 0) + 1
+    return f"tblfs_{base}_{n[base]}"
+
+
+
+@st.dialog(" ", width="large")
+def _tela_cheia(titulo: str, html: str):
+    st.markdown(f"**{titulo}**")
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def tabela(df, num=(), altura_max=None, titulo="Tabela"):
     """Tabela em HTML no padrão da marca.
 
     O st.dataframe desenha num canvas com grade em volta de cada célula, não
@@ -38,13 +59,20 @@ def tabela(df, num=(), altura_max=None):
             )
         corpo.append("<tr>" + "".join(celulas) + "</tr>")
 
-    estilo = f' style="max-height:{altura_max}px"' if altura_max else ""
-    # Sem quebras de linha: linha em branco encerraria o bloco HTML no markdown.
-    st.markdown(
-        f'<div class="tbl-wrap"{estilo}><table class="tbl">'
-        f"<thead><tr>{cab}</tr></thead><tbody>{''.join(corpo)}</tbody></table></div>",
-        unsafe_allow_html=True,
-    )
+    def montar(limite):
+        estilo = f' style="max-height:{limite}px"' if limite else ""
+        # Sem quebras de linha: linha em branco encerraria o bloco no markdown.
+        return (f'<div class="tbl-box"><div class="tbl-wrap"{estilo}><table class="tbl">'
+                f"<thead><tr>{cab}</tr></thead><tbody>{''.join(corpo)}</tbody></table></div></div>")
+
+    st.markdown(montar(altura_max), unsafe_allow_html=True)
+
+    # Tela cheia pelo diálogo do Streamlit, e não por CSS: dentro de um
+    # expander o <details> vira bloco de contenção e prende o position:fixed
+    # no lugar da tabela, então a tabela "em tela cheia" ficava do tamanho da
+    # janela mas ancorada no meio da página. O diálogo abre na raiz do app.
+    if st.button("⤢", key=_chave(df), help="Ver em tela cheia", type="tertiary"):
+        _tela_cheia(titulo, montar(None))
 
 
 def versao_publicada() -> str:
