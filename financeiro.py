@@ -602,9 +602,20 @@ def _proporcoes(meses: int = 6) -> dict:
     if u.empty or not u.receita_liquida.sum():
         return {}
     cmv_total = u.cmv_site + u.cmv_fisico_estimado
+    fisica = u.receita_maquininha + u.receita_pix_direto
+    # A venda fora do site é projetada somada, e só depois repartida entre
+    # maquininha e Pix direto. Separadas elas oscilam muito e sem sentido
+    # econômico: em setembro a maquininha caiu para 12,3% da receita e o Pix
+    # direto subiu para 20%, com a física total no mesmo lugar. O que mudou
+    # foi a forma de pagar, não a venda. O rateio usa o mês fechado mais
+    # recente, que é a foto mais próxima do hábito de agora. Decisão do
+    # Pedro, 30/09/2026.
+    ult = u[u.mes == mes_fechado()]
+    fis_ult = float((ult.receita_maquininha + ult.receita_pix_direto).iloc[0]) if not ult.empty else 0.0
+    maq_na_fisica = float(ult.receita_maquininha.iloc[0]) / fis_ult if fis_ult else 0.5
     return {
-        "maquininha": _aparada(u.receita_maquininha / u.receita_liquida),
-        "pix_direto": _aparada(u.receita_pix_direto / u.receita_liquida),
+        "fisica": _aparada(fisica / u.receita_liquida),
+        "maq_na_fisica": maq_na_fisica,
         "desconto": _aparada(u.desconto_pix / u.receita_site),
         "estornos": _aparada(u.estornos / u.receita_site),
         "cmv_site": _aparada(u.cmv_site / cmv_total.replace(0, pd.NA)),
@@ -631,9 +642,10 @@ def _abrir_receita(receita: float, cmv: float) -> dict:
     p = _proporcoes()
     if not p:
         return {}
-    maq = receita * p["maquininha"]
-    pix = receita * p["pix_direto"]
-    site_liq = receita - maq - pix
+    fisica = receita * p["fisica"]
+    maq = fisica * p["maq_na_fisica"]
+    pix = fisica - maq
+    site_liq = receita - fisica
     # Desconto e estorno são só do site, e são medidos sobre a receita cheia
     # dele: site_liq = site_bruta × (1 − desconto − estorno).
     fator = 1 - p["desconto"] - p["estornos"]
