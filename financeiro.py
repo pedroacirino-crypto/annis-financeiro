@@ -559,7 +559,7 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     agencia = 1800.0
     marketing = float(r.ads) + agencia
     outras = float(r.fixos) - agencia + float(r.compromissos)
-    return {
+    linhas = {
         "Receita líquida": receita,
         "(-) Taxas Pagar.me": taxas,
         "(-) Imposto": imposto,
@@ -568,6 +568,61 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
         "(-) Meta e agência": marketing,
         "(-) Demais despesas": outras,
         "Resultado": receita - taxas - imposto - cmv - marketing - outras,
+    }
+    linhas.update(_abrir_receita(receita, cmv))
+    return linhas
+
+
+@memo()
+def _proporcoes(meses: int = 6) -> dict:
+    """Como a receita se reparte, medido nos últimos meses fechados.
+
+    O plano projeta um número só de receita líquida e um de CMV. Para o
+    orçado não ficar com metade das linhas em branco, o resto sai daqui:
+    proporção medida, não chute, e recalculada a cada mês que fecha.
+    """
+    t = pnl_competencia()["tabela"]
+    fim = mes_fechado()
+    u = t[(t.mes >= str(pd.Period(fim, "M") - (meses - 1))) & (t.mes <= fim)]
+    if u.empty or not u.receita_liquida.sum():
+        return {}
+    liq = u.receita_liquida.sum()
+    site_bruta = u.receita_site.sum()
+    site_liq = (u.receita_site - u.desconto_pix - u.estornos).sum()
+    return {
+        "maquininha": float(u.receita_maquininha.sum() / liq),
+        "pix_direto": float(u.receita_pix_direto.sum() / liq),
+        "desconto": float(u.desconto_pix.sum() / site_bruta),
+        "estornos": float(u.estornos.sum() / site_bruta),
+        "cmv_site": float(u.cmv_site.sum() / (u.cmv_site.sum() + u.cmv_fisico_estimado.sum())),
+        "ticket": float(site_bruta / u.pedidos.sum()) if u.pedidos.sum() else 0.0,
+        "meses": int(len(u)),
+    }
+
+
+def _abrir_receita(receita: float, cmv: float) -> dict:
+    """Quebra a receita líquida projetada em canal, desconto e estorno."""
+    p = _proporcoes()
+    if not p:
+        return {}
+    maq = receita * p["maquininha"]
+    pix = receita * p["pix_direto"]
+    site_liq = receita - maq - pix
+    # Desconto e estorno são só do site, e são medidos sobre a receita cheia
+    # dele: site_liq = site_bruta × (1 − desconto − estorno).
+    fator = 1 - p["desconto"] - p["estornos"]
+    site_bruta = site_liq / fator if fator > 0 else site_liq
+    cmv_site = cmv * p["cmv_site"]
+    return {
+        "Receita bruta": site_bruta + maq + pix,
+        "Receita do site (Shopify)": site_bruta,
+        "Maquininha (líquido de MDR)": maq,
+        "Pix direto e link": pix,
+        "(-) Desconto Pix": site_bruta * p["desconto"],
+        "(-) Estornos": site_bruta * p["estornos"],
+        "(-) CMV do site": cmv_site,
+        "(-) CMV fora do site (estimado)": cmv - cmv_site,
+        "Pedidos no site": site_bruta / p["ticket"] if p["ticket"] else 0.0,
     }
 
 

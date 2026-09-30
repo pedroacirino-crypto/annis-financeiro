@@ -222,6 +222,7 @@ def render():
         # para a linha do total, e as duas de detalhe ficam vazias no orçado.
         de_para = {"(-) CMV total": "(-) CMV"}
         campos = dict((r, c) for r, c, _ in LINHAS_PNL)
+        eh_dinheiro = dict((r, d) for r, _, d in LINHAS_PNL)
         col_orc, col_mtd = [], []
         for rotulo in wide.index:
             campo = campos.get(rotulo)
@@ -231,10 +232,15 @@ def render():
                 col_mtd.append(pct(mtd.margem_bruta.iloc[0] / mtd.receita_liquida.iloc[0])
                                if not mtd.empty and float(mtd.receita_liquida.iloc[0]) else "")
                 continue
+            dinheiro = eh_dinheiro.get(rotulo, True)
             v_orc = orc.get(de_para.get(rotulo, rotulo))
-            col_orc.append(brl(v_orc) if v_orc is not None else "")
-            col_mtd.append(brl(float(mtd[campo].iloc[0]))
-                           if campo and not mtd.empty and campo in mtd else "")
+            col_orc.append(("" if v_orc is None else
+                            brl(v_orc) if dinheiro else str(round(v_orc))))
+            if campo and not mtd.empty and campo in mtd:
+                v_mtd = float(mtd[campo].iloc[0])
+                col_mtd.append(brl(v_mtd) if dinheiro else str(int(v_mtd)))
+            else:
+                col_mtd.append("")
         rot_orc = f"{mes_curto(corrente)} orçado"
         rot_mtd = f"{mes_curto(corrente)} até dia {dia}" if dia else f"{mes_curto(corrente)} até hoje"
         wide[rot_orc] = col_orc
