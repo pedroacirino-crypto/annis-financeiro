@@ -209,10 +209,15 @@ hr {{ border-color: rgba(104,56,10,0.15); }}
 [data-testid="stDataFrame"] {{ border: 1px solid rgba(104,56,10,0.12); border-radius: 2px; }}
 .tbl-wrap {{ background:#FFFFFF; border:1px solid rgba(104,56,10,0.12); border-radius:2px; overflow:auto; }}
 .tbl {{ width:100%; border-collapse:collapse; font-family:'Poppins',sans-serif; font-size:0.82rem; }}
-.tbl thead th {{ position:sticky; top:0; background:#FFFFFF; text-align:left; font-weight:400; font-size:0.62rem; text-transform:uppercase; letter-spacing:0.1em; color:{MARROM_CLARO}; padding:0.85rem 0.9rem 0.5rem; border-bottom:1px solid {LINHA}; white-space:nowrap; }}
+.tbl thead th {{ position:sticky; top:0; z-index:2; background:#FFFFFF; text-align:left; font-weight:400; font-size:0.62rem; text-transform:uppercase; letter-spacing:0.1em; color:{MARROM_CLARO}; padding:0.85rem 0.9rem 0.5rem; border-bottom:1px solid {LINHA}; white-space:nowrap; }}
 .tbl tbody td {{ padding:0.6rem 0.9rem; border-bottom:1px solid rgba(232,218,203,0.55); color:#4A2C0F; white-space:nowrap; }}
+/* Cabeçalho e primeira coluna ficam parados enquanto o resto rola: sem isso
+   a tabela larga vira adivinhação, some o mês da linha e o nome da coluna. */
+.tbl tbody td:first-child {{ position:sticky; left:0; z-index:1; background:#FFFFFF; border-right:1px solid {LINHA}; }}
+.tbl thead th:first-child {{ z-index:3; left:0; border-right:1px solid {LINHA}; }}
 .tbl tbody tr:last-child td {{ border-bottom:none; }}
 .tbl tbody tr:hover td {{ background:#FFFBF7; }}
+.tbl tbody tr:hover td:first-child {{ background:#FFFBF7; }}
 .tbl th.num, .tbl td.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
 .tbl td.neg {{ color:#8C2F0D; }}
 .btn-acao {{ display:block; text-align:center; padding:0.5rem 0.6rem; border:1px solid rgba(104,56,10,0.35); border-radius:2px; color:{MARROM}; text-decoration:none; font-family:'Poppins',sans-serif; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.1em; background:#FFFFFF; }}
