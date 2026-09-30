@@ -147,9 +147,46 @@ def congelar_orcamento(mes: str) -> None:
         print(f"o plano não alcança {mes}")
         return
     n = dados_fin.salvar_orcamento(mes, linhas)
-    print(f"orçamento de {mes} congelado, {n} linhas:")
-    for k, v in linhas.items():
-        print(f"  {k:24s} R$ {v:>10,.2f}")
+    print(f"orçamento de {mes} congelado, {n} linhas.\n")
+    _conferir_orcamento(linhas)
+
+
+# Toda linha projetada é comparada com o último mês fechado, e o que se
+# afastar muito é apontado. Sem isto eu subi três projeções seguidas com
+# defeito e foi o Pedro quem achou, de olho, uma por vez, em 30/09/2026.
+_LIMITE = 25  # % de variação a partir do qual a linha precisa de explicação
+
+
+def _conferir_orcamento(linhas: dict) -> None:
+    import financeiro
+    t = financeiro.pnl_competencia()["tabela"]
+    ref = t[t.mes == financeiro.mes_fechado()]
+    if ref.empty:
+        return
+    s = ref.iloc[0]
+    campos = {
+        "Pedidos no site": "pedidos", "Receita bruta": "receita_bruta",
+        "Receita do site (Shopify)": "receita_site", "Maquininha (líquido de MDR)": "receita_maquininha",
+        "Pix direto e link": "receita_pix_direto", "(-) Desconto Pix": "desconto_pix",
+        "(-) Estornos": "estornos", "Receita líquida": "receita_liquida",
+        "(-) Taxas Pagar.me": "taxas", "(-) Imposto": "imposto", "(-) CMV do site": "cmv_site",
+        "(-) CMV fora do site (estimado)": "cmv_fisico_estimado", "(-) CMV": "cmv",
+        "Margem bruta": "margem_bruta", "(-) Meta e agência": "marketing",
+        "(-) Demais despesas": "despesas_outras", "Resultado": "resultado",
+    }
+    print(f"  {'linha':34s} {financeiro.mes_fechado():>10s} {'projetado':>11s} {'variação':>9s}")
+    suspeitas = []
+    for rot, campo in campos.items():
+        real, proj = float(s[campo]), linhas.get(rot, 0.0)
+        var = (proj / real - 1) * 100 if real else float("nan")
+        marca = ""
+        if real and abs(var) > _LIMITE:
+            marca = "  <<< explique"
+            suspeitas.append(rot)
+        print(f"  {rot:34s} {real:>10,.0f} {proj:>11,.0f} {var:>8.0f}%{marca}")
+    if suspeitas:
+        print(f"\n  {len(suspeitas)} linha(s) acima de {_LIMITE}% de variação: " + ", ".join(suspeitas))
+        print("  Cada uma precisa de um motivo, senão é defeito de estimador e não projeção.")
 
 
 def carregar_regras() -> None:

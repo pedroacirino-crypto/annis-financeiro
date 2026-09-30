@@ -616,7 +616,13 @@ def _proporcoes(meses: int = 6) -> dict:
     return {
         "fisica": _aparada(fisica / u.receita_liquida),
         "maq_na_fisica": maq_na_fisica,
-        "desconto": _aparada(u.desconto_pix / u.receita_site),
+        # Desconto de Pix pelo mês fechado, não pela média: até agosto todo
+        # pedido Pix levava 5% e em setembro só 1 de 9 levou. A política
+        # mudou, o cupom virou FRETEGRATIS, e a média de 6 meses projetava
+        # R$ 234 onde setembro gastou R$ 19. Média sobre mudança de regime
+        # é o mesmo erro do ticket.
+        "desconto": (float(ult.desconto_pix.iloc[0]) / float(ult.receita_site.iloc[0])
+                     if not ult.empty and float(ult.receita_site.iloc[0]) else 0.0),
         "estornos": _aparada(u.estornos / u.receita_site),
         "cmv_site": _aparada(u.cmv_site / cmv_total.replace(0, pd.NA)),
         # Ticket pelo mês fechado mais recente, não pela média: ele vem
