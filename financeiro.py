@@ -619,7 +619,14 @@ def _proporcoes(meses: int = 6) -> dict:
         "desconto": _aparada(u.desconto_pix / u.receita_site),
         "estornos": _aparada(u.estornos / u.receita_site),
         "cmv_site": _aparada(u.cmv_site / cmv_total.replace(0, pd.NA)),
-        "ticket": _aparada(u.receita_site / u.pedidos.replace(0, pd.NA)),
+        # Ticket pelo mês fechado mais recente, não pela média: ele vem
+        # caindo (1.324, 867, 865, 771) e a média aparada dava R$ 921, o que
+        # fazia a projeção vender menos peças e faturar mais sem nada que
+        # sustentasse a alta. O Pedro viu em 30/09/2026. Com o ticket de
+        # M-1, o crescimento da receita aparece como mais pedido, que é o
+        # que a operação vem fazendo.
+        "ticket": (float(ult.receita_site.iloc[0]) / float(ult.pedidos.iloc[0])
+                   if not ult.empty and float(ult.pedidos.iloc[0]) else 0.0),
         "meses": int(len(u)),
     }
 
