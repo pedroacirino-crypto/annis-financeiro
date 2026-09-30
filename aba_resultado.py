@@ -22,6 +22,7 @@ import streamlit as st
 import extrato
 import financeiro as fin
 import plano
+from ui import tabela
 
 
 COR = {"receita": "#1f5fa8", "margem": "#7fb3e6", "resultado": "#c0392b", "caixa": "#2e7d32",
@@ -220,7 +221,9 @@ def render():
         dc = dc.loc[[m for m in dc.index if m in meses_vis and dc.loc[m].sum() > 0]]
         dc.index = [mes_curto(m) for m in dc.index]
         dc = dc.loc[:, (dc != 0).any()]
-        st.dataframe(dc.map(lambda v: brl(v) if v else ""), width="stretch")
+        vis = dc.map(lambda v: brl(v) if v else "").reset_index()
+        vis = vis.rename(columns={vis.columns[0]: "Mês"})
+        tabela(vis, num=[c for c in vis.columns if c != "Mês"], altura_max=520)
         com_fatura = fin.meses_com_fatura()
         if com_fatura:
             quem = ", ".join(f"{t} ({len(m)} faturas)" for t, m in sorted(com_fatura.items()))

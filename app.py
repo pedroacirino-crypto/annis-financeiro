@@ -17,6 +17,7 @@ import db
 import nuvem
 import pagarme_client
 import shopify_client
+from ui import tabela
 
 # Precisa ser o primeiro comando Streamlit do arquivo.
 st.set_page_config(
@@ -525,44 +526,6 @@ def fmt_brl(centavos: int) -> str:
 def md(texto: str) -> str:
     """Escapa o cifrão, em markdown o Streamlit trata `$...$` como LaTeX."""
     return texto.replace("$", r"\$")
-
-
-def tabela(df, num=(), altura_max=None):
-    """Tabela em HTML no padrão da marca.
-
-    O st.dataframe desenha num canvas com grade em volta de cada célula, não
-    dá para estilizar por CSS e destoa do resto. Aqui sai HTML de verdade:
-    sem linhas verticais, cabeçalho em caixa alta discreta, régua fina entre
-    as linhas. `num` são as colunas alinhadas à direita (valores).
-    """
-    import html as _html
-
-    cab = "".join(
-        f'<th class="num">{_html.escape(str(c))}</th>' if c in num
-        else f"<th>{_html.escape(str(c))}</th>"
-        for c in df.columns
-    )
-    corpo = []
-    for _, linha in df.iterrows():
-        celulas = []
-        for c in df.columns:
-            v = "" if pd.isna(linha[c]) else str(linha[c])
-            classe = "num" if c in num else ""
-            if classe and v.strip().startswith("-"):
-                classe += " neg"
-            celulas.append(
-                f'<td class="{classe}">{_html.escape(v)}</td>' if classe
-                else f"<td>{_html.escape(v)}</td>"
-            )
-        corpo.append("<tr>" + "".join(celulas) + "</tr>")
-
-    estilo = f' style="max-height:{altura_max}px"' if altura_max else ""
-    # Sem quebras de linha: linha em branco encerraria o bloco HTML no markdown.
-    st.markdown(
-        f'<div class="tbl-wrap"{estilo}><table class="tbl">'
-        f"<thead><tr>{cab}</tr></thead><tbody>{''.join(corpo)}</tbody></table></div>",
-        unsafe_allow_html=True,
-    )
 
 
 def fmt_pct(x: float, casas: int = 2) -> str:
