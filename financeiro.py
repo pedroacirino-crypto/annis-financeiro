@@ -636,6 +636,31 @@ def compromissos_por_categoria(mes: str) -> dict:
     return saida
 
 
+def _premissas_do_painel():
+    """As premissas como o painel as mostra, já arredondadas pelo passo do
+    slider. O orçamento congela exatamente o que está na tela, senão o
+    gráfico diz um número e a coluna do orçado diz outro: em 30/09/2026 o
+    lucro projetado de outubro dava R$ 276 no gráfico e R$ 314 no orçado,
+    e os R$ 38 eram só isto.
+    """
+    import plano
+    m = premissas_medidas()
+    if not m:
+        return None
+    return plano.Premissas(
+        inicio=mes_corrente(),
+        receita_base=round(m["receita_base"][0] / 100) * 100,
+        crescimento=round(m["crescimento"][0] * 100, 1) / 100,
+        cmv=round(m["cmv"][0] * 100, 1) / 100,
+        taxas=round(m["taxas"][0] * 100, 1) / 100,
+        ads=round(m["ads"][0] * 100, 1) / 100,
+        fixos=float(round(m["fixos"][0] / 100) * 100),
+        share_fisica=m["share_fisica"][0],
+        prazo_recebimento=m["prazo_recebimento"][0],
+        estoque_custo=estoque_a_custo(),
+        caixa_inicial=max(_caixa_hoje(), 0.0))
+
+
 @memo()
 def caixa_orcado(mes: str) -> dict:
     """A linha do fluxo de caixa projetado, nas colunas da tabela de caixa.
@@ -646,14 +671,9 @@ def caixa_orcado(mes: str) -> dict:
     estoque, despesa e imposto, dá o saldo do mês do plano.
     """
     import plano
-    m = premissas_medidas()
-    if not m:
+    p = _premissas_do_painel()
+    if p is None:
         return {}
-    p = plano.Premissas(
-        inicio=mes_corrente(), receita_base=m["receita_base"][0], crescimento=m["crescimento"][0],
-        cmv=m["cmv"][0], taxas=m["taxas"][0], ads=m["ads"][0], share_fisica=m["share_fisica"][0],
-        fixos=m["fixos"][0], prazo_recebimento=m["prazo_recebimento"][0],
-        estoque_custo=estoque_a_custo(), caixa_inicial=max(_caixa_hoje(), 0.0))
     sim = plano.simular(p)
     linha = sim["tabela"][sim["tabela"].mes == mes]
     if linha.empty:
@@ -776,12 +796,9 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     onde ela aparece no realizado.
     """
     import plano
-    m = premissas_medidas()
-    p = premissas or plano.Premissas(
-        inicio=mes_corrente(), receita_base=m["receita_base"][0],
-        crescimento=m["crescimento"][0], cmv=m["cmv"][0], taxas=m["taxas"][0],
-        ads=m["ads"][0], share_fisica=m["share_fisica"][0],
-        fixos=m["fixos"][0], prazo_recebimento=m["prazo_recebimento"][0])
+    p = premissas or _premissas_do_painel()
+    if p is None:
+        return {}
     sim = plano.simular(p)
     linha = sim["tabela"][sim["tabela"].mes == mes]
     if linha.empty:
