@@ -601,18 +601,29 @@ def _proporcoes(meses: int = 6) -> dict:
     u = t[(t.mes >= str(pd.Period(fim, "M") - (meses - 1))) & (t.mes <= fim)]
     if u.empty or not u.receita_liquida.sum():
         return {}
-    liq = u.receita_liquida.sum()
-    site_bruta = u.receita_site.sum()
-    site_liq = (u.receita_site - u.desconto_pix - u.estornos).sum()
+    cmv_total = u.cmv_site + u.cmv_fisico_estimado
     return {
-        "maquininha": float(u.receita_maquininha.sum() / liq),
-        "pix_direto": float(u.receita_pix_direto.sum() / liq),
-        "desconto": float(u.desconto_pix.sum() / site_bruta),
-        "estornos": float(u.estornos.sum() / site_bruta),
-        "cmv_site": float(u.cmv_site.sum() / (u.cmv_site.sum() + u.cmv_fisico_estimado.sum())),
-        "ticket": float(site_bruta / u.pedidos.sum()) if u.pedidos.sum() else 0.0,
+        "maquininha": _aparada(u.receita_maquininha / u.receita_liquida),
+        "pix_direto": _aparada(u.receita_pix_direto / u.receita_liquida),
+        "desconto": _aparada(u.desconto_pix / u.receita_site),
+        "estornos": _aparada(u.estornos / u.receita_site),
+        "cmv_site": _aparada(u.cmv_site / cmv_total.replace(0, pd.NA)),
+        "ticket": _aparada(u.receita_site / u.pedidos.replace(0, pd.NA)),
         "meses": int(len(u)),
     }
+
+
+def _aparada(s: pd.Series) -> float:
+    """Média sem o maior e o menor. Escolha do Pedro em 30/09/2026.
+
+    A média agregada era puxada pelos meses grandes: setembro vendeu muito
+    e teve pouca maquininha, e isso sozinho derrubava a proporção do canal.
+    Com poucos meses de histórico, um mês fora da curva move demais.
+    """
+    s = s.replace([float("inf"), float("-inf")], pd.NA).dropna().astype(float).sort_values()
+    if len(s) >= 4:
+        s = s.iloc[1:-1]
+    return float(s.mean()) if len(s) else 0.0
 
 
 def _abrir_receita(receita: float, cmv: float) -> dict:
