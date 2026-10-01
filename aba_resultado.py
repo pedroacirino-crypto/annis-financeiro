@@ -461,6 +461,13 @@ def render():
             "Estoque que envelhece por mês (%)", min_value=0.0, max_value=20.0, value=2.0, step=0.5, format="%.1f",
             help="Peça que deixa de vender a preço cheio. Sai do estoque sem virar receita.") / 100
 
+        if dec:
+            st.caption(md(
+                f"**Decisão congelada para {mes_curto(fin.mes_corrente())}**: Meta de "
+                f"{brl(dec.get('ads', 0) * dec.get('receita_base', 0) * (1 - med['share_fisica'][0]))} "
+                f"com ROAS de {dec.get('roas', 0):.2f}x, o que leva a receita de partida de "
+                f"{brl(med['receita_base'][0])} medidos para {brl(dec.get('receita_base', 0))}. "
+                "Os campos acima já vêm com ela; a tabela abaixo mostra o que o dado diz, sem a decisão."))
         regras = pd.DataFrame(
             [{"Premissa": d, "Regra": r,
               "Medido": (f"{v * 100:.1f}%" if v < 1 else brl(v))}
