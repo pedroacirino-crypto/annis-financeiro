@@ -659,6 +659,7 @@ def _premissas_do_painel():
         fixos=m["fixos"][0],
         share_fisica=m["share_fisica"][0],
         prazo_recebimento=m["prazo_recebimento"][0],
+        ads_a_pagar=float(meta_ads().get(mes_fechado(), 0.0)),
         estoque_custo=estoque_a_custo(),
         caixa_inicial=max(_caixa_hoje(), 0.0))
 
@@ -687,7 +688,7 @@ def caixa_orcado(mes: str) -> dict:
         "Site": float(r.recebido) - fisica - (float(r.taxas) - imposto),
         "Fora do site": fisica,
         "Estoque": -float(r.producao),
-        "Despesas": -(float(r.ads) + float(r.fixos) + float(r.compromissos)),
+        "Despesas": -(float(r.ads_pago) + float(r.fixos) + float(r.compromissos)),
         "Imposto": -imposto,
         "Saldo do mês": float(r.fluxo),
         "Aportes": float(r.aporte),

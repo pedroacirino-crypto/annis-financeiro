@@ -470,6 +470,7 @@ def render():
                            prazo_recebimento=med["prazo_recebimento"][0],
                            estoque_custo=estoque_custo, acumulado_historico=acumulado,
                            caixa_inicial=max(float(fx.caixa.iloc[-1]), 0.0),
+                           ads_a_pagar=float(fin.meta_ads().get(mes_base, 0.0)),
                            a_receber_inicial=float(fluxo[fluxo.mes >= hoje].a_receber.sum()))
     res = plano.simular(prem)
     pt = res["tabela"]

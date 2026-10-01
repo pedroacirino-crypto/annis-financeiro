@@ -100,6 +100,7 @@ class Premissas:
     envelhecimento: float = 0.02         # fração do estoque que deixa de ser vendável por mês
     antecedencia: int = 2                # produz em M para vender em M+antecedencia
     prazo_recebimento: float = 0.3       # fração da receita que só cai no mês seguinte (cartão)
+    ads_a_pagar: float = 0.0             # Meta do mês anterior ao início, que é pago no primeiro mês
     a_receber_inicial: float = 0.0       # recebíveis da Pagar.me ainda por cair
     caixa_inicial: float = 0.0           # saldo da conta no início do plano
     acumulado_historico: float = -94574.0
@@ -129,6 +130,11 @@ def simular(p: Premissas) -> dict:
     compromissos = {m: v for m, v in compromissos.items() if m >= str(ini)}
     compromissos[str(ini)] = compromissos.get(str(ini), 0.0) + atrasados
 
+    # O Meta vai no cartão e a fatura é paga no mês seguinte: a mídia de
+    # agosto saiu na fatura paga em 11/09/2026. No resultado ele é do mês em
+    # que foi veiculado, no caixa é do mês seguinte. O Pedro apontou em
+    # 30/09/2026 que o aporte estava caindo no mês errado por causa disso.
+    ads_a_pagar = p.ads_a_pagar
     linhas, estoque, caixa, receita_anterior = [], p.estoque_custo, p.caixa_inicial, 0.0
     total_aportes = 0.0
     for i, m in enumerate(meses):
@@ -163,7 +169,8 @@ def simular(p: Premissas) -> dict:
         estoque += demanda[i + p.antecedencia] * p.cmv * fracao
 
         compromisso_mes = compromissos.get(str(m), 0.0)
-        fluxo = recebido - taxas - ads - p.fixos - producao - compromisso_mes
+        fluxo = recebido - taxas - ads_a_pagar - p.fixos - producao - compromisso_mes
+        ads_pago, ads_a_pagar = ads_a_pagar, ads
         caixa += fluxo
         aporte = 0.0
         if caixa < 0:
@@ -181,6 +188,7 @@ def simular(p: Premissas) -> dict:
         linhas.append({
             "mes": str(m), "receita": d, "recebido": recebido, "taxas": taxas, "ads": ads,
             "fixos": p.fixos, "producao": producao, "compromissos": compromisso_mes,
+            "ads_pago": ads_pago,
             "cmv_competencia": cmv_total, "do_estoque": do_estoque, "estoque_restante": estoque,
             "envelhecido": envelhecido, "fracao_producao": fracao,
             "fluxo": fluxo, "aporte": aporte, "caixa": caixa, "resultado": resultado,
