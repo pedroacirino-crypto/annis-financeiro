@@ -5,3 +5,7 @@ altair>=5.4,<6
 # Histórico que precisa sobreviver ao reinício do Streamlit, num Postgres.
 sqlalchemy>=2.0,<3
 psycopg2-binary>=2.9,<3
+
+# Mexer aqui obriga a Streamlit Cloud a reinstalar e reiniciar o processo.
+# Sem isso ela puxa o commit novo para o disco e continua servindo o codigo
+# velho, como em 01/10/2026.

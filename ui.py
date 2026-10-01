@@ -92,13 +92,22 @@ def tabela(df, num=(), altura_max=None, titulo="Tabela", fixas_direita=0, fixas_
 
 
 def versao_publicada() -> str:
-    """Commit que está rodando, lido do .git que a Streamlit Cloud clona.
+    """Commit que o processo carregou, não o que está no disco.
 
     Existe para eu conseguir conferir o que foi publicado sem passar pela
     senha. Sem isto eu ficava adivinhando se um deploy tinha entrado, e
     cheguei a dizer que o Pedro estava vendo versão velha sem ter como
     saber. Aparece discreto na tela de entrada.
+
+    Lido uma vez só, quando o módulo é importado. Em 01/10/2026 a Streamlit
+    Cloud já tinha puxado o commit novo para o disco e ainda servia o código
+    velho: a tela dizia uma versão e a conta vinha de outra. Lendo no
+    import, o número que aparece é o do código que está de fato rodando.
     """
+    return _VERSAO
+
+
+def _ler_versao() -> str:
     import pathlib
     try:
         raiz = pathlib.Path(__file__).resolve().parent / ".git"
@@ -116,3 +125,6 @@ def versao_publicada() -> str:
         return cabeca[:7]
     except Exception:
         return "?"
+
+
+_VERSAO = _ler_versao()
