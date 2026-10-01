@@ -459,7 +459,12 @@ def render():
     res = plano.simular(prem)
     pt = res["tabela"]
     fim_horizonte = mes_curto(pt.mes.iloc[-1])
-    contrib = 1 - prem.taxas - prem.cmv - prem.ads
+    # Taxa e Meta incidem sobre bases diferentes da receita total: o Simples
+    # pega tudo, a Pagar.me só o site, e o Meta é indexado ao site. Antes de
+    # 30/09/2026 os três eram somados como se fossem todos sobre o total.
+    taxa_efetiva = prem.imposto + (1 - prem.share_fisica) * prem.taxa_site
+    ads_efetivo = (1 - prem.share_fisica) * prem.ads
+    contrib = 1 - taxa_efetiva - prem.cmv - ads_efetivo
     breakeven_lucro = prem.fixos / contrib if contrib > 0 else float("inf")
 
 
@@ -613,9 +618,9 @@ def render():
     with st.expander("Cenários: o que muda se mexer numa alavanca"):
         cenarios = [
             ("Base", {}),
-            ("Meta a 8%", {"ads": 0.08}),
-            ("Meta a 16%", {"ads": 0.16}),
-            ("Sem agência (fixos R$ 5,8 mil)", {"fixos": 5800.0}),
+            ("Meta a 10% do site", {"ads": 0.10}),
+            ("Meta a 25% do site", {"ads": 0.25}),
+            ("Sem agência", {"fixos": max(prem.fixos - 1800.0, 0.0)}),
             ("Crescimento amortece menos (0,9)", {"fator_reducao": 0.9}),
             ("Crescimento amortece mais (0,7)", {"fator_reducao": 0.7}),
             ("Sem crescimento", {"crescimento": 0.0}),
