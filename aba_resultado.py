@@ -115,7 +115,10 @@ def render():
     if not fin.legado_disponivel() or not extrato.disponivel():
         st.error("Sem extrato e fichas: carregue com `carga.py` no Supabase, ou deixe os arquivos em `legado/`.")
         return
-    hoje = datetime.now().strftime("%Y-%m")
+    # "Hoje" vem do dado, não do relógio do servidor, que roda em UTC e vira
+    # o mês três horas antes: em 30/09/2026 às 21h o gráfico já projetava a
+    # partir de novembro e outubro ficava sem barra.
+    hoje = fin.mes_fechado()
     d = _dados(versao_publicada())
     pnl = d["pnl"]
     t = pnl["tabela"]
@@ -216,8 +219,14 @@ def render():
         # já entrou até hoje. Linha que o plano não projeta fica vazia em
         # vez de inventada.
         orc = fin.orcamentos().get(corrente, {})
-        mtd = t[t.mes == corrente]
         dia = ex.data.max().day if ex.data.max().strftime("%Y-%m") == corrente else 0
+        # Mês pela metade antes do dia 10 não diz nada: medido nos seis meses
+        # fechados, no dia 5 já tinha entrado entre 0% e 35% do mês. Até lá a
+        # coluna do realizado nem aparece e vale só a projeção. Regra do
+        # Pedro, 30/09/2026.
+        DIA_DO_MTD = 10
+        mostra_mtd = dia >= DIA_DO_MTD
+        mtd = t[t.mes == corrente] if mostra_mtd else t.iloc[0:0]
         # O plano projeta o CMV inteiro, sem separar site de físico: ele vai
         # para a linha do total, e as duas de detalhe ficam vazias no orçado.
         de_para = {"(-) CMV total": "(-) CMV"}
@@ -242,19 +251,23 @@ def render():
             else:
                 col_mtd.append("")
         rot_orc = f"{mes_curto(corrente)} orçado"
-        rot_mtd = f"{mes_curto(corrente)} até dia {dia}" if dia else f"{mes_curto(corrente)} até hoje"
+        rot_mtd = f"{mes_curto(corrente)} até dia {dia}"
         wide[rot_orc] = col_orc
-        wide[rot_mtd] = col_mtd
+        if mostra_mtd:
+            wide[rot_mtd] = col_mtd
 
         vis = wide.reset_index().rename(columns={"index": ""})
         tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560,
-               titulo="PnL por competência", fixas_direita=2)
+               titulo="PnL por competência", fixas_direita=2 if mostra_mtd else 1)
         st.caption(md(
             f"As duas últimas colunas são o mês que está correndo e ficam paradas enquanto o resto rola. "
             f"**{rot_orc}** é a projeção congelada em "
             f"{'hoje' if not orc else ''}{pd.Timestamp.now():%d/%m/%Y}, feita antes do mês começar, e não se mexe mais. "
-            f"**{rot_mtd}** é mês pela metade: não compare com coluna de mês fechado. "
-            "Linha vazia no orçado é linha que o plano não projeta, como receita por canal."))
+            + (f"**{rot_mtd}** é mês pela metade: não compare com coluna de mês fechado. "
+               if mostra_mtd else
+               f"O realizado de {mes_curto(corrente)} entra a partir do dia {DIA_DO_MTD}: "
+               "antes disso o mês mal começou e o número engana mais do que informa. ")
+            + "Linha vazia no orçado é linha que o plano não projeta, como receita por canal."))
         if pnl["cobertura_cmv"] < 0.999:
             faltam = ", ".join(f"{k} ({v})" for k, v in pnl["pecas_sem_custo"].items())
             st.caption(md(f"CMV do site cobre {pct(pnl['cobertura_cmv'])} das peças; sem ficha: {faltam}. "
@@ -286,7 +299,7 @@ def render():
         # Mesma dupla do PnL: o mês corrente sai do meio e vira orçado e
         # realizado até hoje, presos na direita.
         cxo = fin.caixa_orcado(corrente)
-        cxm = fx[fx.mes == corrente]
+        cxm = fx[fx.mes == corrente] if mostra_mtd else fx.iloc[0:0]
         linha_orc = {"Mês": f"{mes_curto(corrente)} orçado",
                      **{k: brl(v) for k, v in cxo.items()}}
         linha_mtd = {"Mês": rot_mtd}
@@ -300,9 +313,10 @@ def render():
                 "Estrutura": brl(-r.saida_capex) if r.saida_capex else "",
                 "Saldo do mês": brl(r.saldo_operacional),
                 "Aportes": brl(r.aportes) if r.aportes else "", "Caixa": brl(r.caixa)})
-        cx = pd.concat([cx, pd.DataFrame([linha_orc, linha_mtd])], ignore_index=True).fillna("")
+        novas_linhas = [linha_orc, linha_mtd] if mostra_mtd else [linha_orc]
+        cx = pd.concat([cx, pd.DataFrame(novas_linhas)], ignore_index=True).fillna("")
         tabela(cx, num=[c for c in cx.columns if c != "Mês"], altura_max=520,
-               titulo="Caixa mês a mês", fixas_baixo=2)
+               titulo="Caixa mês a mês", fixas_baixo=len(novas_linhas))
 
     with st.expander("Tabela: despesas por categoria"):
         dc = pnl["despesas_por_categoria"]
@@ -314,7 +328,7 @@ def render():
         dproj = dict(fin.despesas_projetadas())
         dproj["Meta Ads"] = orc.get("(-) Meta e agência", 0.0) - dproj.get("Ads e agência", 0.0)
         mtd_desp = pnl["despesas_por_categoria"]
-        mtd_desp = mtd_desp.loc[corrente] if corrente in mtd_desp.index else None
+        mtd_desp = mtd_desp.loc[corrente] if (mostra_mtd and corrente in mtd_desp.index) else None
         l_orc = {"Mês": f"{mes_curto(corrente)} orçado"}
         l_mtd = {"Mês": rot_mtd}
         for c in vis.columns:
@@ -327,9 +341,10 @@ def render():
             vis[c] = ""
             l_orc[c] = brl(dproj[c])
             l_mtd[c] = ""
-        vis = pd.concat([vis, pd.DataFrame([l_orc, l_mtd])], ignore_index=True).fillna("")
+        novas_d = [l_orc, l_mtd] if mostra_mtd else [l_orc]
+        vis = pd.concat([vis, pd.DataFrame(novas_d)], ignore_index=True).fillna("")
         tabela(vis, num=[c for c in vis.columns if c != "Mês"], altura_max=520,
-               titulo="Despesas por categoria", fixas_baixo=2)
+               titulo="Despesas por categoria", fixas_baixo=len(novas_d))
         com_fatura = fin.meses_com_fatura()
         if com_fatura:
             quem = ", ".join(f"{t} ({len(m)} faturas)" for t, m in sorted(com_fatura.items()))
@@ -490,15 +505,24 @@ def render():
     filme["lucro_acumulado"] = filme.resultado.fillna(0).cumsum()
     filme["lucro_acumulado_brl"] = (filme.lucro_acumulado * 1000).map(brl)
     filme.loc[filme.fase == "Projetado", "lucro_acumulado"] = filme.loc[filme.fase == "Projetado", "lucro_acumulado"]
+    # Barra com 43 meses no eixo fica com 7 pixels de largura e o mês que
+    # está começando some. Os gráficos de barra mostram 12 meses à frente,
+    # onde a barra dobra de largura; as linhas de acumulado ficam com o
+    # horizonte inteiro, que é onde o payback aparece.
+    MESES_EM_BARRA = 12
+    corte_barra = pt.mes.iloc[min(MESES_EM_BARRA, len(pt)) - 1] if len(pt) else hoje
+    barra = filme[filme.mes <= corte_barra]
     ordem = list(dict.fromkeys(filme.rotulo))
+    ordem_barra = list(dict.fromkeys(barra.rotulo))
     corte = mes_curto(hoje)
     eixo_x = alt.X("rotulo:N", sort=ordem, scale=alt.Scale(domain=ordem), title="")
+    eixo_barra = alt.X("rotulo:N", sort=ordem_barra, scale=alt.Scale(domain=ordem_barra), title="")
     # Cada camada precisa do seu próprio objeto: reaproveitar o mesmo gráfico
     # em vários layers faz o Altair mandar o dado uma vez só e os gráficos
     # seguintes quebram com "Unrecognized data set", sem desenhar as marcas.
-    def regua_hoje():
+    def regua_hoje(eixo=None):
         return alt.Chart(pd.DataFrame({"rotulo": [corte]})).mark_rule(
-            color=COR["neutro"], strokeDash=[4, 4]).encode(x=eixo_x)
+            color=COR["neutro"], strokeDash=[4, 4]).encode(x=eixo if eixo is not None else eixo_x)
 
     def zero():
         return alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(color=COR["neutro"]).encode(y="y")
@@ -508,11 +532,11 @@ def render():
 
     def barras_sinal_filme(coluna, titulo):
         """Barras verde/vermelho; o projetado sai mais claro para não se confundir."""
-        g = filme.dropna(subset=[coluna]).copy()
+        g = barra.dropna(subset=[coluna]).copy()
         g["classe"] = [("+" if v >= 0 else "-") + ("R" if f == "Realizado" else "P") for v, f in zip(g[coluna], g.fase)]
         escala = alt.Scale(domain=["+R", "-R", "+P", "-P"], range=[COR["caixa"], COR["resultado"], "#9ccc9c", "#e8a09a"])
         return alt.Chart(g).mark_bar().encode(
-            x=eixo_x, y=alt.Y(f"{coluna}:Q", title=f"{titulo} (R$ mil)"),
+            x=eixo_barra, y=alt.Y(f"{coluna}:Q", title=f"{titulo} (R$ mil)"),
             color=alt.Color("classe:N", scale=escala, legend=None),
             tooltip=["rotulo", "fase", alt.Tooltip(f"{coluna}_brl:N", title=titulo)],
         )
@@ -521,22 +545,22 @@ def render():
     f1, f2 = st.columns(2)
     with f1:
         st.markdown("**Receita líquida**")
-        barras = alt.Chart(filme.dropna(subset=["receita"])).mark_bar().encode(
-            x=eixo_x, y=alt.Y("receita:Q", title="R$ mil"),
+        barras = alt.Chart(barra.dropna(subset=["receita"])).mark_bar().encode(
+            x=eixo_barra, y=alt.Y("receita:Q", title="R$ mil"),
             color=alt.Color("fase:N", title="", scale=alt.Scale(domain=["Realizado", "Projetado"], range=[COR["receita"], COR["margem"]]), legend=legenda_fase),
             tooltip=["rotulo", "fase", alt.Tooltip("receita_brl:N", title="Receita líquida")])
         be = alt.Chart(pd.DataFrame({"y": [breakeven_lucro / 1000]})).mark_rule(color=COR["resultado"], strokeDash=[6, 4]).encode(y="y")
-        st.altair_chart((barras + be + regua_hoje()).properties(height=230), use_container_width=True)
+        st.altair_chart((barras + be + regua_hoje(eixo_barra)).properties(height=230), use_container_width=True)
         st.caption(md(f"Tracejado vermelho: {brl(breakeven_lucro)}/mês, onde o lucro começa."))
     with f2:
         st.markdown("**Lucro do mês (competência)**")
-        st.altair_chart((barras_sinal_filme("resultado", "Lucro") + zero() + regua_hoje()).properties(height=230), use_container_width=True)
+        st.altair_chart((barras_sinal_filme("resultado", "Lucro") + zero() + regua_hoje(eixo_barra)).properties(height=230), use_container_width=True)
         st.caption(md("Receita menos taxas, CMV cheio, Meta, agência e fixos. Tom mais claro é projeção."))
 
     f3, f4 = st.columns(2)
     with f3:
         st.markdown("**Fluxo de caixa do mês**")
-        st.altair_chart((barras_sinal_filme("fluxo", "Fluxo") + zero() + regua_hoje()).properties(height=230), use_container_width=True)
+        st.altair_chart((barras_sinal_filme("fluxo", "Fluxo") + zero() + regua_hoje(eixo_barra)).properties(height=230), use_container_width=True)
         st.caption(md("O que entrou menos o que saiu no mês, sem aportes. Vermelho depois de hoje é mês que pede aporte."))
     with f4:
         st.markdown("**Acumulados: caixa e lucro**")

@@ -726,11 +726,33 @@ def premissas_medidas() -> dict:
         "desconto": (prop.get("desconto", 0.0), "M-1", "desconto de Pix sobre a receita do site"),
         "estornos": (prop.get("estornos", 0.0), "aparada", "estornos sobre a receita do site"),
         "cmv_site": (prop.get("cmv_site", 0.0), "aparada", "fatia do site no CMV"),
+        "roas": (_roas(), "M-1", "receita do site por real de Meta"),
         "fixos": (sum(despesas_projetadas().values()), "por categoria",
                   "despesas fora Meta, somadas da projeção por categoria"),
         "prazo_recebimento": (_prazo_recebimento() * (1 - prop.get("fisica", 0.0)), "aparada",
                               "fatia da receita que só cai no mês seguinte"),
     }
+
+
+@memo()
+def _roas() -> float:
+    """Receita do site por real investido em Meta, no último mês fechado.
+
+    Fica como informação medida, não entra na projeção: o plano cresce a
+    receita por uma taxa e trata o Meta como custo. Ligar os dois viraria
+    circular, porque o Meta é indexado à receita. A decisão de quanto
+    investir se toma olhando este número, não simulando na tela. Pedido do
+    Pedro em 30/09/2026.
+
+    Vem do mês fechado porque tem trajetória clara: 3,6x em fevereiro,
+    6,8x em setembro.
+    """
+    meta = meta_ads().get(mes_fechado())
+    t = pnl_competencia()["tabela"]
+    linha = t[t.mes == mes_fechado()]
+    if not meta or linha.empty:
+        return 0.0
+    return float(linha.receita_site.iloc[0]) / float(meta)
 
 
 @memo()
@@ -1268,7 +1290,11 @@ def fluxo_de_caixa() -> pd.DataFrame:
     ap_mes = ap.groupby(ap.data.dt.strftime("%Y-%m"))["valor"].sum() if not ap.empty else pd.Series(dtype=float)
     pag = caixa_pagarme_por_mes()
 
-    hoje = datetime.now().strftime("%Y-%m")
+    # O mês corrente sai do dado, não do relógio: o servidor roda em UTC e
+    # no fim do dia 30 ele já acha que virou o mês, o que fazia o gráfico
+    # projetar a partir de novembro e deixar outubro sem barra nenhuma.
+    # O Pedro viu em 30/09/2026 às 21h, que é 01/10 em UTC.
+    hoje = mes_fechado()
     meses = _eixo_meses(ent_nat.index, sai_nat.index, ap_mes.index, pag.index if not pag.empty else [], [hoje])
     t = pd.DataFrame(index=meses)
     t.index.name = "mes"
