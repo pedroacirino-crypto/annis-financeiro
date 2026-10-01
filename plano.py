@@ -90,7 +90,8 @@ class Premissas:
     crescimento: float = 0.105           # ao mês, ajuste log-linear abr a set/26
     fator_reducao: float = 0.8           # g_t = crescimento · fator^t
     cmv: float = 0.414                   # CMV médio sobre receita líquida
-    taxas: float = 0.074                 # taxas Pagar.me + Simples
+    imposto: float = 0.0264              # Simples, sobre toda a receita
+    taxa_site: float = 0.0694            # Pagar.me, só sobre a receita líquida do site
     ads: float = 0.094                   # Meta, % da receita DO SITE, do último mês fechado
     share_fisica: float = 0.331          # fatia da receita que vem de maquininha e Pix direto
     fixos: float = 7600.0                # aluguel 2,8, agência 1,8, pessoas 1,3, foto 0,7, frete, contador, sistemas
@@ -135,7 +136,12 @@ def simular(p: Premissas) -> dict:
         recebido = d * (1 - p.prazo_recebimento) + receita_anterior * p.prazo_recebimento
         if i == 0:
             recebido += p.a_receber_inicial
-        taxas = d * p.taxas
+        # A Pagar.me só cobra o que passa por ela: maquininha já entra
+        # líquida de MDR e Pix direto não tem taxa nenhuma. Cobrar sobre a
+        # receita inteira inflava a taxa quando a venda física crescia, e
+        # some com ela quando o site cresce. O Simples, esse sim, é sobre
+        # tudo. Escolha do Pedro em 30/09/2026: média aparada na base certa.
+        taxas = d * p.imposto + d * (1 - p.share_fisica) * p.taxa_site
         # Meta puxa venda de site, não venda física: indexar à receita total
         # fazia o investimento crescer junto com maquininha e Pix direto, que
         # não têm nada a ver com anúncio. Em out/26 isso projetava R$ 2.862

@@ -653,7 +653,8 @@ def _premissas_do_painel():
         receita_base=m["receita_base"][0],
         crescimento=m["crescimento"][0],
         cmv=m["cmv"][0],
-        taxas=m["taxas"][0],
+        imposto=m["imposto"][0],
+        taxa_site=m["taxa_site"][0],
         ads=m["ads"][0],
         fixos=m["fixos"][0],
         share_fisica=m["share_fisica"][0],
@@ -715,7 +716,9 @@ def premissas_medidas() -> dict:
         "receita_base": (receita_partida(), "M-1 crescido", "receita do primeiro mês projetado"),
         "crescimento": (crescimento, "ajuste 6m", "crescimento log-linear da receita líquida"),
         "cmv": (_aparada(u.cmv / u.receita_liquida), "aparada", "CMV sobre receita líquida"),
-        "taxas": (_aparada(u.taxas / u.receita_liquida) + IMPOSTO_PADRAO, "aparada", "Pagar.me mais Simples"),
+        "taxa_site": (_aparada(u.taxas / u.receita_site_liquida.replace(0, pd.NA)), "aparada",
+                      "Pagar.me sobre a receita líquida do site"),
+        "imposto": (IMPOSTO_PADRAO, "alíquota", "Simples sobre toda a receita"),
         "ads": (meta_por_site(), "M-1", "Meta sobre receita líquida do site"),
         "share_fisica": (prop.get("fisica", 0.0), "aparada", "maquininha e Pix direto na receita"),
         "ticket": (prop.get("ticket", 0.0), "M-1", "ticket médio do site"),
@@ -806,8 +809,8 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
         return {}
     r = linha.iloc[0]
     receita = float(r.receita)
-    imposto = receita * IMPOSTO_PADRAO
-    taxas = receita * p.taxas - imposto
+    imposto = receita * p.imposto
+    taxas = float(r.taxas) - imposto
     cmv = float(r.cmv_competencia)
     agencia = 1800.0
     marketing = float(r.ads) + agencia

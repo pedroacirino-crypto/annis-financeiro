@@ -426,10 +426,12 @@ def render():
             help="Soma da projeção por categoria, que está na tabela de despesas: "
                  "contrato pelo último valor, frete por pedido, o resto por média "
                  "dos meses em que houve."))
-        pr_imposto = q8.number_input(
-            "Taxas e imposto (% da receita)", min_value=0.0, max_value=50.0,
-            value=float(med["taxas"][0] * 100), step=0.1, format="%.2f",
-            help="Medido: Pagar.me nos seis meses fechados mais Simples a 2,64%.") / 100
+        pr_taxa_site = q8.number_input(
+            "Taxa Pagar.me (% da receita do site)", min_value=0.0, max_value=50.0,
+            value=float(med["taxa_site"][0] * 100), step=0.1, format="%.2f",
+            help="Média aparada dos seis meses fechados. Só sobre o que passa pela "
+                 "Pagar.me: maquininha já entra líquida de MDR e Pix direto não tem taxa. "
+                 "O Simples, de 2,64%, incide sobre tudo e é fixo.") / 100
         q9, _, _, _ = st.columns(4)
         pr_envelh = q9.number_input(
             "Estoque que envelhece por mês (%)", min_value=0.0, max_value=20.0, value=2.0, step=0.5, format="%.1f",
@@ -448,7 +450,7 @@ def render():
 
     prem = plano.Premissas(inicio=str(pd.Period(hoje, "M") + 1), receita_base=pr_receita, crescimento=pr_g,
                            fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
-                           cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxas=pr_imposto,
+                           cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxa_site=pr_taxa_site,
                            share_fisica=med["share_fisica"][0],
                            prazo_recebimento=med["prazo_recebimento"][0],
                            estoque_custo=estoque_custo, acumulado_historico=acumulado,
