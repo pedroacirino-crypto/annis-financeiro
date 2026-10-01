@@ -636,6 +636,20 @@ def compromissos_por_categoria(mes: str) -> dict:
     return saida
 
 
+def premissas_decididas(mes: str) -> dict:
+    """O que foi decidido para o mês, e que não é mais medição.
+
+    Quanto investir em Meta é escolha, não medida. Quando o Pedro decide,
+    a decisão entra no orçamento congelado e passa a valer também para a
+    projeção da tela, senão o gráfico mostraria um número e a coluna do
+    orçado outro para o mesmo mês. O que foi medido continua visível na
+    tabela de premissas, do lado, para a diferença entre o dado e a decisão
+    ficar à vista.
+    """
+    o = orcamentos().get(mes, {})
+    return {k[1:]: v for k, v in o.items() if k.startswith("_")}
+
+
 def _premissas_do_painel():
     """As premissas exatamente como o painel as mostra.
 
@@ -643,12 +657,16 @@ def _premissas_do_painel():
     gráfico dizia lucro de R$ 276 em out/26 enquanto a coluna do orçado
     dizia R$ 314. Viraram campo de digitar, escolha do Pedro em 30/09/2026,
     e aqui não se arredonda mais nada: os dois leem o mesmo número.
+
+    No fim vêm as premissas decididas do mês corrente, que sobrescrevem a
+    medição: quanto investir em Meta é escolha, não medida, e depois de
+    decidida ela tem que valer na tela e no orçamento ao mesmo tempo.
     """
     import plano
     m = premissas_medidas()
     if not m:
         return None
-    return plano.Premissas(
+    p = plano.Premissas(
         inicio=mes_corrente(),
         receita_base=m["receita_base"][0],
         crescimento=m["crescimento"][0],
@@ -662,6 +680,10 @@ def _premissas_do_painel():
         ads_a_pagar=float(meta_ads().get(mes_fechado(), 0.0)),
         estoque_custo=estoque_a_custo(),
         caixa_inicial=max(_caixa_hoje(), 0.0))
+    for campo, valor in premissas_decididas(mes_corrente()).items():
+        if hasattr(p, campo):
+            setattr(p, campo, valor)
+    return p
 
 
 @memo()
@@ -811,6 +833,31 @@ def receita_partida() -> float:
     """
     import plano
     return receita_base() * (1 + plano.Premissas().crescimento)
+
+
+def orcamento_com_meta(mes: str, meta: float, roas: float) -> dict:
+    """Orçamento do mês com uma decisão de investimento em Meta.
+
+    O plano não liga Meta a receita, de propósito, porque o Meta é indexado
+    à receita e ligar os dois seria circular. Quando a decisão é tomada, o
+    efeito entra aqui: o investimento a mais vezes o ROAS vira receita a
+    mais, e as duas coisas vão congeladas para o orçamento.
+    """
+    import copy
+    p = _premissas_do_painel()
+    if p is None:
+        return {}
+    prop = _proporcoes()
+    meta_hoje = p.ads * p.receita_base * (1 - p.share_fisica)
+    fator = 1 - prop.get("desconto", 0.0) - prop.get("estornos", 0.0)
+    p = copy.copy(p)
+    p.receita_base = p.receita_base + (meta - meta_hoje) * roas * fator
+    p.ads = meta / (p.receita_base * (1 - p.share_fisica))
+    linhas = orcamento_do_mes(mes, premissas=p)
+    linhas["_receita_base"] = p.receita_base
+    linhas["_ads"] = p.ads
+    linhas["_roas"] = roas
+    return linhas
 
 
 def orcamento_do_mes(mes: str, premissas=None) -> dict:

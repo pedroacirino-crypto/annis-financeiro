@@ -8,6 +8,7 @@
     python carga.py fatura   legado/faturas_cartao.csv linhas das faturas dos cartões das sócias
     python carga.py rateio   legado/rateios.csv        pagamento que é duas coisas (aluguel com seguro dentro)
     python carga.py orcamento 2026-10                  congela a projeção do mês, para comparar com o realizado
+    python carga.py orcamento 2026-10 3000 6.82        congela com decisão de Meta e o ROAS assumido
     python carga.py resumo                             o que tem lá e até quando
 
 Roda na máquina do Pedro, com o .env apontando para o banco. Nada disso vai
@@ -137,12 +138,19 @@ def carregar_rateio(caminho: str) -> None:
               f"R$ {r.valor_parte:,.2f} para {r.categoria_parte}")
 
 
-def congelar_orcamento(mes: str) -> None:
-    """Congela a projeção do mês com as premissas padrão. A projeção anda
-    sozinha conforme os meses passam; sem congelar, o mês corrente não tem
-    contra o que ser comparado."""
+def congelar_orcamento(mes: str, meta: str = None, roas: str = None) -> None:
+    """Congela a projeção do mês. Com `meta`, congela uma decisão: o
+    investimento escolhido e a receita que o ROAS assumido devolve.
+
+    A projeção anda sozinha conforme os meses passam; sem congelar, o mês
+    corrente não tem contra o que ser comparado.
+    """
     import financeiro
-    linhas = financeiro.orcamento_do_mes(mes)
+    if meta:
+        linhas = financeiro.orcamento_com_meta(mes, float(meta), float(roas or 0))
+        print(f"decisão: Meta de R$ {float(meta):,.2f} com ROAS de {float(roas or 0):.2f}x\n")
+    else:
+        linhas = financeiro.orcamento_do_mes(mes)
     if not linhas:
         print(f"o plano não alcança {mes}")
         return
@@ -189,6 +197,8 @@ def _conferir_orcamento(linhas: dict) -> None:
     print(f"  {'linha':34s} {financeiro.mes_fechado():>10s} {'projetado':>11s} {'variação':>9s}")
     suspeitas = []
     for rot, campo in campos.items():
+        if rot not in linhas and rot.startswith("_"):
+            continue
         real, proj = float(s[campo]), linhas.get(rot, 0.0)
         var = (proj / real - 1) * 100 if real else float("nan")
         marca = ""
@@ -228,7 +238,7 @@ def main(argv):
     elif cmd == "rateio":
         carregar_rateio(argv[2])
     elif cmd == "orcamento":
-        congelar_orcamento(argv[2])
+        congelar_orcamento(*argv[2:5])
     else:
         r = dados_fin.resumo()
         print(f"extrato: {r['extrato_linhas']} linhas, até {r['extrato_ate']}")
