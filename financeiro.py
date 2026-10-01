@@ -679,6 +679,8 @@ def _premissas_do_painel():
         prazo_recebimento=m["prazo_recebimento"][0],
         ads_a_pagar=float(meta_ads().get(mes_fechado(), 0.0)),
         estoque_custo=estoque_a_custo(),
+        a_receber_inicial=a_receber_futuro(),
+        acumulado_historico=_acumulado_operacional(),
         caixa_inicial=max(_caixa_hoje(), 0.0))
     for campo, valor in premissas_decididas(mes_corrente()).items():
         if hasattr(p, campo):
@@ -722,6 +724,29 @@ def _caixa_hoje() -> float:
     fx = fluxo_de_caixa()
     real = fx[~fx.futuro]
     return float(real.caixa.iloc[-1]) if not real.empty else 0.0
+
+
+def _acumulado_operacional() -> float:
+    """Tudo que a operação gerou menos gastou desde o início, sem aportes."""
+    fx = fluxo_de_caixa()
+    real = fx[fx.mes <= mes_fechado()]
+    return float(real.acumulado_operacional.iloc[-1]) if not real.empty else 0.0
+
+
+def a_receber_futuro() -> float:
+    """Recebivel de venda ja feita que ainda vai cair, do mes fechado para a frente.
+
+    O plano só sabe adiar a receita que ele mesmo projeta: no primeiro mês
+    `receita_anterior` vale zero, então a parcela de setembro que cai em
+    outubro desaparecia. Era o único número diferente entre o plano do
+    gráfico e o do orçamento, e por causa dele a tabela pedia R$ 879 de
+    aporte em out/26 enquanto o cartão "aporte ainda necessário" dizia
+    zero. Medido, não estimado pela proporção: são R$ 1.284,38 de
+    recebiveis identificados, contra R$ 2.590 que a proporção de 12,5%
+    daria.
+    """
+    fx = fluxo_de_caixa()
+    return float(fx[fx.mes >= mes_fechado()].a_receber.sum())
 
 
 @memo()
