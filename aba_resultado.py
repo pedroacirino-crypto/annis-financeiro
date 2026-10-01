@@ -399,6 +399,13 @@ def render():
     base_real = float(linha_base.receita_liquida.iloc[0]) if not linha_base.empty else 20000.0
 
     med = fin.premissas_medidas()
+    # Decisão tomada sobrescreve a medição nos campos: depois que o Pedro
+    # escolhe quanto investir, a tela e o orçamento congelado têm que falar
+    # o mesmo número. O medido continua logo abaixo, na tabela de regras.
+    dec = fin.premissas_decididas(fin.mes_corrente())
+    def inicial(campo):
+        return float(dec[campo]) if campo in dec else float(med[campo][0])
+
     with st.expander("Premissas", expanded=False):
         st.caption(
             "Campo de digitar, não barra: com passo de arredondamento o gráfico e a "
@@ -410,9 +417,11 @@ def render():
         q1, q2, q3, q4 = st.columns(4)
         pr_receita = float(q1.number_input(
             f"Receita líquida em {mes_curto(primeiro_projetado)} (R$)",
-            min_value=0.0, value=float(med["receita_base"][0]), step=100.0, format="%.2f",
+            min_value=0.0, value=inicial("receita_base"), step=100.0, format="%.2f",
             help=f"Âncora: {mes_curto(mes_base)} fechou em {brl(base_real)}. "
-                 f"Aqui ele já vem crescido pela taxa do modelo."))
+                 f"Aqui ele já vem crescido pela taxa do modelo."
+                 + (f" Carrega a decisão de Meta congelada no orçamento, com ROAS de "
+                    f"{dec.get('roas', 0):.2f}x." if "receita_base" in dec else "")))
         pr_g = q2.number_input(
             "Crescimento ao mês (%)", min_value=-50.0, max_value=100.0,
             value=float(med["crescimento"][0] * 100), step=0.5, format="%.2f",
@@ -432,7 +441,7 @@ def render():
         meta_site = med["ads"][0] * 100
         pr_ads = q6.number_input(
             "Meta (% da receita líquida do site)", min_value=0.0, max_value=100.0,
-            value=float(meta_site), step=0.5, format="%.2f",
+            value=inicial("ads") * 100, step=0.5, format="%.2f",
             help=f"Só a mídia, indexada à venda do site, que é o que o anúncio puxa. "
                  f"Em {mes_curto(mes_base)} foi {meta_site:.1f}%, e a eficiência vem "
                  "melhorando: era 28% em março. A agência é fixa e está nos fixos.") / 100
