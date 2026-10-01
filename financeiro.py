@@ -847,10 +847,17 @@ def orcamento_com_meta(mes: str, meta: float, roas: float) -> dict:
     p = _premissas_do_painel()
     if p is None:
         return {}
+    # Parte sempre do medido, nunca da decisão anterior: congelar de novo
+    # em cima de um orçamento já decidido empilha o efeito duas vezes. Em
+    # 01/10/2026 isso levou a decisão de R$ 3.100 a nascer somando o
+    # aumento de receita que a decisão de R$ 3.000 já tinha embutido.
+    m = premissas_medidas()
+    p = copy.copy(p)
+    p.receita_base = m["receita_base"][0]
+    p.ads = m["ads"][0]
     prop = _proporcoes()
     meta_hoje = p.ads * p.receita_base * (1 - p.share_fisica)
     fator = 1 - prop.get("desconto", 0.0) - prop.get("estornos", 0.0)
-    p = copy.copy(p)
     p.receita_base = p.receita_base + (meta - meta_hoje) * roas * fator
     p.ads = meta / (p.receita_base * (1 - p.share_fisica))
     linhas = orcamento_do_mes(mes, premissas=p)
