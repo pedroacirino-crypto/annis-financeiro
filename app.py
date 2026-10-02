@@ -2024,6 +2024,59 @@ if "Clientes" in abas:
             for c in sumidas:
                 _card_cliente(c)
 
+    # A base de cima é só o site. Quem compra no balcão não tem cadastro,
+    # mas deixa rastro no cartão e no Pix, e é lá que a recompra acontece.
+    st.divider()
+    st.subheader("Fora do site: quem voltou")
+    st.caption(
+        "Venda de maquininha e Pix não tem cadastro, mas tem rastro: o cartão "
+        "mascarado no relatório de vendas da Stone e o nome de quem pagou o Pix. "
+        "Dá para medir quem voltou, não para entrar em contato. É um piso: quem "
+        "trocou de cartão aparece como duas pessoas. Compras a menos de 7 dias "
+        "uma da outra contam como a mesma ocasião."
+    )
+    import financeiro as _fin
+    _bf = _fin.base_fisica()
+    if _bf["resumo"].empty:
+        st.info("Relatório de vendas da Stone ainda não carregado.")
+    else:
+        _r = _bf["resumo"]
+        _site_voltou = (len([c for c in cli if c["compras"] > 1]) / len(cli) * 100) if cli else 0.0
+        _fis = _r[_r.canal != "Cartão no site (Stone)"]
+        f1, f2, f3 = st.columns(3)
+        f1.metric("Identidades fora do site", int(_fis.identidades.sum()))
+        f1.caption("Cartões na maquininha e pagadores de Pix")
+        f2.metric("Voltaram a comprar", int(_fis.voltaram.sum()))
+        f2.caption(fmt_pct(_fis.voltaram.sum() / _fis.identidades.sum() * 100, 1)
+                   + f" da base, contra {fmt_pct(_site_voltou, 1)} no site")
+        f3.metric("Receita de recompra", fmt_brl(int(round(_fis.receita_recompra.sum() * 100))))
+        f3.caption(fmt_pct(_fis.receita_recompra.sum() / _fis.receita.sum() * 100, 1) + " do que entrou fora do site")
+
+        tabela(pd.DataFrame({
+            "Canal": _r.canal,
+            "Identidades": _r.identidades,
+            "Voltaram": _r.voltaram,
+            "Taxa": _r.taxa.map(lambda v: fmt_pct(v, 1)),
+            "Receita": _r.receita.map(lambda v: fmt_brl(int(round(v * 100)))),
+            "Recompra": _r.receita_recompra.map(lambda v: fmt_brl(int(round(v * 100)))),
+            "% recompra": _r.fatia_recompra.map(lambda v: fmt_pct(v, 1)),
+        }), num=["Identidades", "Voltaram", "Taxa", "Receita", "Recompra", "% recompra"],
+            titulo="Recompra por canal")
+
+        _v = _bf["clientes"]
+        _v = _v[_v.ocasioes > 1]
+        if not _v.empty:
+            st.markdown("**Quem voltou**")
+            tabela(pd.DataFrame({
+                "Quem": _v.quem,
+                "Canal": _v.canal,
+                "Ocasiões": _v.ocasioes,
+                "Total": _v.total.map(lambda v: fmt_brl(int(round(v * 100)))),
+                "Primeira": _v.primeira.map(lambda d: d.strftime("%d/%m/%Y")),
+                "Última": _v.ultima.map(lambda d: d.strftime("%d/%m/%Y")),
+                "Dias entre compras": _v.intervalos,
+            }), num=["Ocasiões", "Total"], titulo="Quem voltou, fora do site")
+
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 4: LISTA DE ESPERA: quem quis e não tinha

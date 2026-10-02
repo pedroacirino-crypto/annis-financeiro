@@ -7,6 +7,7 @@
     python carga.py regras                             regras de classificação com nome de pessoa (legado/regras.json)
     python carga.py fatura   legado/faturas_cartao.csv linhas das faturas dos cartões das sócias
     python carga.py rateio   legado/rateios.csv        pagamento que é duas coisas (aluguel com seguro dentro)
+    python carga.py stone    caminho/vendas.csv        relatório de vendas da Stone, com o cartão de cada venda
     python carga.py orcamento 2026-10                  congela a projeção do mês, para comparar com o realizado
     python carga.py orcamento 2026-10 3000 6.82        congela com decisão de Meta e o ROAS assumido
     python carga.py resumo                             o que tem lá e até quando
@@ -127,6 +128,37 @@ def carregar_fatura(caminho: str) -> None:
         print(f"    {cat[:40]:40s} R$ {v:,.2f}")
 
 
+def carregar_vendas_stone(caminho: str) -> None:
+    """Relatório de vendas da conta Stone (Vendas > exportar). É a única
+    fonte em que a venda de maquininha tem identidade: o cartão mascarado."""
+    import financeiro
+    bruto = pd.read_csv(caminho, sep=";", dtype=str, encoding="utf-8-sig").fillna("")
+    bruto = bruto[bruto["DATA DA VENDA"].str.strip() != ""]
+
+    def numero(s):
+        return s.str.strip().str.replace(".", "", regex=False).str.replace(",", ".").replace("", "0").astype(float)
+
+    df = pd.DataFrame({
+        "stone_id": bruto["STONE ID"].str.strip(),
+        "data": pd.to_datetime(bruto["DATA DA VENDA"].str.strip(), format="%d/%m/%Y %H:%M"),
+        "bandeira": bruto["BANDEIRA"].str.strip(),
+        "produto": bruto["PRODUTO"].str.strip(),
+        "parcelas": bruto["N DE PARCELAS"].str.strip().replace("", "0").astype(int),
+        "bruto": numero(bruto["VALOR BRUTO"]),
+        "liquido": numero(bruto["VALOR LIQUIDO"]),
+        "cartao": bruto["N DO CARTAO"].str.strip(),
+        "captura": bruto["MEIO DE CAPTURA"].str.strip(),
+        "status": bruto["ULTIMO STATUS"].str.strip(),
+    })
+    n = dados_fin.salvar_vendas_stone(df)
+    print(f"vendas stone: {n} transações, de {df.data.min():%d/%m/%Y} a {df.data.max():%d/%m/%Y}")
+    base = financeiro.base_fisica()
+    print()
+    for r in base["resumo"].itertuples(index=False):
+        print(f"  {r.canal:22s} {r.identidades:>4} identidades  {r.voltaram:>3} voltaram  {r.taxa:>5.1f}%"
+              f"   recompra R$ {r.receita_recompra:>9,.2f} = {r.fatia_recompra:>4.1f}% da receita")
+
+
 def carregar_rateio(caminho: str) -> None:
     """Um pagamento que é duas coisas. Sem isso o seguro incêndio dentro do
     boleto do aluguel de setembro fazia parecer que o aluguel tinha subido
@@ -237,6 +269,8 @@ def main(argv):
         carregar_fatura(argv[2])
     elif cmd == "rateio":
         carregar_rateio(argv[2])
+    elif cmd == "stone":
+        carregar_vendas_stone(argv[2])
     elif cmd == "orcamento":
         congelar_orcamento(*argv[2:5])
     else:

@@ -116,7 +116,28 @@ def garantir() -> None:
         con.execute(text(_SQL_FATURA))
         con.execute(text(_SQL_RATEIO))
         con.execute(text(_SQL_ORCAMENTO))
+        con.execute(text(_SQL_VENDAS_STONE))
     _tabelas_garantidas = True
+
+
+# Relatório de vendas da conta Stone: a venda física só tem identidade aqui.
+# O extrato mostra a maquininha como um repasse líquido por dia, sem dizer
+# de quem veio; o relatório traz o cartão mascarado de cada venda, e é por
+# ele que se mede quem voltou a comprar no presencial.
+_SQL_VENDAS_STONE = """
+    CREATE TABLE IF NOT EXISTS fin_vendas_stone (
+        stone_id     TEXT PRIMARY KEY,
+        data         TIMESTAMP NOT NULL,
+        bandeira     TEXT,
+        produto      TEXT,
+        parcelas     INTEGER,
+        bruto        DOUBLE PRECISION NOT NULL,
+        liquido      DOUBLE PRECISION NOT NULL,
+        cartao       TEXT,
+        captura      TEXT,
+        status       TEXT,
+        carregado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"""
 
 
 _SQL_FATURA = """
@@ -329,6 +350,27 @@ def salvar_fatura_cartao(df: pd.DataFrame, substituir_faturas: bool = True) -> i
                "natureza": r.natureza, "categoria": r.categoria}
               for r in df.itertuples(index=False)]
     return _upsert("fin_fatura_cartao", linhas, "id")
+
+
+def salvar_vendas_stone(df: pd.DataFrame) -> int:
+    """A chave é o Stone ID, único por transação: subir o mesmo relatório
+    duas vezes, ou um relatório mais longo por cima, não duplica."""
+    linhas = [{"stone_id": str(r.stone_id), "data": pd.Timestamp(r.data).to_pydatetime(),
+               "bandeira": r.bandeira or None, "produto": r.produto or None,
+               "parcelas": int(r.parcelas) if r.parcelas else None,
+               "bruto": float(r.bruto), "liquido": float(r.liquido),
+               "cartao": r.cartao or None, "captura": r.captura or None, "status": r.status or None}
+              for r in df.itertuples(index=False)]
+    return _upsert("fin_vendas_stone", linhas, "stone_id")
+
+
+@memo()
+def ler_vendas_stone() -> pd.DataFrame:
+    df = _ler("SELECT stone_id, data, bandeira, produto, parcelas, bruto, liquido, cartao, captura, status "
+              "FROM fin_vendas_stone ORDER BY data")
+    if not df.empty:
+        df["data"] = pd.to_datetime(df["data"])
+    return df
 
 
 @memo()

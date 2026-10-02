@@ -749,6 +749,92 @@ def a_receber_futuro() -> float:
     return float(fx[fx.mes >= mes_fechado()].a_receber.sum())
 
 
+# Compras da mesma identidade a menos de uma semana uma da outra são a mesma
+# ocasião: duas passadas de cartão no mesmo atendimento não são recompra.
+_DIAS_MESMA_OCASIAO = 7
+
+
+def _ocasioes(eventos: list) -> list:
+    eventos = sorted(eventos, key=lambda e: e[0])
+    grupos = [[eventos[0]]]
+    for ev in eventos[1:]:
+        if (ev[0] - grupos[-1][-1][0]).days < _DIAS_MESMA_OCASIAO:
+            grupos[-1].append(ev)
+        else:
+            grupos.append([ev])
+    return grupos
+
+
+@memo()
+def base_fisica() -> dict:
+    """Quem compra fora do site, e quem voltou.
+
+    A venda física não tem cadastro, mas tem rastro: o cartão mascarado no
+    relatório de vendas da Stone e o nome do pagador no Pix do extrato. Foi
+    o Pedro quem apontou, em 02/10/2026, depois de eu afirmar que um terço
+    da receita não tinha cliente identificado. Tinha; só não estava
+    carregado.
+
+    Serve para medir, não para contatar: cartão e nome de Pix não dão
+    telefone. E é piso: quem trocou de cartão, ou pagou de outra conta,
+    aparece como duas pessoas.
+
+    Link de pagamento entra junto com o Pix direto, e link inclui pedido do
+    site cobrado por fora, então o grupo do Pix não é só balcão.
+    """
+    import unicodedata
+    import dados_fin
+    import extrato
+    linhas, resumo = [], []
+
+    def fechar(canal: str, grupos: dict) -> None:
+        total = sum(v for evs in grupos.values() for _, v in evs)
+        voltaram, recompra = 0, 0.0
+        for quem, evs in grupos.items():
+            oc = _ocasioes(evs)
+            if len(oc) > 1:
+                voltaram += 1
+                recompra += sum(v for g in oc[1:] for _, v in g)
+            datas = [g[0][0] for g in oc]
+            linhas.append({
+                "canal": canal, "quem": quem, "ocasioes": len(oc),
+                "total": sum(v for _, v in evs),
+                "primeira": datas[0], "ultima": datas[-1],
+                "intervalos": ", ".join(str((datas[i + 1] - datas[i]).days) for i in range(len(datas) - 1)),
+            })
+        if grupos:
+            resumo.append({
+                "canal": canal, "identidades": len(grupos), "voltaram": voltaram,
+                "taxa": voltaram / len(grupos) * 100, "receita": total,
+                "receita_recompra": recompra,
+                "fatia_recompra": recompra / total * 100 if total else 0.0,
+            })
+
+    vs = dados_fin.ler_vendas_stone()
+    if not vs.empty:
+        ok = vs[(vs.status == "Aprovada") & (vs.bruto > 5) & vs.cartao.notna() & (vs.cartao != "")]
+        for captura, canal in (("POS", "Maquininha"), ("E-commerce", "Cartão no site (Stone)")):
+            grupos = {}
+            for r in ok[ok.captura == captura].itertuples(index=False):
+                grupos.setdefault(r.cartao, []).append((r.data.to_pydatetime(), float(r.bruto)))
+            fechar(canal, grupos)
+
+    ex = extrato.carregar()
+    if ex is not None and not ex.empty:
+        pix = ex[(ex.sentido == "entrada") & (ex.categoria.isin(["Pix direto", "Link de pagamento"]))]
+        grupos = {}
+        for r in pix.itertuples(index=False):
+            nome = unicodedata.normalize("NFKD", str(r.contraparte)).encode("ascii", "ignore").decode()
+            nome = " ".join(nome.upper().split())
+            grupos.setdefault(nome, []).append((pd.Timestamp(r.data).to_pydatetime(), float(r.valor)))
+        fechar("Pix direto e link", grupos)
+
+    clientes = pd.DataFrame(linhas)
+    if not clientes.empty:
+        clientes = clientes.sort_values(["ocasioes", "total"], ascending=False).reset_index(drop=True)
+    return {"resumo": pd.DataFrame(resumo), "clientes": clientes}
+
+
 @memo()
 def premissas_medidas() -> dict:
     """Todas as premissas que saem de dado, com a regra de cada uma."""
