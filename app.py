@@ -2086,8 +2086,11 @@ def _marcar_item_do_plano(id_: str):
     nuvem.marcar_plano(id_, bool(st.session_state.get(f"plano_{id_}")))
 
 
-if "Plano" in abas:
-  with abas["Plano"]:
+# Fragmento: marcar uma caixa refaz só esta aba. Sem isso o app inteiro
+# rodava de novo a cada clique e o contador levava uns vinte segundos
+# para acompanhar a caixa.
+@st.fragment
+def _aba_plano():
     _meses = nuvem.meses_com_plano()
     if not _meses:
         st.header("Plano do mês")
@@ -2127,6 +2130,11 @@ if "Plano" in abas:
                     st.caption(f"feito em {(i['feito_em'] - timedelta(hours=3)).strftime('%d/%m')}")
                 elif i["prazo"]:
                     st.caption(i["prazo"])
+
+
+if "Plano" in abas:
+  with abas["Plano"]:
+    _aba_plano()
 
 
 # ════════════════════════════════════════════════════════════════════════════
