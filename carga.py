@@ -8,6 +8,7 @@
     python carga.py fatura   legado/faturas_cartao.csv linhas das faturas dos cartões das sócias
     python carga.py rateio   legado/rateios.csv        pagamento que é duas coisas (aluguel com seguro dentro)
     python carga.py stone    caminho/vendas.csv        relatório de vendas da Stone, com o cartão de cada venda
+    python carga.py plano    legado/plano_2026-10.json plano de ação do mês, que aparece em Trabalho > Plano
     python carga.py orcamento 2026-10                  congela a projeção do mês, para comparar com o realizado
     python carga.py orcamento 2026-10 3000 6.82        congela com decisão de Meta e o ROAS assumido
     python carga.py resumo                             o que tem lá e até quando
@@ -159,6 +160,17 @@ def carregar_vendas_stone(caminho: str) -> None:
               f"   recompra R$ {r.receita_recompra:>9,.2f} = {r.fatia_recompra:>4.1f}% da receita")
 
 
+def carregar_plano(caminho: str) -> None:
+    """Plano de ação do mês. Recarregar preserva o que já foi marcado."""
+    import json
+    import nuvem
+    with open(caminho, encoding="utf-8") as f:
+        plano = json.load(f)
+    n = nuvem.salvar_plano(plano["mes"], plano["frentes"])
+    feitos = sum(1 for i in nuvem.ler_plano(plano["mes"]) if i["feito_em"])
+    print(f"plano de {plano['mes']}: {n} itens, {feitos} feitos")
+
+
 def carregar_rateio(caminho: str) -> None:
     """Um pagamento que é duas coisas. Sem isso o seguro incêndio dentro do
     boleto do aluguel de setembro fazia parecer que o aluguel tinha subido
@@ -271,6 +283,8 @@ def main(argv):
         carregar_rateio(argv[2])
     elif cmd == "stone":
         carregar_vendas_stone(argv[2])
+    elif cmd == "plano":
+        carregar_plano(argv[2])
     elif cmd == "orcamento":
         congelar_orcamento(*argv[2:5])
     else:

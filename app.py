@@ -1523,7 +1523,7 @@ with st.sidebar:
 # Duas naturezas de trabalho na mesma tela cansavam a leitura: Recuperar e
 # Clientes são fila de contato, as outras são conferência de dinheiro. Elas
 # não se misturam no dia da Ana, então também não se misturam no menu.
-TRABALHO = ["Recuperar", "Clientes", "Lista de espera", "Acessos"]
+TRABALHO = ["Plano", "Recuperar", "Clientes", "Lista de espera", "Acessos"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
@@ -2076,6 +2076,57 @@ if "Clientes" in abas:
                 "Última": _v.ultima.map(lambda d: d.strftime("%d/%m/%Y")),
                 "Dias entre compras": _v.intervalos,
             }), num=["Ocasiões", "Total"], titulo="Quem voltou, fora do site")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA: PLANO DO MÊS: o que foi combinado fazer, e o que já foi feito
+# ════════════════════════════════════════════════════════════════════════════
+def _marcar_item_do_plano(id_: str):
+    """Callback da caixa: grava na hora, sem botão de salvar."""
+    nuvem.marcar_plano(id_, bool(st.session_state.get(f"plano_{id_}")))
+
+
+if "Plano" in abas:
+  with abas["Plano"]:
+    _meses = nuvem.meses_com_plano()
+    if not _meses:
+        st.header("Plano do mês")
+        st.info("Nenhum plano carregado ainda.")
+    else:
+        _atual = (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m")
+        _mes = _atual if _atual in _meses else _meses[0]
+        if len(_meses) > 1:
+            _mes = st.selectbox("Mês", _meses, index=_meses.index(_mes), key="plano_mes")
+        _itens = nuvem.ler_plano(_mes)
+        _feitos = sum(1 for i in _itens if i["feito_em"])
+        _nome_mes = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
+                     "setembro", "outubro", "novembro", "dezembro"][int(_mes[5:7]) - 1]
+
+        st.header(f"Plano de {_nome_mes}")
+        st.caption("O que foi combinado fazer no mês. Marcar ou desmarcar grava na hora, para todo mundo.")
+        p1, p2 = st.columns([1, 3])
+        p1.metric("Feito", f"{_feitos} de {len(_itens)}")
+        with p2:
+            st.write("")
+            st.progress(_feitos / len(_itens) if _itens else 0.0)
+
+        _frente = None
+        for i in _itens:
+            if i["frente"] != _frente:
+                _frente = i["frente"]
+                _da_frente = [x for x in _itens if x["frente"] == _frente]
+                st.divider()
+                st.subheader(_frente)
+                st.caption(md(f"{sum(1 for x in _da_frente if x['feito_em'])} de {len(_da_frente)} · {i['alvo']}"))
+            c1, c2 = st.columns([5, 1])
+            with c1:
+                st.checkbox(md(i["texto"]), value=bool(i["feito_em"]), key=f"plano_{i['id']}",
+                            on_change=_marcar_item_do_plano, args=(i["id"],))
+            with c2:
+                if i["feito_em"]:
+                    st.caption(f"feito em {(i['feito_em'] - timedelta(hours=3)).strftime('%d/%m')}")
+                elif i["prazo"]:
+                    st.caption(i["prazo"])
 
 
 # ════════════════════════════════════════════════════════════════════════════

@@ -657,3 +657,102 @@ def ler_aparelhos() -> List[dict]:
         return [dict(l) for l in linhas]
     except Exception:
         return []
+
+
+# ─── Plano do mês: o que foi combinado fazer, e o que já foi feito ─────────
+#
+# O texto do plano mora na nuvem, não no código: o repositório é público e o
+# plano tem meta, verba e número de cliente. Entra por `carga.py plano`. A
+# marcação de feito fica na mesma linha, para o plano e o andamento nunca se
+# separarem.
+
+TABELA_PLANO = "plano_do_mes"
+
+
+def garantir_plano() -> None:
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        con.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {TABELA_PLANO} (
+                id        TEXT PRIMARY KEY,
+                mes       TEXT NOT NULL,
+                ordem     INTEGER NOT NULL,
+                frente    TEXT NOT NULL,
+                alvo      TEXT,
+                texto     TEXT NOT NULL,
+                prazo     TEXT,
+                feito_em  TIMESTAMPTZ
+            )
+        """))
+
+
+def salvar_plano(mes: str, frentes: list) -> int:
+    """Grava o plano de um mês. Recarregar o mesmo mês atualiza texto e prazo
+    e preserva o que já foi marcado como feito; item que saiu do arquivo sai
+    da tabela."""
+    from sqlalchemy import text
+    garantir_plano()
+    linhas, ordem = [], 0
+    for f in frentes:
+        for it in f["itens"]:
+            ordem += 1
+            linhas.append({"id": f"{mes}:{it['id']}", "mes": mes, "ordem": ordem,
+                           "frente": f["frente"], "alvo": f.get("alvo", ""),
+                           "texto": it["texto"], "prazo": it.get("prazo", ""),
+                           "feito": bool(it.get("feito"))})
+    with _conectar().begin() as con:
+        con.execute(text(f"DELETE FROM {TABELA_PLANO} WHERE mes = :mes AND NOT (id = ANY(:ids))"),
+                    {"mes": mes, "ids": [l["id"] for l in linhas]})
+        for l in linhas:
+            con.execute(text(
+                f"INSERT INTO {TABELA_PLANO} (id, mes, ordem, frente, alvo, texto, prazo, feito_em)"
+                f" VALUES (:id, :mes, :ordem, :frente, :alvo, :texto, :prazo,"
+                f"         CASE WHEN :feito THEN now() ELSE NULL END)"
+                f" ON CONFLICT (id) DO UPDATE SET ordem = EXCLUDED.ordem, frente = EXCLUDED.frente,"
+                f" alvo = EXCLUDED.alvo, texto = EXCLUDED.texto, prazo = EXCLUDED.prazo,"
+                f" feito_em = COALESCE({TABELA_PLANO}.feito_em, EXCLUDED.feito_em)"
+            ), l)
+    return len(linhas)
+
+
+def ler_plano(mes: str) -> list:
+    """Itens do plano do mês, na ordem. Vazio se o banco não estiver de pé."""
+    if not configurado():
+        return []
+    from sqlalchemy import text
+    try:
+        garantir_plano()
+        with _conectar().connect() as con:
+            return [dict(l) for l in con.execute(text(
+                f"SELECT id, frente, alvo, texto, prazo, feito_em FROM {TABELA_PLANO}"
+                f" WHERE mes = :mes ORDER BY ordem"), {"mes": mes}).mappings().all()]
+    except Exception:
+        return []
+
+
+def meses_com_plano() -> list:
+    if not configurado():
+        return []
+    from sqlalchemy import text
+    try:
+        garantir_plano()
+        with _conectar().connect() as con:
+            return [l[0] for l in con.execute(text(
+                f"SELECT DISTINCT mes FROM {TABELA_PLANO} ORDER BY mes DESC")).all()]
+    except Exception:
+        return []
+
+
+def marcar_plano(id_: str, feito: bool) -> bool:
+    if not configurado() or not id_:
+        return False
+    from sqlalchemy import text
+    try:
+        garantir_plano()
+        with _conectar().begin() as con:
+            con.execute(text(
+                f"UPDATE {TABELA_PLANO} SET feito_em = CASE WHEN :feito THEN now() ELSE NULL END"
+                f" WHERE id = :id"), {"id": id_, "feito": bool(feito)})
+        return True
+    except Exception:
+        return False
