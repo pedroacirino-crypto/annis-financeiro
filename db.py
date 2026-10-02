@@ -1346,6 +1346,40 @@ def horas_desde_sincronizacao():
 # conseguiu não é venda perdida nenhuma.
 _HORAS_MESMA_TENTATIVA = 24     # intervalo máximo entre tentativas da mesma compra
 _DIAS_PARA_CONVERTER = 7        # prazo em que pagar depois ainda conta como a mesma compra
+_DIAS_PARA_PAGAR_POR_FORA = 30  # prazo para a mesma compra reaparecer como link ou Pix na conta
+_PARTICULAS = {"de", "da", "do", "dos", "das", "e"}
+
+
+def _nome_em_pedacos(nome: str) -> set:
+    """Pedaços comparáveis de um nome, sem partícula e sem apelido curto."""
+    return {p for p in _normalizar(nome).split() if len(p) >= 3 and p not in _PARTICULAS}
+
+
+def _pagou_fora_da_pagarme() -> list:
+    """Quem pagou por link ou Pix direto na conta, com data e nome em pedaços.
+
+    A Pagar.me não sabe de nada que não passou por ela. A Fabiana Sarkis
+    gerou um Pix de R$ 898,70 em 12/09/2026 que a Shopify deu como expirado
+    e a Pagar.me como pendente, e pagou por link no dia 30/09: o dinheiro
+    está no extrato e no caixa, mas a venda continuava na lista de perdidas.
+    O Pedro mandou ajustar em 02/10/2026.
+
+    Falha para o lado seguro: se o extrato não estiver disponível, a lista
+    de perdidas fica como era antes.
+    """
+    try:
+        import extrato
+        e = extrato.carregar()
+    except Exception:
+        return []
+    try:
+        entradas = e[(e.sentido == "entrada") & (e.natureza == "venda_fisica")
+                     & (e.categoria.isin(["Link de pagamento", "Pix direto"]))]
+        return [(q.to_pydatetime() if hasattr(q, "to_pydatetime") else q,
+                 _nome_em_pedacos(str(n)), int(round(float(v) * 100)))
+                for q, n, v in zip(entradas.data, entradas.contraparte, entradas.valor)]
+    except Exception:
+        return []
 
 
 def _instante(texto: str):
@@ -1418,6 +1452,7 @@ def vendas_perdidas(date_from: str = None, date_to: str = None) -> "list[dict]":
         aberta[chave] = g
         compras.append(g)
 
+    fora = _pagou_fora_da_pagarme()
     saida = []
     for g in compras:
         c, inicio = g["ultima"], g["de"]
@@ -1426,6 +1461,20 @@ def vendas_perdidas(date_from: str = None, date_to: str = None) -> "list[dict]":
             inicio <= q <= inicio + _td(days=_DIAS_PARA_CONVERTER)
             for chave in (c["customer_email"] or "", _normalizar(c["customer_name"]))
             for q in pagamentos.get(chave, [])
+        ):
+            continue
+        # Ou pagou por fora da Pagar.me, por link ou Pix na conta. Aqui a
+        # identidade é nome mais valor exato, não proximidade de data: a
+        # cobrança abandonada vira link que a Ana manda dias depois, e no
+        # caso da Fabiana foram 18 dias entre uma coisa e outra. Dois
+        # pedaços do nome porque o extrato traz o nome completo do titular
+        # e a cobrança costuma trazer só parte dele.
+        pedacos = _nome_em_pedacos(c["customer_name"])
+        if inicio and len(pedacos) >= 2 and any(
+            valor == c["amount"]
+            and inicio <= q <= inicio + _td(days=_DIAS_PARA_PAGAR_POR_FORA)
+            and len(pedacos & outros) >= 2
+            for q, outros, valor in fora
         ):
             continue
         # O período recorta pela tentativa mais recente, que é a que a tabela
