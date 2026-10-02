@@ -669,7 +669,16 @@ def ler_aparelhos() -> List[dict]:
 TABELA_PLANO = "plano_do_mes"
 
 
+_plano_garantido = False
+
+
 def garantir_plano() -> None:
+    """Uma vez por processo: cada ida ao banco custa centenas de
+    milissegundos da nuvem do Streamlit até São Paulo, e a aba do plano
+    fazia seis delas a cada caixa marcada."""
+    global _plano_garantido
+    if _plano_garantido:
+        return
     from sqlalchemy import text
     with _conectar().begin() as con:
         con.execute(text(f"""
@@ -684,6 +693,7 @@ def garantir_plano() -> None:
                 feito_em  TIMESTAMPTZ
             )
         """))
+    _plano_garantido = True
 
 
 def salvar_plano(mes: str, frentes: list) -> int:
