@@ -1314,15 +1314,26 @@ def estornos_por_mes() -> pd.DataFrame:
     Andréa Fontoura, e o estorno de verdade saiu no dia 24. Somando só o
     tipo 'refund' a mesma devolução contava duas vezes: setembro aparecia
     com R$ 3.671 de estorno em vez de R$ 2.469.
+
+    Só conta o estorno de cobrança que tem pedido na loja. A receita do site
+    vem da Shopify, então estornar uma cobrança sem pedido abateria uma
+    venda que nunca foi contada. Era o caso de R$ 2.500 cobrados no cartão
+    do próprio Pedro em 10/03/2026 e devolvidos em abril e maio. Ele mandou
+    tirar em 02/10/2026.
     """
-    return _sql("""
+    linhas = _sql("""
         SELECT strftime('%Y-%m', datetime(created_at, '-3 hours')) AS mes,
-               -SUM(amount) / 100.0 AS estornos,
-               -SUM(fee) / 100.0 AS taxa_devolvida
+               charge_id, amount, fee
           FROM payables
          WHERE type IN ('refund', 'refund_reversal')
-         GROUP BY mes
-    """).set_index("mes")
+    """)
+    if linhas.empty:
+        return pd.DataFrame(columns=["estornos", "taxa_devolvida"]).rename_axis("mes")
+    com_pedido = set(db.pedido_de_cada_cobranca())
+    linhas = linhas[linhas.charge_id.isin(com_pedido)]
+    g = linhas.groupby("mes")
+    return pd.DataFrame({"estornos": -g.amount.sum() / 100.0,
+                         "taxa_devolvida": -g.fee.sum() / 100.0})
 
 
 def caixa_pagarme_por_mes() -> pd.DataFrame:
