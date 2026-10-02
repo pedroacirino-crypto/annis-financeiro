@@ -750,12 +750,15 @@ def a_receber_futuro() -> float:
     # e somar o que dela ainda vai cair contaria a mesma venda duas vezes.
     # Em 02/10/2026 dois pedidos de outubro já inflavam o caixa orçado em
     # R$ 279 na produção, e a diferença cresceria a cada venda do mês.
+    # E o filtro é pela data em que cai, não pelo status: parcela de setembro
+    # que já caiu em 01/10 continua sendo entrada de outubro. Filtrando por
+    # "ainda não pago" o número encolhia a cada dia do mês.
     corte = f"{mes_corrente()}-01"
     r = _sql(f"""
         SELECT COALESCE(SUM(amount - fee - COALESCE(anticipation_fee, 0)), 0) / 100.0 AS v
           FROM payables
-         WHERE status != 'paid'
-           AND date(datetime(created_at, '-3 hours')) < '{corte}'
+         WHERE date(datetime(created_at, '-3 hours')) < '{corte}'
+           AND date(datetime(payment_date, '-3 hours')) >= '{corte}'
     """)
     return float(r.v.iloc[0]) if not r.empty else 0.0
 
