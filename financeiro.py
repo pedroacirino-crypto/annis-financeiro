@@ -1307,13 +1307,20 @@ def taxas_por_mes_da_venda() -> pd.DataFrame:
 
 
 def estornos_por_mes() -> pd.DataFrame:
-    """Estornos pelo mês em que foram feitos, com a taxa que a Pagar.me devolve."""
+    """Estornos pelo mês em que foram feitos, com a taxa que a Pagar.me devolve.
+
+    A reversão de estorno entra junto, com sinal contrário. Em 17/09/2026 a
+    Pagar.me estornou e desfez em dez segundos a compra de R$ 1.202,70 da
+    Andréa Fontoura, e o estorno de verdade saiu no dia 24. Somando só o
+    tipo 'refund' a mesma devolução contava duas vezes: setembro aparecia
+    com R$ 3.671 de estorno em vez de R$ 2.469.
+    """
     return _sql("""
         SELECT strftime('%Y-%m', datetime(created_at, '-3 hours')) AS mes,
                -SUM(amount) / 100.0 AS estornos,
                -SUM(fee) / 100.0 AS taxa_devolvida
           FROM payables
-         WHERE type = 'refund'
+         WHERE type IN ('refund', 'refund_reversal')
          GROUP BY mes
     """).set_index("mes")
 
