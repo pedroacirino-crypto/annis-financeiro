@@ -745,8 +745,19 @@ def a_receber_futuro() -> float:
     recebiveis identificados, contra R$ 2.590 que a proporção de 12,5%
     daria.
     """
-    fx = fluxo_de_caixa()
-    return float(fx[fx.mes >= mes_fechado()].a_receber.sum())
+    # Só o que foi vendido até o fim do mês fechado. Recebível de venda do
+    # mês corrente não entra: o plano já projeta a receita desse mês inteira,
+    # e somar o que dela ainda vai cair contaria a mesma venda duas vezes.
+    # Em 02/10/2026 dois pedidos de outubro já inflavam o caixa orçado em
+    # R$ 279 na produção, e a diferença cresceria a cada venda do mês.
+    corte = f"{mes_corrente()}-01"
+    r = _sql(f"""
+        SELECT COALESCE(SUM(amount - fee - COALESCE(anticipation_fee, 0)), 0) / 100.0 AS v
+          FROM payables
+         WHERE status != 'paid'
+           AND date(datetime(created_at, '-3 hours')) < '{corte}'
+    """)
+    return float(r.v.iloc[0]) if not r.empty else 0.0
 
 
 # Compras da mesma identidade a menos de uma semana uma da outra são a mesma
