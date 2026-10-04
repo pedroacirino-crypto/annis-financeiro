@@ -1,0 +1,12 @@
+{%- comment -%}
+  Annis, 04/10/2026. Seção "Liquid personalizado" no rodapé, que aparece em
+  todas as páginas. Cards de produto com cantos retos no site inteiro (home,
+  coleção, busca e sugestões na página de produto); o tema arredonda 12px
+  em cada seção.
+{%- endcomment -%}
+<style>
+  product-card .product-card__content,
+  product-card .card-gallery,
+  product-card .product-media,
+  product-card slideshow-slide { border-radius: 0 !important; }
+</style>
