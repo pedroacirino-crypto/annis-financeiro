@@ -2,7 +2,8 @@
 --
 -- Roda dentro do Supabase, sem depender do GitHub (o agendador de lá já
 -- atrasou de 3 a 4 horas) nem de computador ligado:
---   - a cada 2 minutos, pedido novo e carrinho abandonado novo viram mensagem;
+--   - a cada 2 minutos, pedido novo, Pix vencido sem pagamento e carrinho
+--     abandonado novo viram mensagem;
 --   - todo dia às 23h de Brasília, fechamento com hoje, semana e mês.
 --
 -- As credenciais (Shopify e Telegram) ficam no cofre do Supabase (vault),
@@ -146,8 +147,9 @@ begin
           displayFinancialStatus
           totalPriceSet { shopMoney { amount } }
           discountCodes
-          customer { displayName numberOfOrders }
-          shippingAddress { city provinceCode }
+          customer { displayName numberOfOrders phone }
+          shippingAddress { city provinceCode phone }
+          billingAddress { phone }
           lineItems(first: 20) { nodes { title variantTitle quantity } }
         }
       }
@@ -175,6 +177,30 @@ begin
     begin
       if not semear then perform avisos.telegram(texto); end if;
       insert into avisos.enviados (id, tipo) values (n ->> 'id', 'pedido') on conflict do nothing;
+    exception when others then
+      perform avisos.anota_erro(sqlerrm);
+      return;
+    end;
+  end loop;
+
+  -- Pix que venceu sem pagamento (a Shopify marca o pedido como EXPIRED).
+  -- Venda quase fechada: a cliente escolheu, preencheu e só não pagou.
+  for n in select * from jsonb_array_elements(d -> 'orders' -> 'nodes')
+           where value ->> 'displayFinancialStatus' = 'EXPIRED' loop
+    continue when exists (select 1 from avisos.enviados where id = 'pix:' || (n ->> 'id'));
+    if not semear then
+      nome := coalesce(nullif(n -> 'customer' ->> 'displayName', ''), 'Cliente sem nome');
+      contato := case
+        when coalesce(n -> 'customer' ->> 'phone', n -> 'shippingAddress' ->> 'phone', n -> 'billingAddress' ->> 'phone') is not null
+          then 'tem telefone' else 'sem telefone' end;
+      texto := 'Pix do pedido ' || (n ->> 'name') || ' venceu sem pagar · '
+        || avisos.brl((n -> 'totalPriceSet' -> 'shopMoney' ->> 'amount')::numeric)
+        || E'\n' || nome || ' · ' || contato
+        || E'\n' || avisos.itens(n -> 'lineItems' -> 'nodes');
+    end if;
+    begin
+      if not semear then perform avisos.telegram(texto); end if;
+      insert into avisos.enviados (id, tipo) values ('pix:' || (n ->> 'id'), 'pix vencido') on conflict do nothing;
     exception when others then
       perform avisos.anota_erro(sqlerrm);
       return;
