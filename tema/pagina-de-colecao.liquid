@@ -159,15 +159,20 @@
        mesmo esgotado. Junto com "Em estoque" ela traz só quem tem aquele
        tamanho disponível. Então escolher tamanho marca "Em estoque". */
     var TAMANHO = 'filter.v.option.tamanho', ESTOQUE = 'filter.v.availability';
-    /* O tema reage ao clique, antes da mudança: escuta os três. */
-    function marcaEstoque(e) {
+    /* O tema dispara a busca no clique; só marcar a caixa não basta, porque
+       a busca sem "Em estoque" pode chegar por último. Então, logo depois,
+       a caixa é marcada avisando o tema, e a última busca vai com as duas. */
+    document.addEventListener('change', function (e) {
       var t = e.target;
       if (!t || t.name !== TAMANHO || !t.checked) return;
       var lugar = t.form || t.closest('form') || document;
       var estoque = lugar.querySelector('input[name="' + ESTOQUE + '"][value="1"]');
-      if (estoque && !estoque.checked) estoque.checked = true;
-    }
-    ['click', 'input', 'change'].forEach(function (ev) { document.addEventListener(ev, marcaEstoque, true); });
+      if (!estoque || estoque.checked) return;
+      setTimeout(function () {
+        estoque.checked = true;
+        estoque.dispatchEvent(new Event('change', { bubbles: true }));
+      }, 0);
+    }, true);
     (function () {
       var u = new URL(location.href);
       if (u.searchParams.has(TAMANHO) && !u.searchParams.has(ESTOQUE)) {
