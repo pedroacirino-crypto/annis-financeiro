@@ -1626,7 +1626,9 @@ with st.sidebar:
 # não se misturam no dia da Ana, então também não se misturam no menu.
 # O Plano fica por último de propósito: é consulta de vez em quando, não
 # trabalho do dia, e não precisa estar na frente de quem abre a seção.
-TRABALHO = ["Recuperar", "Disparos", "Clientes", "Lista de espera", "Acessos", "Plano"]
+# Lista de espera escondida em 04/10/2026 a pedido do Pedro, para voltar
+# depois; o código da aba continua aqui e basta devolver o nome à lista.
+TRABALHO = ["Recuperar", "Disparos", "Clientes", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
