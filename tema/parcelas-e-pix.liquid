@@ -63,10 +63,9 @@
   <p>{{ pix | money }} no Pix</p>
 </div>
 <style>
-  /* Mesmo tamanho e ritmo do preço do tema: 12px, entrelinha 1.2, 3px entre
-     linhas. O margin negativo desfaz os 12px que o tema põe entre blocos,
-     para o bloco colar no preço como o parcelamento nativo do tema faria. */
-  .annis-pagamento{display:flex;flex-direction:column;gap:3px;margin-top:-9px;font-size:1em;line-height:1.2}
+  product-price .price{font-weight:600;font-size:15px;letter-spacing:.01em}
+  product-price .compare-at-price{font-size:12px;margin-left:.4em}
+  .annis-pagamento{display:flex;flex-direction:column;gap:3px;margin-top:-6px;font-size:1em;line-height:1.2}
   .annis-pagamento p{margin:0}
   .annis-parcelas summary{display:block;padding:0;min-height:0;cursor:pointer;list-style:none}
   .annis-parcelas summary::-webkit-details-marker{display:none}
