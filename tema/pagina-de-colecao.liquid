@@ -1,0 +1,162 @@
+{%- comment -%}
+  Página de coleção da Annis, 04/10/2026. Vai numa seção "Liquid personalizado"
+  no template de coleção. Faz três coisas nos cards de produto:
+  cantos retos, parcelamento sem juros abaixo do preço e os tamanhos
+  disponíveis (no computador, ao passar o mouse na foto; no celular, numa
+  linha abaixo do preço). Clicar no tamanho abre a peça com ele marcado.
+  Tamanho esgotado não aparece. Peça de tamanho único não mostra tamanho.
+  Os números do parcelamento espelham o Hub da Stone, como no bloco da
+  página de produto: 6x sem juros, parcela mínima de R$ 50.
+{%- endcomment -%}
+<script type="application/json" id="annis-grade">{
+  {%- for p in collection.products -%}
+    {%- assign v0 = p.selected_or_first_available_variant -%}
+    {{ p.handle | json }}:{"p":{{ v0.price }},"u":{{ p.url | json }},"o":{{ p.options | json }},"v":[
+      {%- assign primeiro = true -%}
+      {%- for v in p.variants -%}
+        {%- if v.available -%}
+          {%- unless primeiro -%},{%- endunless -%}
+          [{{ v.id }},{{ v.options | json }}]
+          {%- assign primeiro = false -%}
+        {%- endif -%}
+      {%- endfor -%}
+    ]}{%- unless forloop.last -%},{%- endunless -%}
+  {%- endfor -%}
+}</script>
+<style>
+  /* Cantos retos, como na Aluf. */
+  product-card .product-card__content,
+  product-card .card-gallery,
+  product-card .product-media,
+  product-card slideshow-slide { border-radius: 0 !important; }
+
+  .annis-parcela { margin-top: 2px; font-size: .85em; opacity: .75; }
+
+  .annis-tam { display: flex; flex-wrap: wrap; gap: 6px; }
+  .annis-tam a {
+    position: relative; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 34px; height: 30px; padding: 0 6px;
+    font-size: 11px; letter-spacing: .04em; line-height: 1;
+    color: #000; background: #fff; border: 1px solid rgba(0, 0, 0, .15);
+    text-decoration: none;
+  }
+  .annis-tam a:hover { color: #fff; background: #000; border-color: #000; }
+
+  /* Computador: tamanhos sobre o rodapé da foto, só ao passar o mouse,
+     acima do botão Adicionar do tema. */
+  .annis-tam--foto {
+    position: absolute; left: 0; right: 0; bottom: var(--annis-tam-base, 60px); z-index: 3;
+    justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    product-card:hover .annis-tam--foto { opacity: 1; pointer-events: auto; }
+    .annis-tam--linha { display: none; }
+  }
+  /* Celular: linha de tamanhos abaixo do preço, sempre visível. */
+  @media not all and (hover: hover) and (pointer: fine) {
+    .annis-tam--foto { display: none; }
+    .annis-tam--linha { margin-top: 8px; gap: 4px; }
+    .annis-tam--linha a { min-width: 26px; height: 24px; padding: 0 4px; font-size: 10px; }
+  }
+</style>
+<script>
+  (function () {
+    var SEM_JUROS = 6, PARCELA_MINIMA = 5000;
+    var ORDEM = ['PP', 'P', 'M', 'G', 'GG'];
+    var dados = {};
+    try { dados = JSON.parse(document.getElementById('annis-grade').textContent); } catch (e) {}
+
+    function brl(c) { return (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+
+    /* Mesma conta do checkout: parcela arredondada para cima. */
+    function parcelas(preco) {
+      var melhor = null;
+      for (var n = 2; n <= SEM_JUROS; n++) {
+        var p = Math.ceil(preco / n);
+        if (p >= PARCELA_MINIMA) melhor = [n, p];
+      }
+      return melhor;
+    }
+
+    function handleDe(card) {
+      var a = card.querySelector('a[href*="/products/"]');
+      var m = a && a.getAttribute('href').match(/\/products\/([^/?#]+)/);
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    /* Peça que não veio na página (filtro trocado depois de abrir) é
+       buscada na hora. */
+    function busca(h) {
+      if (dados[h]) return Promise.resolve(dados[h]);
+      return fetch('/products/' + encodeURIComponent(h) + '.js').then(function (r) { return r.json(); }).then(function (p) {
+        var v0 = p.variants.filter(function (v) { return v.available; })[0] || p.variants[0];
+        dados[h] = {
+          p: v0.price, u: '/products/' + h,
+          o: p.options.map(function (o) { return o.name || o; }),
+          v: p.variants.filter(function (v) { return v.available; }).map(function (v) { return [v.id, v.options]; })
+        };
+        return dados[h];
+      });
+    }
+
+    function tamanhos(d) {
+      var i = d.o.indexOf('Tamanho');
+      if (i < 0) return [];
+      var vistos = {}, lista = [];
+      d.v.forEach(function (x) {
+        var t = x[1][i];
+        if (!vistos[t]) { vistos[t] = 1; lista.push([t, x[0]]); }
+      });
+      lista.sort(function (a, b) { return ORDEM.indexOf(a[0]) - ORDEM.indexOf(b[0]); });
+      if (lista.length === 1 && ORDEM.indexOf(lista[0][0]) < 0) return [];
+      return lista;
+    }
+
+    function caixa(classe, d, lista) {
+      var el = document.createElement('div');
+      el.className = 'annis-tam ' + classe;
+      lista.forEach(function (t) {
+        var a = document.createElement('a');
+        a.href = d.u + (d.u.indexOf('?') < 0 ? '?' : '&') + 'variant=' + t[1];
+        a.textContent = t[0];
+        a.setAttribute('aria-label', 'Tamanho ' + t[0]);
+        el.appendChild(a);
+      });
+      return el;
+    }
+
+    function aplica(card) {
+      if (card.hasAttribute('data-annis')) return;
+      card.setAttribute('data-annis', '');
+      var h = handleDe(card);
+      if (!h) return;
+      busca(h).then(function (d) {
+        var pc = parcelas(d.p);
+        var lista = tamanhos(d);
+        card.querySelectorAll('product-price').forEach(function (pp) {
+          var depois = pp;
+          if (pc) {
+            var s = document.createElement('div');
+            s.className = 'annis-parcela';
+            s.textContent = pc[0] + 'x de ' + brl(pc[1]) + ' sem juros';
+            depois.after(s);
+            depois = s;
+          }
+          if (lista.length) depois.after(caixa('annis-tam--linha', d, lista));
+        });
+        var galeria = card.querySelector('.card-gallery');
+        if (galeria && lista.length) galeria.appendChild(caixa('annis-tam--foto', d, lista));
+      }).catch(function () {});
+    }
+
+    function varre() { document.querySelectorAll('product-card').forEach(aplica); }
+    var espera = null;
+    new MutationObserver(function () {
+      if (espera) return;
+      espera = setTimeout(function () { espera = null; varre(); }, 50);
+    }).observe(document.documentElement, { childList: true, subtree: true });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', varre); else varre();
+  })();
+</script>
