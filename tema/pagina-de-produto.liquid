@@ -138,6 +138,8 @@
       padding-inline-start: 16px !important;
     }
     .product-information .product-details > .group-block { max-width: 600px !important; }
+    /* O tema limitava os parágrafos da descrição a ~377px dentro da coluna. */
+    .product-information .product-details .details-content p { max-width: none !important; }
   }
 
   /* Computador: lupa ao passar o mouse, 2x, seguindo o cursor. */
@@ -148,6 +150,22 @@
   }
   /* Celular: transição suave quando o toque amplia ou volta. */
   drag-zoom-wrapper.annis-animando img { transition: transform .25s ease; }
+
+  /* Celular: foto inteira, em 2:3. O tema cortava em cima e embaixo para
+     caber numa moldura 4:5 limitada pela altura da tela. Toque amplia 2,5x
+     no ponto tocado, como a lupa do computador; arrastar move a foto
+     ampliada e outro toque volta. */
+  @media (max-width: 749px) {
+    media-gallery slideshow-slide.product-media-container {
+      aspect-ratio: 2 / 3 !important;
+      height: auto !important;
+      max-height: none !important;
+      min-height: 0 !important;
+    }
+    media-gallery .product-media { overflow: hidden; }
+    media-gallery .product-media img { transition: transform .25s ease; }
+    media-gallery .product-media img.annis-lupa { transform: scale(2.5); }
+  }
 </style>
 <script>
   /* Onde a foto começa na tela com a página no topo, para a galeria usar só
@@ -187,6 +205,56 @@
       atual = img;
     }, { passive: true });
     document.addEventListener('mouseleave', solta);
+  })();
+
+  /* Lupa do celular: toque amplia 2,5x no ponto tocado, na própria página,
+     sem abrir a tela cheia do tema. Com a foto ampliada, arrastar move a
+     foto junto com o dedo; outro toque volta. */
+  (function () {
+    var celular = matchMedia('(max-width: 749px)');
+    var ESCALA = 2.5;
+    var atual = null, inicio = null;
+    function limita(v, a, b) { return Math.max(a, Math.min(v, b)); }
+    function poe(img, x, y) {
+      img._annisX = x; img._annisY = y;
+      img.style.transformOrigin = x + 'px ' + y + 'px';
+    }
+    function solta() {
+      if (!atual) return;
+      atual.classList.remove('annis-lupa');
+      atual = null; inicio = null;
+    }
+    window.addEventListener('click', function (e) {
+      if (!celular.matches) return;
+      var caixa = e.target.closest && e.target.closest('media-gallery .product-media-container--image .product-media');
+      if (!caixa) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var img = caixa.querySelector('img');
+      if (!img) return;
+      if (atual === img) return solta();
+      solta();
+      var r = caixa.getBoundingClientRect();
+      poe(img, limita(e.clientX - r.left, 0, r.width), limita(e.clientY - r.top, 0, r.height));
+      img.classList.add('annis-lupa');
+      atual = img;
+    }, true);
+    document.addEventListener('touchstart', function (e) {
+      if (!atual || e.touches.length !== 1 || !atual.parentElement.contains(e.target)) { inicio = null; return; }
+      inicio = { x: e.touches[0].clientX, y: e.touches[0].clientY, ox: atual._annisX, oy: atual._annisY };
+    }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (!atual || !inicio || e.touches.length !== 1) return;
+      e.preventDefault();
+      var r = atual.parentElement.getBoundingClientRect();
+      var dx = e.touches[0].clientX - inicio.x, dy = e.touches[0].clientY - inicio.y;
+      poe(atual,
+        limita(inicio.ox - dx / (ESCALA - 1), 0, r.width),
+        limita(inicio.oy - dy / (ESCALA - 1), 0, r.height));
+    }, { passive: false });
+    window.addEventListener('scroll', function () {
+      if (atual && atual.getBoundingClientRect().bottom < 0) solta();
+    }, { passive: true });
   })();
 
   /* Zoom do celular na tela cheia: é o drag-zoom-wrapper do tema (pinça
