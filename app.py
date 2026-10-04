@@ -862,6 +862,8 @@ def _cupom_pessoal(a: dict):
                             r["id"], r["expira"])
         return codigo, r["expira"]
     except Exception as e:
+        if "_discounts" in str(e):
+            return None, "a loja ainda não liberou a permissão de descontos para o app"
         return None, str(e)[:160]
 
 
