@@ -150,8 +150,13 @@ ENDERECO_APP = "https://annis-financeiro-vzk7lcvic78hfk7s8rngdw.streamlit.app"
 # Cupom de recuperação, lido de Descontos no admin da loja. Só é aplicado a
 # quem abandonou sem tentar pagar, ver _card_recuperar. Se o código mudar ou
 # expirar, atualize aqui; não há endpoint que descubra sozinho qual usar.
+# Desde 04/10/2026 o cupom é pessoal: nome da pessoa mais 10, 10% por 48
+# horas, criado na Shopify na hora em que o card da fila é montado. O VOLTE5
+# genérico ficou de reserva para quando a loja não deixar criar cupom.
 CUPOM_RECUPERACAO = "VOLTE5"
 DESCONTO_RECUPERACAO = "5% OFF"
+PERCENTUAL_CUPOM_PESSOAL = 0.10
+HORAS_CUPOM_PESSOAL = 48
 # Validade do Pix do checkout. Medido no pedido #1118: gerado 10:53, expirou
 # 11:23. Se mudar o prazo na Stone, é só trocar aqui.
 MINUTOS_PIX = 30
@@ -813,6 +818,53 @@ def _dias_desde(quando) -> str:
     return "hoje" if d == 0 else ("ontem" if d == 1 else f"há {d} dias")
 
 
+def _codigo_pessoal(cliente: str, usados: set) -> str:
+    """LETICIA10; se já existir, LETICIAZ10 com a inicial do sobrenome, e
+    por fim LETICIA10B. Só letras, sem acento, como a Shopify aceita."""
+    import unicodedata
+    partes = [p for p in unicodedata.normalize("NFKD", cliente or "").encode("ascii", "ignore")
+              .decode().upper().split() if p.isalpha()]
+    if not partes:
+        partes = ["CLIENTE"]
+    base = partes[0]
+    candidatos = [f"{base}10"] + [f"{base}{p[0]}10" for p in partes[1:]] + [f"{base}10{l}" for l in "BCDEFGH"]
+    for c in candidatos:
+        if c in usados:
+            continue
+        try:
+            if shopify_client.codigo_existe(c):
+                usados.add(c)
+                continue
+        except Exception:
+            pass
+        return c
+    return f"{base}10X"
+
+
+def _cupom_pessoal(a: dict):
+    """Cupom da pessoa: o que já existe, ou um novo criado agora na Shopify.
+
+    Devolve (codigo, expira_em) ou (None, motivo). Criado uma vez por
+    carrinho e guardado na nuvem, para a mensagem sair sempre igual e para
+    contar no fim do mês. Falha vira texto sem cupom, nunca card quebrado.
+    """
+    pronto = nuvem.cupom_do_carrinho(a["id"])
+    if pronto:
+        return pronto["codigo"], pronto["expira_em"]
+    if not shopify_client.configurado():
+        return None, "loja não conectada"
+    try:
+        codigo = _codigo_pessoal(a.get("cliente") or "", nuvem.codigos_de_cupom())
+        r = shopify_client.criar_cupom_pessoal(
+            codigo, f"Recuperação · {a.get('cliente') or a['id']}", a.get("email") or "",
+            PERCENTUAL_CUPOM_PESSOAL, HORAS_CUPOM_PESSOAL)
+        nuvem.guardar_cupom(a["id"], codigo, a.get("cliente") or "", a.get("email") or "",
+                            r["id"], r["expira"])
+        return codigo, r["expira"]
+    except Exception as e:
+        return None, str(e)[:160]
+
+
 def _card_recuperar(a: dict, enviado_em=None):
     """Uma pessoa da fila, com o texto pronto e o link que restaura o carrinho.
 
@@ -886,15 +938,26 @@ def _card_recuperar(a: dict, enviado_em=None):
         # FRETEGRATIS aplicado. Os dois não acumulam, então forçar um na URL
         # tiraria o outro sem avisar. Escrito na mensagem, a oferta aparece
         # inteira e a cliente escolhe qual usar.
+        codigo, expira = _cupom_pessoal(a)
+        if codigo:
+            ate = (expira - timedelta(hours=3)).strftime("%d/%m às %H:%M") if hasattr(expira, "strftime") else ""
+            oferta = (f"Preparamos um cupom só seu: {codigo}, com 10% de desconto, "
+                      f"válido até {ate}.")
+            aviso_cupom = ""
+        else:
+            oferta = (f"Preparamos um desconto especial: {DESCONTO_RECUPERACAO} para sua "
+                      f"compra com o cupom {CUPOM_RECUPERACAO}.")
+            aviso_cupom = f"Sem cupom pessoal ({expira}). A mensagem saiu com o {CUPOM_RECUPERACAO}."
         texto = (
             f"{saudacao}\n\n"
             f"Vimos que você deixou {produtos} no seu carrinho, "
             f"e {pronome} esperando por você!\n\n"
-            f"Preparamos um desconto especial: {DESCONTO_RECUPERACAO} para sua "
-            f"compra com o cupom {CUPOM_RECUPERACAO}.\n\n"
+            f"{oferta}\n\n"
             f"{fecho}\n{url}\n\n"
             "Com carinho,\nAnnis"
         )
+        if aviso_cupom:
+            st.caption(aviso_cupom)
         cor, rotulo = MARROM, "Não tentou pagar"
     if a["situacao"] == "Já comprou":
         cor, rotulo = "#4A7C46", "Já comprou, não contatar"

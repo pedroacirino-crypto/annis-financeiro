@@ -766,3 +766,71 @@ def marcar_plano(id_: str, feito: bool) -> bool:
         return True
     except Exception:
         return False
+
+
+# ─── Cupons pessoais de recuperação ─────────────────────────────────────────
+#
+# Um por carrinho. Fica aqui para a mensagem sair sempre com o mesmo código,
+# para o cupom não ser criado duas vezes, e para no fim do mês dar para
+# contar quantos nasceram e quantos foram usados.
+
+TABELA_CUPONS = "cupons_recuperacao"
+
+
+def garantir_cupons() -> None:
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        con.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {TABELA_CUPONS} (
+                carrinho    TEXT PRIMARY KEY,
+                codigo      TEXT NOT NULL,
+                cliente     TEXT,
+                email       TEXT,
+                shopify_id  TEXT,
+                criado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+                expira_em   TIMESTAMPTZ NOT NULL
+            )
+        """))
+
+
+def cupom_do_carrinho(carrinho: str):
+    if not configurado() or not carrinho:
+        return None
+    from sqlalchemy import text
+    try:
+        garantir_cupons()
+        with _conectar().connect() as con:
+            l = con.execute(text(
+                f"SELECT codigo, criado_em, expira_em FROM {TABELA_CUPONS} WHERE carrinho = :c"),
+                {"c": carrinho}).mappings().first()
+        return dict(l) if l else None
+    except Exception:
+        return None
+
+
+def guardar_cupom(carrinho: str, codigo: str, cliente: str, email: str, shopify_id: str, expira_em) -> bool:
+    if not configurado():
+        return False
+    from sqlalchemy import text
+    try:
+        garantir_cupons()
+        with _conectar().begin() as con:
+            con.execute(text(
+                f"INSERT INTO {TABELA_CUPONS} (carrinho, codigo, cliente, email, shopify_id, expira_em)"
+                f" VALUES (:c, :cod, :cli, :e, :s, :x) ON CONFLICT (carrinho) DO NOTHING"),
+                {"c": carrinho, "cod": codigo, "cli": cliente, "e": email, "s": shopify_id, "x": expira_em})
+        return True
+    except Exception:
+        return False
+
+
+def codigos_de_cupom() -> set:
+    if not configurado():
+        return set()
+    from sqlalchemy import text
+    try:
+        garantir_cupons()
+        with _conectar().connect() as con:
+            return {l[0] for l in con.execute(text(f"SELECT codigo FROM {TABELA_CUPONS}")).all()}
+    except Exception:
+        return set()

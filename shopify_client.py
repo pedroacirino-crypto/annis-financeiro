@@ -169,3 +169,71 @@ def listar_abandonados(limite: int = 500) -> list:
             break
         cursor = bloco["pageInfo"]["endCursor"]
     return itens[:limite]
+
+
+# ─── Cupom pessoal de recuperação ───────────────────────────────────────────
+#
+# Um código de desconto na Shopify tem validade única, igual para todo mundo.
+# "48 horas a partir do envio" só existe se cada pessoa tiver o seu, criado
+# na hora. Escolha do Pedro em 04/10/2026: nome da pessoa mais 10, 10%,
+# 48 horas, uso único.
+
+_MUT_CUPOM = """
+mutation($d: DiscountCodeBasicInput!) {
+  discountCodeBasicCreate(basicCodeDiscount: $d) {
+    codeDiscountNode { id }
+    userErrors { field message code }
+  }
+}
+"""
+
+_Q_CLIENTE = """
+query($q: String!) { customers(first: 1, query: $q) { nodes { id email } } }
+"""
+
+_Q_CODIGO = """
+query($c: String!) { codeDiscountNodeByCode(code: $c) { id } }
+"""
+
+
+def codigo_existe(codigo: str) -> bool:
+    d = _graphql(_Q_CODIGO, {"c": codigo})
+    return bool(d.get("codeDiscountNodeByCode"))
+
+
+def _id_cliente(email: str):
+    if not email:
+        return None
+    d = _graphql(_Q_CLIENTE, {"q": f"email:{email}"})
+    nos = d.get("customers", {}).get("nodes") or []
+    return nos[0]["id"] if nos and (nos[0].get("email") or "").lower() == email.lower() else None
+
+
+def criar_cupom_pessoal(codigo: str, titulo: str, email: str = "", percentual: float = 0.10,
+                        horas: int = 48) -> dict:
+    """Cria o cupom e devolve {id, codigo, comeca, expira}.
+
+    Restrito à cliente quando ela existe como cliente na loja; quem comprou
+    como visitante fica com uso único e uma vez por cliente, que é o mais
+    perto que dá. Não acumula com outro desconto, então a cliente escolhe
+    entre este e o frete grátis de primeira compra.
+    """
+    from datetime import datetime, timedelta, timezone
+    comeca = datetime.now(timezone.utc)
+    expira = comeca + timedelta(hours=horas)
+    cliente = _id_cliente(email)
+    selecao = {"customers": {"add": [cliente]}} if cliente else {"all": True}
+    entrada = {
+        "title": titulo, "code": codigo,
+        "startsAt": comeca.isoformat(), "endsAt": expira.isoformat(),
+        "usageLimit": 1, "appliesOncePerCustomer": True,
+        "customerSelection": selecao,
+        "customerGets": {"value": {"percentage": percentual}, "items": {"all": True}},
+        "combinesWith": {"orderDiscounts": False, "productDiscounts": False, "shippingDiscounts": False},
+    }
+    d = _graphql(_MUT_CUPOM, {"d": entrada})
+    r = d["discountCodeBasicCreate"]
+    if r.get("userErrors"):
+        raise RuntimeError(f"Shopify: {r['userErrors']}")
+    return {"id": r["codeDiscountNode"]["id"], "codigo": codigo,
+            "comeca": comeca, "expira": expira, "restrito": bool(cliente)}
