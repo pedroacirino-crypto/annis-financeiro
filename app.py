@@ -685,6 +685,25 @@ def _artigo(nome: str) -> str:
     return "uma" if primeira.lower().endswith("a") else "um"
 
 
+# Peças feitas depois do pedido. O Pedro explicou em 02/09/2026: não há 15
+# Loulou em estoque, há tecido para produzir até 15.
+SOB_ENCOMENDA = ("Loulou",)
+
+
+def _tem_sob_encomenda(itens_txt: str) -> bool:
+    return any(p.lower() in (itens_txt or "").lower() for p in SOB_ENCOMENDA)
+
+
+def _nome_sob_encomenda(itens_txt: str) -> str:
+    """"o Vestido Loulou", a partir da primeira peça sob encomenda do carrinho."""
+    for pedaco in (itens_txt or "").split(", "):
+        titulo = pedaco.split("x ", 1)[-1] if "x " in pedaco else pedaco
+        if _tem_sob_encomenda(titulo):
+            curto = _nome_curto(titulo) or titulo.strip()
+            return f"{_artigo(curto)} {curto}"
+    return "o vestido"
+
+
 def _lista_produtos(itens_txt: str) -> tuple:
     """Devolve (frase com artigos, coleção comum, pronome de retomada).
 
@@ -807,7 +826,24 @@ def _card_recuperar(a: dict, enviado_em=None):
     produtos, colecao, pronome = _lista_produtos(itens)
     url = _link_recuperacao(a.get("url_recuperacao", ""))
 
-    if a["situacao"] == "Gerou o pedido e não pagou":
+    # Peça sob encomenda não é carrinho abandonado comum: o Loulou é feito
+    # depois do pedido, com prazo e medida da cliente. Quem o deixou no
+    # carrinho provavelmente parou numa dúvida, não no preço. A abordagem é
+    # abrir a conversa, sem cupom e sem link, como o Pedro pediu em
+    # 04/10/2026. Quem tentou pagar e não passou continua com o texto de
+    # pagamento, que é o problema dela naquele momento.
+    if _tem_sob_encomenda(itens) and a["situacao"] != "Tentou e não passou":
+        nome_peca = _nome_sob_encomenda(itens)
+        texto = (
+            f"{saudacao}\n\n"
+            f"Vi que você colocou {nome_peca} no carrinho. Ele é um vestido feito "
+            "sob encomenda, do seu jeito, então queria saber se ficou alguma "
+            "dúvida sobre ele: prazo, medidas, cores, o que for.\n\n"
+            "Me conta por aqui que eu te ajudo. 🤎\n\n"
+            "Com carinho,\nAnnis"
+        )
+        cor, rotulo = "#5B4A8A", "Sob encomenda"
+    elif a["situacao"] == "Gerou o pedido e não pagou":
         # Curto de propósito: no caso comum a cliente sabe que não pagou, e
         # explicar o e-mail de confirmação ou oferecer abertura de chamado
         # levanta um problema que ela não tem. Quem reclamar de cobrança
@@ -1523,7 +1559,9 @@ with st.sidebar:
 # Duas naturezas de trabalho na mesma tela cansavam a leitura: Recuperar e
 # Clientes são fila de contato, as outras são conferência de dinheiro. Elas
 # não se misturam no dia da Ana, então também não se misturam no menu.
-TRABALHO = ["Plano", "Recuperar", "Clientes", "Lista de espera", "Acessos"]
+# O Plano fica por último de propósito: é consulta de vez em quando, não
+# trabalho do dia, e não precisa estar na frente de quem abre a seção.
+TRABALHO = ["Recuperar", "Clientes", "Lista de espera", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
