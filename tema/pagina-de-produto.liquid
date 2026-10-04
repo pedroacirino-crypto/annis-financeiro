@@ -129,6 +129,17 @@
     }
   }
 
+  /* Computador: texto encostado na foto, como na Aluf (55px de distância), e
+     mais largo. O tema centralizava uma coluna de 400px, deixando 187px de
+     vazio entre a foto e o texto e mais 187px na borda direita. */
+  @media (min-width: 750px) {
+    .product-information .product-details {
+      justify-content: flex-start !important;
+      padding-inline-start: 16px !important;
+    }
+    .product-information .product-details > .group-block { max-width: 600px !important; }
+  }
+
   /* Computador: lupa ao passar o mouse, 2x, seguindo o cursor. */
   @media (hover: hover) and (pointer: fine) and (min-width: 750px) {
     media-gallery .product-media { overflow: hidden; }
