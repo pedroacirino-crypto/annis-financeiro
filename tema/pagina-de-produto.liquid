@@ -5,8 +5,9 @@
      espelham o Hub da Stone (Minhas Integrações > Shopify). Mudou lá, muda
      aqui. A conta é a do checkout: juros simples sobre o total e parcela
      arredondada para cima.
-  2. Galeria no computador: a foto cabe na altura da tela e amplia 2x ao
-     passar o mouse.
+  2. Galeria no computador: amplia 2x ao passar o mouse. Caber na altura
+     da tela e as miniaturas à esquerda são opções do bloco Mídias do
+     produto (Ajustar à altura da tela; Paginação: Miniaturas).
   3. Zoom no celular, na tela cheia: o do tema mais toque para ampliar.
   Fonte versionada em tema/pagina-de-produto.liquid, no repositório do painel.
 {%- endcomment -%}
@@ -78,16 +79,7 @@
   .annis-ver{margin-left:.6em;opacity:.65;text-decoration:underline;text-underline-offset:2px}
   .annis-parcelas table{margin:6px 0 2px;border-collapse:collapse;font-size:inherit;line-height:1.7;font-variant-numeric:tabular-nums}
   .annis-parcelas td{padding:0 1.5em 0 0;white-space:nowrap}
-</style>
-<style>
-  /* Computador: a foto cabe na altura da tela. As fotos do tema são 4:5,
-     então a largura máxima é a altura útil da tela vezes 0,8. */
-  @media (min-width: 750px) {
-    .product-information__media media-gallery.media-gallery--carousel {
-      max-width: calc((100svh - 140px) * 0.8);
-      margin-inline: auto;
-    }
-  }
+
   /* Computador: lupa ao passar o mouse, 2x, seguindo o cursor. */
   @media (hover: hover) and (pointer: fine) and (min-width: 750px) {
     media-gallery .product-media { overflow: hidden; }
