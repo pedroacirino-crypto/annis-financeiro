@@ -1,0 +1,248 @@
+{%- comment -%}
+  Página de produto da Annis. Um bloco "Liquid personalizado" logo abaixo
+  do Preço, no template Produto padrão, com três coisas:
+  1. Parcelamento e Pix embaixo do preço (04/10/2026). Os números abaixo
+     espelham o Hub da Stone (Minhas Integrações > Shopify). Mudou lá, muda
+     aqui. A conta é a do checkout: juros simples sobre o total e parcela
+     arredondada para cima.
+  2. Galeria no computador: a foto cabe na altura da tela e amplia 2x ao
+     passar o mouse.
+  3. Zoom no celular, na tela cheia: o do tema mais toque para ampliar.
+  Fonte versionada em tema/pagina-de-produto.liquid, no repositório do painel.
+{%- endcomment -%}
+{%- liquid
+  assign max_parcelas = 12
+  assign sem_juros = 6
+  assign parcela_minima = 5000
+  assign juros_inicial = 1840
+  assign juros_incremental = 239
+  assign desconto_pix = 5
+
+  assign preco = product.selected_or_first_available_variant.price
+  assign fator_pix = 100 | minus: desconto_pix
+  assign pix = preco | times: fator_pix | divided_by: 100
+
+  assign melhor = 1
+  assign parcela_melhor = preco
+  for n in (2..sem_juros)
+    assign parcela = preco | plus: n | minus: 1 | divided_by: n
+    if parcela >= parcela_minima
+      assign melhor = n
+      assign parcela_melhor = parcela
+    endif
+  endfor
+
+  assign linhas_juros = ''
+  if melhor == sem_juros
+    assign inicio = sem_juros | plus: 1
+    for n in (inicio..max_parcelas)
+      assign passos = n | minus: sem_juros | minus: 1
+      assign fator = juros_incremental | times: passos | plus: juros_inicial | plus: 10000
+      assign total_x = preco | times: fator
+      assign divisor = n | times: 10000
+      assign parcela = total_x | plus: divisor | minus: 1 | divided_by: divisor
+      if parcela < parcela_minima
+        break
+      endif
+      assign total = total_x | plus: 5000 | divided_by: 10000
+      assign parcela_txt = parcela | money
+      assign total_txt = total | money
+      assign linha = '<tr><td>' | append: n | append: 'x</td><td>' | append: parcela_txt | append: '</td><td>total ' | append: total_txt | append: '</td></tr>'
+      assign linhas_juros = linhas_juros | append: linha
+    endfor
+  endif
+-%}
+<div class="annis-pagamento">
+  {%- if melhor > 1 -%}
+    {%- if linhas_juros != blank -%}
+      <details class="annis-parcelas">
+        <summary>ou {{ melhor }}x de {{ parcela_melhor | money }} sem juros <span class="annis-ver">ver parcelas</span></summary>
+        <table>
+          <tr><td>1x a {{ melhor }}x</td><td>até {{ parcela_melhor | money }}</td><td>sem juros</td></tr>
+          {{ linhas_juros }}
+        </table>
+      </details>
+    {%- else -%}
+      <p>ou {{ melhor }}x de {{ parcela_melhor | money }} sem juros</p>
+    {%- endif -%}
+  {%- endif -%}
+  <p>{{ pix | money }} no Pix</p>
+</div>
+<style>
+  product-price .price{font-weight:600;font-size:15px;letter-spacing:.01em}
+  product-price .compare-at-price{font-size:12px;margin-left:.4em}
+  .annis-pagamento{display:flex;flex-direction:column;gap:3px;margin-top:-6px;font-size:1em;line-height:1.2}
+  .annis-pagamento p{margin:0}
+  .annis-parcelas summary{display:block;padding:0;min-height:0;cursor:pointer;list-style:none}
+  .annis-parcelas summary::-webkit-details-marker{display:none}
+  .annis-ver{margin-left:.6em;opacity:.65;text-decoration:underline;text-underline-offset:2px}
+  .annis-parcelas table{margin:6px 0 2px;border-collapse:collapse;font-size:inherit;line-height:1.7;font-variant-numeric:tabular-nums}
+  .annis-parcelas td{padding:0 1.5em 0 0;white-space:nowrap}
+</style>
+<style>
+  /* Computador: a foto cabe na altura da tela. As fotos do tema são 4:5,
+     então a largura máxima é a altura útil da tela vezes 0,8. */
+  @media (min-width: 750px) {
+    .product-information__media media-gallery.media-gallery--carousel {
+      max-width: calc((100svh - 140px) * 0.8);
+      margin-inline: auto;
+    }
+  }
+  /* Computador: lupa ao passar o mouse, 2x, seguindo o cursor. */
+  @media (hover: hover) and (pointer: fine) and (min-width: 750px) {
+    media-gallery .product-media { overflow: hidden; }
+    media-gallery .product-media img { transition: transform .25s ease; cursor: zoom-in; }
+    media-gallery .product-media img.annis-lupa { transform: scale(2); }
+  }
+  /* Celular: transição suave quando o toque amplia ou volta. */
+  drag-zoom-wrapper.annis-animando img { transition: transform .25s ease; }
+</style>
+<script>
+  /* Lupa do computador. */
+  (function () {
+    var fino = matchMedia('(hover: hover) and (pointer: fine) and (min-width: 750px)');
+    var atual = null;
+    function solta() {
+      if (!atual) return;
+      atual.classList.remove('annis-lupa');
+      atual = null;
+    }
+    document.addEventListener('mousemove', function (e) {
+      if (!fino.matches) return solta();
+      var caixa = e.target.closest && e.target.closest('media-gallery .product-media-container--image .product-media');
+      var img = caixa && caixa.querySelector('img');
+      if (img !== atual) solta();
+      if (!img) return;
+      var r = caixa.getBoundingClientRect();
+      img.style.transformOrigin = ((e.clientX - r.left) / r.width * 100) + '% ' + ((e.clientY - r.top) / r.height * 100) + '%';
+      img.classList.add('annis-lupa');
+      atual = img;
+    }, { passive: true });
+    document.addEventListener('mouseleave', solta);
+  })();
+
+  /* Zoom do celular na tela cheia: é o drag-zoom-wrapper do tema (pinça
+     para ampliar, arrastar para mover) com um acréscimo, toque simples
+     amplia 2,5x no ponto tocado e outro toque volta. Registrado antes do
+     script do tema, que só define o elemento se ninguém definiu. */
+  (function () {
+    if (customElements.get('drag-zoom-wrapper')) return;
+    var MIN = 1, MAX = 5, INICIAL = 1.5, TOQUE = 2.5;
+    var grande = matchMedia('(width >= 750px)');
+    function limita(v, a, b) { return Math.max(a, Math.min(v, b)); }
+    function ponto(t) { return t ? { x: t.clientX, y: t.clientY } : null; }
+    function distancia(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    function meio(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+
+    class AnnisZoom extends HTMLElement {
+      constructor() {
+        super();
+        this._c = new AbortController();
+        this._s = INICIAL; this._d0 = 0; this._s0 = INICIAL;
+        this._t = { x: 0, y: 0 }; this._p0 = { x: 0, y: 0 }; this._t0 = { x: 0, y: 0 };
+        this._arrastando = false; this._ligado = false; this._raf = null; this._toque = null;
+        this._ro = new ResizeObserver(() => {
+          if (!this._ligado && !grande.matches) this._liga();
+          if (this._ligado) this._pede();
+        });
+      }
+      get _img() { return this.querySelector('img'); }
+      connectedCallback() {
+        if (!this._img) return;
+        this._ro.observe(this);
+        if (!grande.matches) { this._liga(); this._aplica(); }
+      }
+      disconnectedCallback() { this._c.abort(); this._ro.disconnect(); if (this._raf) cancelAnimationFrame(this._raf); }
+      _liga() {
+        if (this._ligado) return;
+        this._ligado = true;
+        var o = { passive: false, signal: this._c.signal };
+        this.addEventListener('touchstart', this._inicio, o);
+        this.addEventListener('touchmove', this._move, o);
+        this.addEventListener('touchend', this._fim, o);
+        var img = this._img;
+        if (img) img.addEventListener('load', this._aplica, { signal: this._c.signal });
+      }
+      _inicio = (e) => {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+          var a = ponto(e.touches[0]), b = ponto(e.touches[1]);
+          this._d0 = distancia(a, b); this._s0 = this._s; this._arrastando = false; this._toque = null;
+        } else if (e.touches.length === 1) {
+          var p = ponto(e.touches[0]);
+          this._p0 = p; this._t0 = { x: this._t.x, y: this._t.y }; this._arrastando = true;
+          this._toque = { x: p.x, y: p.y, quando: Date.now(), mexeu: false };
+        }
+      };
+      _move = (e) => {
+        e.preventDefault();
+        if (e.touches.length === 2) {
+          this._toque = null;
+          var a = ponto(e.touches[0]), b = ponto(e.touches[1]);
+          var m = meio(a, b), velho = this._s;
+          this._s = limita(distancia(a, b) / this._d0 * this._s0, MIN, MAX);
+          this._aproxima(m, velho);
+          this._arrastando = false;
+        } else if (e.touches.length === 1 && this._arrastando) {
+          var p = ponto(e.touches[0]);
+          if (this._toque && Math.hypot(p.x - this._toque.x, p.y - this._toque.y) > 8) this._toque.mexeu = true;
+          this._t = { x: this._t0.x + (p.x - this._p0.x) / this._s, y: this._t0.y + (p.y - this._p0.y) / this._s };
+          this._pede();
+        }
+      };
+      _fim = (e) => {
+        if (e.touches.length !== 0) return;
+        this._arrastando = false;
+        var t = this._toque; this._toque = null;
+        if (t && !t.mexeu && Date.now() - t.quando < 300) this._alterna(t);
+        this._pede();
+      };
+      _aproxima(p, velho) {
+        var r = this.getBoundingClientRect();
+        var dx = p.x - (r.left + this.clientWidth / 2), dy = p.y - (r.top + this.clientHeight / 2);
+        var delta = this._s / velho - 1;
+        this._t.x -= dx * delta / this._s;
+        this._t.y -= dy * delta / this._s;
+      }
+      _alterna(p) {
+        var base = this._minimo() || INICIAL;
+        var velho = this._s;
+        this.classList.add('annis-animando');
+        setTimeout(() => this.classList.remove('annis-animando'), 300);
+        if (velho > base * 1.15) { this._s = base; this._t = { x: 0, y: 0 }; }
+        else { this._s = limita(base * TOQUE, MIN, MAX); this._aproxima(p, velho); }
+        this._pede();
+      }
+      _dimensoes() {
+        var img = this._img, r = this.getBoundingClientRect();
+        if (!img || !img.naturalWidth || !img.naturalHeight || !this.clientWidth || !this.clientHeight) return null;
+        var ar = r.width / r.height, an = img.naturalWidth / img.naturalHeight, w, h;
+        if (an > ar) { w = r.width; h = w / an; } else { h = r.height; w = h * an; }
+        return w && h ? { w: w, h: h } : null;
+      }
+      _minimo() {
+        var d = this._dimensoes();
+        if (!d) return null;
+        return Math.max(this.clientWidth / d.w, this.clientHeight / d.h) + 0.001;
+      }
+      _restringe() {
+        var min = this._minimo(), d = this._dimensoes();
+        if (!min || !d) return;
+        this._s = limita(this._s, min, MAX);
+        var sobraX = Math.max(0, d.w * this._s - this.clientWidth), sobraY = Math.max(0, d.h * this._s - this.clientHeight);
+        var mx = sobraX / (2 * this._s), my = sobraY / (2 * this._s);
+        this._t.x = limita(this._t.x, -mx, mx);
+        this._t.y = limita(this._t.y, -my, my);
+      }
+      _pede = () => { if (!this._raf) this._raf = requestAnimationFrame(this._aplica); };
+      _aplica = () => {
+        this._raf = null;
+        this._restringe();
+        this.style.setProperty('--drag-zoom-scale', String(this._s));
+        this.style.setProperty('--drag-zoom-translate-x', this._t.x + 'px');
+        this.style.setProperty('--drag-zoom-translate-y', this._t.y + 'px');
+      };
+    }
+    customElements.define('drag-zoom-wrapper', AnnisZoom);
+  })();
+</script>
