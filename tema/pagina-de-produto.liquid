@@ -5,9 +5,10 @@
      espelham o Hub da Stone (Minhas Integrações > Shopify). Mudou lá, muda
      aqui. A conta é a do checkout: juros simples sobre o total e parcela
      arredondada para cima.
-  2. Galeria no computador: amplia 2x ao passar o mouse. Caber na altura
-     da tela e as miniaturas à esquerda são opções do bloco Mídias do
-     produto (Ajustar à altura da tela; Paginação: Miniaturas).
+  2. Galeria no computador, no formato da Aluf: foto inteira em 2:3 na
+     altura da tela, miniaturas grandes ao lado, lupa 2x ao passar o mouse.
+     Depende do bloco Mídias do produto em Carrossel com Paginação:
+     Miniaturas.
   3. Zoom no celular, na tela cheia: o do tema mais toque para ampliar.
   Fonte versionada em tema/pagina-de-produto.liquid, no repositório do painel.
 {%- endcomment -%}
@@ -80,6 +81,54 @@
   .annis-parcelas table{margin:6px 0 2px;border-collapse:collapse;font-size:inherit;line-height:1.7;font-variant-numeric:tabular-nums}
   .annis-parcelas td{padding:0 1.5em 0 0;white-space:nowrap}
 
+  /* Computador: galeria como a da Aluf. A foto fica sempre inteira, em 2:3
+     (a proporção das fotos da Annis), com a altura que sobra na tela abaixo
+     do cabeçalho, e as miniaturas grandes, coladas na foto e entre si, numa
+     coluna ao lado (na Aluf a miniatura tem 29% da largura da foto).
+     O tema cortava a foto: moldura 4:5 e altura mínima de 500px. */
+  @media (min-width: 750px) {
+    media-gallery.media-gallery--carousel {
+      --annis-h: max(360px, calc(100svh - var(--annis-topo, 130px) - 24px));
+      --annis-miniatura: calc(var(--annis-h) * 2 / 3 * 0.29);
+      padding-inline-start: 24px;
+      padding-inline-end: 40px;
+    }
+    media-gallery.media-gallery--carousel slideshow-component {
+      grid-template-columns: var(--annis-miniatura) calc(var(--annis-h) * 2 / 3) !important;
+      column-gap: 0 !important;
+      justify-content: end !important;
+    }
+    media-gallery.media-gallery--carousel slideshow-slide.product-media-container {
+      aspect-ratio: 2 / 3 !important;
+      height: var(--annis-h) !important;
+      max-height: none !important;
+      min-height: 0 !important;
+    }
+    media-gallery.media-gallery--carousel .slideshow-controls__thumbnails-container {
+      height: var(--annis-h) !important;
+      max-height: var(--annis-h) !important;
+      -webkit-mask-image: none !important;
+      mask-image: none !important;
+    }
+    media-gallery.media-gallery--carousel .slideshow-controls__thumbnails { gap: 0 !important; padding: 0 !important; }
+    media-gallery.media-gallery--carousel .slideshow-controls__thumbnails .slideshow-control {
+      width: var(--annis-miniatura) !important;
+      aspect-ratio: 2 / 3;
+      height: auto !important;
+      outline: none !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      padding: 0 !important;
+      opacity: .5;
+      transition: opacity .2s;
+    }
+    media-gallery.media-gallery--carousel .slideshow-controls__thumbnails .slideshow-control[aria-selected=true],
+    media-gallery.media-gallery--carousel .slideshow-controls__thumbnails .slideshow-control:hover { opacity: 1; }
+    media-gallery.media-gallery--carousel .slideshow-controls__thumbnails img {
+      width: 100%; height: 100%; object-fit: cover; border-radius: 0 !important;
+    }
+  }
+
   /* Computador: lupa ao passar o mouse, 2x, seguindo o cursor. */
   @media (hover: hover) and (pointer: fine) and (min-width: 750px) {
     media-gallery .product-media { overflow: hidden; }
@@ -90,6 +139,22 @@
   drag-zoom-wrapper.annis-animando img { transition: transform .25s ease; }
 </style>
 <script>
+  /* Onde a foto começa na tela com a página no topo, para a galeria usar só
+     a altura que sobra. A galeria é fixa ao rolar, então só mede no topo;
+     aberta já rolada, fica com 130px até a página voltar ao topo. */
+  (function () {
+    function mede() {
+      if (window.scrollY > 2) return;
+      var s = document.querySelector('media-gallery.media-gallery--carousel slideshow-component');
+      if (!s) return;
+      document.documentElement.style.setProperty('--annis-topo', Math.round(s.getBoundingClientRect().top) + 'px');
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mede); else mede();
+    window.addEventListener('load', mede);
+    window.addEventListener('resize', mede);
+    window.addEventListener('scroll', function () { if (window.scrollY <= 2) mede(); }, { passive: true });
+  })();
+
   /* Lupa do computador. */
   (function () {
     var fino = matchMedia('(hover: hover) and (pointer: fine) and (min-width: 750px)');
