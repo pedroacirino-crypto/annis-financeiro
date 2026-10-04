@@ -1626,7 +1626,7 @@ with st.sidebar:
 # não se misturam no dia da Ana, então também não se misturam no menu.
 # O Plano fica por último de propósito: é consulta de vez em quando, não
 # trabalho do dia, e não precisa estar na frente de quem abre a seção.
-TRABALHO = ["Recuperar", "Clientes", "Lista de espera", "Acessos", "Plano"]
+TRABALHO = ["Recuperar", "Disparos", "Clientes", "Lista de espera", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
@@ -2238,6 +2238,143 @@ def _aba_plano():
 if "Plano" in abas:
   with abas["Plano"]:
     _aba_plano()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA: DISPAROS: campanha para a base, uma pessoa por vez, com "Já enviei"
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Uma campanha é um texto com um link, mandado para quem já comprou. O cupom
+# da campanha vive na Shopify; aqui fica só o nome dele. A marcação de
+# enviada usa a mesma tabela da fila de carrinho, com id próprio por
+# campanha e pessoa, então não se mistura com a recuperação.
+CAMPANHAS = {
+    "entretempos": {
+        "titulo": "Nova coleção · Entretempos",
+        "ate": "18/10",
+        "link": "annis.store/discount/ENTRETEMPOS10?redirect=/collections/entretempos",
+        "cupom_frete": "ENTRETEMPOSFRETE",
+        "cupom": "ENTRETEMPOS10",
+    },
+}
+
+
+def _texto_campanha(c: dict, camp: dict) -> str:
+    primeiro = (c.get("nome") or "").split()[0] if c.get("nome") else ""
+    saudacao = f"Oi, {primeiro}! Tudo bem? 🤎" if primeiro else "Oi! Tudo bem? 🤎"
+    # Quem devolveu peça recebe a abertura que reconhece isso. É a chance de
+    # recuperar quem saiu frustrada, e fingir que não aconteceu soa pior.
+    if c.get("estornos"):
+        abertura = ("Chegou a Entretempos, a nova coleção da Annis. Sei que a última peça "
+                    "não ficou do jeito que você queria, e quis te mostrar a coleção nova "
+                    "com um desconto especial.")
+    else:
+        abertura = ("Chegou a Entretempos, a nova coleção da Annis, e eu quis te mostrar "
+                    "com um desconto especial, só para quem já é de casa.")
+    return (
+        f"{saudacao}\n\n{abertura}\n\n"
+        f"10% em tudo até {camp['ate']}, já aplicado neste link:\n{camp['link']}\n\n"
+        f"E se quiser o frete por nossa conta, é só usar o cupom {camp['cupom_frete']} no checkout.\n\n"
+        "Qualquer dúvida de tamanho ou prazo, é só me responder.\n\n"
+        "Com carinho,\nAnnis"
+    )
+
+
+def _usos_do_cupom(codigo: str):
+    """Quantas vezes o cupom foi usado, direto da Shopify. None se não der."""
+    try:
+        d = shopify_client._graphql(
+            '{ codeDiscountNodeByCode(code: "%s") { codeDiscount { ... on DiscountCodeBasic { asyncUsageCount } '
+            '... on DiscountCodeFreeShipping { asyncUsageCount } } } }' % codigo)
+        return d["codeDiscountNodeByCode"]["codeDiscount"]["asyncUsageCount"]
+    except Exception:
+        return None
+
+
+def _card_disparo(c: dict, camp: dict, chave: str, enviado_em=None):
+    texto = _texto_campanha(c, camp)
+    etiqueta = []
+    if c.get("estornos"):
+        etiqueta.append("devolveu peça")
+    if c.get("compras", 0) > 1:
+        etiqueta.append(f"{c['compras']} compras")
+    etiqueta.append(f"última em {_dia_br(c['ultima'])}")
+    if c.get("cidade"):
+        etiqueta.append(f"{c['cidade']}/{c['uf']}")
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.markdown(
+                f"<div style='font-family:Newsreader,serif;font-size:1.3rem;color:{MARROM}'>{c.get('nome') or 'Sem nome'}</div>"
+                f"<div style='font-family:Poppins;font-size:0.75rem;color:{MARROM_CLARO};padding-top:0.3rem'>"
+                + " · ".join(etiqueta) + "</div>",
+                unsafe_allow_html=True,
+            )
+        with c2:
+            st.markdown(
+                f"<div style='text-align:right;font-family:Newsreader,serif;font-size:1.5rem;color:{MARROM}'>{fmt_brl(c['total'])}</div>"
+                f"<div style='text-align:right;font-family:Poppins;font-size:0.65rem;color:{MARROM_CLARO}'>já gastou</div>",
+                unsafe_allow_html=True,
+            )
+        texto_final = st.text_area("Mensagem", value=texto, height=230, key=f"disp_{chave}",
+                                   label_visibility="collapsed")
+        _botoes_acao(c, texto_final, "Abrir o link", "https://" + camp["link"])
+        if texto_final != texto:
+            st.caption("Texto editado. Os botões acima já usam a sua versão.")
+        if enviado_em:
+            e1, e2 = st.columns([3, 1])
+            e1.caption(f"Marcada como enviada {_dias_desde(enviado_em)}.")
+            if e2.button("Desfazer", key=f"disp_desf_{chave}", use_container_width=True):
+                if nuvem.desmarcar_contato(chave):
+                    st.rerun()
+        elif st.button("Já enviei", key=f"disp_env_{chave}", use_container_width=True):
+            if nuvem.marcar_contato(chave, c.get("nome") or "", "disparo", c.get("total") or 0):
+                st.rerun()
+            else:
+                st.error("Não consegui gravar. O banco na nuvem não respondeu.")
+
+
+if "Disparos" in abas:
+  with abas["Disparos"]:
+    st.header("Disparos")
+    st.caption(
+        "Campanha para quem já comprou, uma pessoa por vez: o texto já vem "
+        "pronto, o botão abre o WhatsApp, e \"Já enviei\" tira a pessoa da fila."
+    )
+    _camp_id = st.selectbox("Campanha", list(CAMPANHAS), format_func=lambda k: CAMPANHAS[k]["titulo"],
+                            key="disp_campanha")
+    _camp = CAMPANHAS[_camp_id]
+    _base = db.clientes()
+    if not _base:
+        st.info("Nenhuma cliente na base ainda. Use **Atualizar dados** na barra lateral.")
+    else:
+        _base = sorted(_base, key=lambda c: c["ultima"] or "", reverse=True)
+        _enviadas = nuvem.ler_contatos()
+        _chave = lambda c: f"disparo:{_camp_id}:{(c.get('email') or c.get('nome') or '').lower()}"
+        _feitas = [c for c in _base if _chave(c) in _enviadas]
+        _sem_fone = [c for c in _base if not _so_digitos(c.get("telefone", ""))]
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Na base", len(_base))
+        m2.metric("Enviadas", len(_feitas))
+        m3.metric("Faltam", len(_base) - len(_feitas))
+        _u1, _u2 = _usos_do_cupom(_camp["cupom"]), _usos_do_cupom(_camp["cupom_frete"])
+        m4.metric("Usos do cupom", "—" if _u1 is None else f"{_u1} · frete {_u2 if _u2 is not None else '—'}",
+                  help="Direto da Shopify: quantos pedidos usaram o cupom de 10%, e quantos o de frete.")
+        if _sem_fone:
+            st.caption(f"{len(_sem_fone)} sem telefone na base; aparecem no fim, com o botão apagado.")
+
+        f1, f2 = st.columns([1, 1])
+        _so_devolveu = f1.checkbox("Só quem devolveu peça", value=False, key="disp_devolveu")
+        _ver_enviadas = f2.checkbox("Mostrar já enviadas", value=False, key="disp_ver_enviadas")
+
+        _fila = [c for c in _base if (not _so_devolveu or c.get("estornos"))]
+        _fila = sorted(_fila, key=lambda c: (0 if _so_digitos(c.get("telefone", "")) else 1))
+        if not _ver_enviadas:
+            _fila = [c for c in _fila if _chave(c) not in _enviadas]
+        st.caption(f"{len(_fila)} na fila")
+        for c in _fila:
+            _card_disparo(c, _camp, _chave(c), enviado_em=_enviadas.get(_chave(c)))
 
 
 # ════════════════════════════════════════════════════════════════════════════
