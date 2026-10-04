@@ -30,6 +30,10 @@
   product-card .product-media,
   product-card slideshow-slide { border-radius: 0 !important; }
 
+  /* Disponibilidade: só "Em estoque". "Fora de estoque" é padrão da Shopify
+     e não serve à cliente. */
+  .facets li:has(input[name="filter.v.availability"][value="0"]) { display: none !important; }
+
   .annis-parcela { margin-top: 2px; font-size: .85em; opacity: .75; }
 
   .annis-tam { display: flex; flex-wrap: wrap; gap: 6px; }
