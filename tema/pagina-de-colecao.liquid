@@ -30,9 +30,17 @@
   product-card .product-media,
   product-card slideshow-slide { border-radius: 0 !important; }
 
-  /* Disponibilidade: só "Em estoque". "Fora de estoque" é padrão da Shopify
-     e não serve à cliente. */
-  .facets li:has(input[name="filter.v.availability"][value="0"]) { display: none !important; }
+  /* Filtro de Disponibilidade escondido: para a cliente não serve, mas
+     continua no formulário, porque o filtro de tamanho marca "Em estoque"
+     por baixo (ver o script). */
+  .facets__item:has(input[name="filter.v.availability"]) { display: none !important; }
+  /* Tamanhos na ordem da grade, não na ordem da Shopify. */
+  .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="PP"]) { order: 1; }
+  .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="P"]) { order: 2; }
+  .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="M"]) { order: 3; }
+  .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="G"]) { order: 4; }
+  .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="GG"]) { order: 5; }
+  .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="U"]) { order: 6; }
 
   .annis-parcela { margin-top: 2px; font-size: .85em; opacity: .75; }
 
