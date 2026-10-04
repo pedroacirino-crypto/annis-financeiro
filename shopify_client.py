@@ -220,7 +220,12 @@ def criar_cupom_pessoal(codigo: str, titulo: str, email: str = "", percentual: f
     """
     from datetime import datetime, timedelta, timezone
     comeca = datetime.now(timezone.utc)
-    expira = comeca + timedelta(hours=horas)
+    # Vence no fim do dia, horário de Brasília, não no meio da tarde: um
+    # cupom criado dia 4 às 14h vale até dia 6 às 23:59. Pedido do Pedro em
+    # 04/10/2026, para a mensagem dizer só a data.
+    brasilia = timezone(timedelta(hours=-3))
+    ultimo_dia = (comeca + timedelta(hours=horas)).astimezone(brasilia)
+    expira = ultimo_dia.replace(hour=23, minute=59, second=59, microsecond=0).astimezone(timezone.utc)
     cliente = _id_cliente(email)
     selecao = {"customers": {"add": [cliente]}} if cliente else {"all": True}
     entrada = {

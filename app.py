@@ -942,7 +942,7 @@ def _card_recuperar(a: dict, enviado_em=None):
         # inteira e a cliente escolhe qual usar.
         codigo, expira = _cupom_pessoal(a)
         if codigo:
-            ate = (expira - timedelta(hours=3)).strftime("%d/%m às %H:%M") if hasattr(expira, "strftime") else ""
+            ate = (expira - timedelta(hours=3)).strftime("%d/%m") if hasattr(expira, "strftime") else ""
             oferta = (f"Preparamos um cupom só seu: {codigo}, com 10% de desconto, "
                       f"válido até {ate}.")
             aviso_cupom = ""
