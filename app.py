@@ -157,9 +157,10 @@ CUPOM_RECUPERACAO = "VOLTE5"
 DESCONTO_RECUPERACAO = "5% OFF"
 PERCENTUAL_CUPOM_PESSOAL = 0.10
 HORAS_CUPOM_PESSOAL = 48
-# Validade do Pix do checkout. Medido no pedido #1118: gerado 10:53, expirou
-# 11:23. Se mudar o prazo na Stone, é só trocar aqui.
-MINUTOS_PIX = 30
+# Validade do Pix do checkout. Era 30 minutos (medido no pedido #1118: gerado
+# 10:53, expirou 11:23). Subiu para 120 em 04/10/2026, no Hub da Stone, em
+# Minhas Integrações > Shopify. Se mudar lá, é só trocar aqui.
+MINUTOS_PIX = 120
 
 # O bloco abaixo não pode conter linhas em branco: no markdown do Streamlit
 # uma linha vazia encerra o bloco HTML e o resto do CSS vaza como texto na
