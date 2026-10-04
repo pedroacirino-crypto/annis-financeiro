@@ -151,6 +151,27 @@
       }).catch(function () {});
     }
 
+    /* Filtro de tamanho: a Shopify traz a peça que tem o tamanho cadastrado,
+       mesmo esgotado. Junto com "Em estoque" ela traz só quem tem aquele
+       tamanho disponível. Então escolher tamanho marca "Em estoque". */
+    var TAMANHO = 'filter.v.option.tamanho', ESTOQUE = 'filter.v.availability';
+    /* O tema reage ao clique, antes da mudança: escuta os três. */
+    function marcaEstoque(e) {
+      var t = e.target;
+      if (!t || t.name !== TAMANHO || !t.checked) return;
+      var lugar = t.form || t.closest('form') || document;
+      var estoque = lugar.querySelector('input[name="' + ESTOQUE + '"][value="1"]');
+      if (estoque && !estoque.checked) estoque.checked = true;
+    }
+    ['click', 'input', 'change'].forEach(function (ev) { document.addEventListener(ev, marcaEstoque, true); });
+    (function () {
+      var u = new URL(location.href);
+      if (u.searchParams.has(TAMANHO) && !u.searchParams.has(ESTOQUE)) {
+        u.searchParams.append(ESTOQUE, '1');
+        location.replace(u.toString());
+      }
+    })();
+
     function varre() { document.querySelectorAll('product-card').forEach(aplica); }
     var espera = null;
     new MutationObserver(function () {
