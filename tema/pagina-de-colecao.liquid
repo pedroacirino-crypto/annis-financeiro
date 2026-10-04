@@ -34,6 +34,9 @@
      continua no formulário, porque o filtro de tamanho marca "Em estoque"
      por baixo (ver o script). */
   .facets__item:has(input[name="filter.v.availability"]) { display: none !important; }
+  /* A tag antiga "ateliê" (minúscula) virou "Ateliê", mas o índice de filtros
+     da Shopify ainda lista a antiga. Ela leva às mesmas peças. */
+  .facets__inputs-list-item:has(input[name="filter.p.tag"][value="ateliê"]) { display: none !important; }
   /* Tamanhos na ordem da grade, não na ordem da Shopify. */
   .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="PP"]) { order: 1; }
   .facets__inputs-list-item:has(input[name="filter.v.option.tamanho"][value="P"]) { order: 2; }
