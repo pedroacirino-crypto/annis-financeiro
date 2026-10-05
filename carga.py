@@ -231,9 +231,10 @@ def _conferir_orcamento(linhas: dict) -> None:
     campos = {
         "Pedidos no site": "pedidos", "Receita bruta": "receita_bruta",
         "Receita do site (Shopify)": "receita_site", "Maquininha (líquido de MDR)": "receita_maquininha",
+        "Maquininha e link no cartão": "receita_maquininha",
         "Pix direto e link": "receita_pix_direto", "(-) Desconto Pix": "desconto_pix",
         "(-) Estornos": "estornos", "Receita líquida": "receita_liquida",
-        "(-) Taxas Pagar.me": "taxas", "(-) Imposto": "imposto", "(-) CMV do site": "cmv_site",
+        "(-) Taxas Pagar.me": "taxas_pagarme", "(-) Taxas Stone": "taxas_stone", "(-) Imposto": "imposto", "(-) CMV do site": "cmv_site",
         "(-) CMV fora do site (estimado)": "cmv_fisico_estimado", "(-) CMV": "cmv",
         "Margem bruta": "margem_bruta", "(-) Meta e agência": "marketing",
         "(-) Demais despesas": "despesas_outras", "Resultado": "resultado",

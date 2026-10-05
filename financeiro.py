@@ -1389,6 +1389,20 @@ def receita_fisica_por_mes() -> pd.DataFrame:
     return out
 
 
+def vendas_stone_por_mes() -> pd.DataFrame:
+    """Maquininha e link de pagamento no cartão, pela data da venda, com o
+    bruto e o líquido de cada transação (API de Conciliação da Stone, e antes
+    dela o relatório CSV). Pix QR Code fica de fora: ele cai na conta como
+    Pix e já entra pelo extrato."""
+    import dados_fin
+    vs = dados_fin.ler_vendas_stone()
+    if vs.empty:
+        return pd.DataFrame(columns=["bruto", "liquido"])
+    ok = vs[(vs.status == "Aprovada") & vs.captura.isin(["POS", "E-commerce"])].copy()
+    ok["mes"] = ok.data.dt.strftime("%Y-%m")
+    return ok.groupby("mes")[["bruto", "liquido"]].sum()
+
+
 @memo()
 def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     ped = pedidos_pagos()
@@ -1434,17 +1448,26 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     t["desconto_pix"] = desc.reindex(meses).fillna(0.0)
     t["estornos"] = est["estornos"].reindex(meses).fillna(0.0) if not est.empty else z
     t["receita_site_liquida"] = t.receita_site - t.desconto_pix - t.estornos
-    t["receita_maquininha"] = fis["maquininha"].reindex(meses).fillna(0.0) if not fis.empty else z
+    # Maquininha e link no cartão pelo bruto e pela data da venda, com a taxa
+    # da Stone (MDR e antecipação) indo para as taxas. Até 05/10/2026 entrava
+    # o líquido do extrato pela data em que o dinheiro caía, e a taxa sumia.
+    # Mês sem venda da Stone registrada fica com o extrato, como antes.
+    stn = vendas_stone_por_mes()
+    maq_extrato = fis["maquininha"].reindex(meses).fillna(0.0) if not fis.empty else z
+    stn_bruto = stn["bruto"].reindex(meses) if not stn.empty else pd.Series(float("nan"), index=meses)
+    stn_liq = stn["liquido"].reindex(meses) if not stn.empty else pd.Series(float("nan"), index=meses)
+    t["receita_maquininha"] = stn_bruto.fillna(maq_extrato)
+    t["taxas_stone"] = (stn_bruto - stn_liq).fillna(0.0)
     t["receita_pix_direto"] = fis["pix"].reindex(meses).fillna(0.0) if not fis.empty else z
     t["receita_fisica"] = t.receita_maquininha + t.receita_pix_direto
     # Bruta é tudo que foi vendido antes de tirar desconto de Pix e estorno.
-    # A maquininha já entra líquida de MDR porque é assim que o dinheiro
-    # aparece no extrato: não existe a venda cheia dela em lugar nenhum.
     t["receita_bruta"] = t.receita_site + t.receita_fisica
     t["receita_liquida"] = t.receita_site_liquida + t.receita_fisica
     t["taxas"] = (taxas["mdr"].reindex(meses).fillna(0.0) + taxas["antecipacao"].reindex(meses).fillna(0.0)) if not taxas.empty else z
     if not est.empty:
         t["taxas"] = t["taxas"] - est["taxa_devolvida"].reindex(meses).fillna(0.0)
+    t["taxas_pagarme"] = t["taxas"]
+    t["taxas"] = t["taxas_pagarme"] + t["taxas_stone"]
     t["imposto"] = t.receita_liquida * imposto
     t["cmv_site"] = cmv.reindex(meses).fillna(0.0)
     # Fora do site não se sabe a peça. O CMV é estimado com a proporção do
