@@ -2192,6 +2192,65 @@ def _marcar_item_do_plano(id_: str):
     nuvem.marcar_plano(id_, bool(st.session_state.get(f"plano_{id_}")))
 
 
+_MESES_PLANO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
+                "setembro", "outubro", "novembro", "dezembro"]
+
+
+def _data_do_prazo(prazo: str, mes: str):
+    """Prazo do plano como data. "16/10" é o dia; "outubro" vale até o fim do
+    mês; "backlog", "1 semana após o disparo" e afins não têm data."""
+    import calendar
+    import re as _re
+    from datetime import date
+    ano, mes_plano = int(mes[:4]), int(mes[5:7])
+    t = (prazo or "").strip().lower()
+    m = _re.fullmatch(r"(\d{1,2})/(\d{1,2})", t)
+    if m:
+        dia, mm = int(m.group(1)), int(m.group(2))
+        return date(ano + (1 if mm < mes_plano - 6 else 0), mm, dia)
+    if t in _MESES_PLANO:
+        mm = _MESES_PLANO.index(t) + 1
+        a = ano + (1 if mm < mes_plano - 6 else 0)
+        return date(a, mm, calendar.monthrange(a, mm)[1])
+    return None
+
+
+def _painel_de_prazos(itens: list, mes: str) -> None:
+    """Atrasadas e próximas 7 dias, no topo do plano."""
+    hoje = (datetime.utcnow() - timedelta(hours=3)).date()
+    abertos = [(i, _data_do_prazo(i["prazo"], mes)) for i in itens if not i["feito_em"]]
+    atrasadas = sorted([(i, d) for i, d in abertos if d and d < hoje], key=lambda x: x[1])
+    proximas = sorted([(i, d) for i, d in abertos if d and hoje <= d <= hoje + timedelta(days=7)],
+                      key=lambda x: x[1])
+    sem_data = sum(1 for _, d in abertos if d is None)
+
+    def linha(i, d):
+        if d < hoje:
+            quando = f"{(hoje - d).days} dia{'s' if (hoje - d).days > 1 else ''} de atraso"
+        elif d == hoje:
+            quando = "hoje"
+        else:
+            quando = d.strftime("%d/%m")
+        return f"- **{quando}** · {i['texto']}  \n  <span style='opacity:.6'>{i['frente']}</span>"
+
+    c1, c2 = st.columns(2)
+    with c1.container(border=True):
+        st.markdown(f"**Atrasadas** · {len(atrasadas)}")
+        if atrasadas:
+            st.markdown(md("\n".join(linha(i, d) for i, d in atrasadas)), unsafe_allow_html=True)
+        else:
+            st.caption("Nada atrasado.")
+    with c2.container(border=True):
+        st.markdown(f"**Próximos 7 dias** · {len(proximas)}")
+        if proximas:
+            st.markdown(md("\n".join(linha(i, d) for i, d in proximas)), unsafe_allow_html=True)
+        else:
+            st.caption("Nada com prazo nos próximos 7 dias.")
+    if sem_data:
+        st.caption(f"{sem_data} em aberto sem data definida (backlog ou que depende de outra ação). "
+                   "Prazo só com o mês vale até o fim dele.")
+
+
 # Fragmento: marcar uma caixa refaz só esta aba. Sem isso o app inteiro
 # rodava de novo a cada clique e o contador levava uns vinte segundos
 # para acompanhar a caixa.
@@ -2208,8 +2267,7 @@ def _aba_plano():
             _mes = st.selectbox("Mês", _meses, index=_meses.index(_mes), key="plano_mes")
         _itens = nuvem.ler_plano(_mes)
         _feitos = sum(1 for i in _itens if i["feito_em"])
-        _nome_mes = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
-                     "setembro", "outubro", "novembro", "dezembro"][int(_mes[5:7]) - 1]
+        _nome_mes = _MESES_PLANO[int(_mes[5:7]) - 1]
 
         st.header(f"Plano de {_nome_mes}")
         st.caption("O que foi combinado fazer no mês. Marcar ou desmarcar grava na hora, para todo mundo.")
@@ -2218,6 +2276,7 @@ def _aba_plano():
         with p2:
             st.write("")
             st.progress(_feitos / len(_itens) if _itens else 0.0)
+        _painel_de_prazos(_itens, _mes)
 
         _frente = None
         for i in _itens:
