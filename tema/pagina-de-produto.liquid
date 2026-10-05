@@ -184,6 +184,32 @@
     window.addEventListener('scroll', function () { if (window.scrollY <= 2) mede(); }, { passive: true });
   })();
 
+  /* Vídeo da galeria toca sozinho, sem som e em loop, quando aparece na tela,
+     e pausa quando sai. O tema esconde o vídeo atrás de uma capa com botão
+     de play e não tem opção de autoplay; aqui o botão é apertado por nós.
+     Só carrega quando a cliente chega nele, então não pesa a página. */
+  (function () {
+    if (!('IntersectionObserver' in window)) return;
+    function toca(v) { v.loop = true; v.muted = true; v.play().catch(function () {}); }
+    var olho = new IntersectionObserver(function (vistos) {
+      vistos.forEach(function (e) {
+        var d = e.target, v = d.querySelector('video');
+        if (!e.isIntersecting) { if (v) v.pause(); return; }
+        if (v) return toca(v);
+        var botao = d.querySelector('.deferred-media__poster-button');
+        if (botao) botao.click();
+        var n = 0, espera = setInterval(function () {
+          var v = d.querySelector('video');
+          if (v || ++n > 30) { clearInterval(espera); if (v) toca(v); }
+        }, 100);
+      });
+    }, { threshold: 0.6 });
+    function liga() {
+      document.querySelectorAll('media-gallery slideshow-slide deferred-media').forEach(function (d) { olho.observe(d); });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', liga); else liga();
+  })();
+
   /* Lupa do computador. */
   (function () {
     var fino = matchMedia('(hover: hover) and (pointer: fine) and (min-width: 750px)');
