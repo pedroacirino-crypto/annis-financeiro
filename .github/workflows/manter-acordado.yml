@@ -34,6 +34,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Vendas da maquininha e dos links, pela API de Conciliação da Stone.
+      # O arquivo de um dia fica pronto na manhã seguinte; buscar os últimos
+      # 10 dias cobre atraso da Stone e cancelamento que chega depois.
+      - name: Vendas da Stone
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          STONE_CHAVES: ${{ secrets.STONE_CHAVES }}
+        run: |
+          pip install --quiet pandas sqlalchemy psycopg2-binary requests
+          python stone_api.py
+
       - name: Preparar o navegador
         run: |
           pip install --quiet playwright

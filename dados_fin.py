@@ -364,6 +364,20 @@ def salvar_vendas_stone(df: pd.DataFrame) -> int:
     return _upsert("fin_vendas_stone", linhas, "stone_id")
 
 
+def marcar_vendas_stone_canceladas(stone_ids: List[str]) -> int:
+    """Cancelamento chega da API num dia posterior ao da venda."""
+    if not stone_ids:
+        return 0
+    from sqlalchemy import text
+    garantir()
+    with nuvem._conectar().begin() as con:
+        n = con.execute(text("UPDATE fin_vendas_stone SET status = 'Cancelada' WHERE stone_id = ANY(:ids)"),
+                        {"ids": list(stone_ids)}).rowcount
+    import memo as _m
+    _m.limpar_tudo()
+    return n
+
+
 @memo()
 def ler_vendas_stone() -> pd.DataFrame:
     df = _ler("SELECT stone_id, data, bandeira, produto, parcelas, bruto, liquido, cartao, captura, status "
