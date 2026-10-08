@@ -2345,6 +2345,10 @@ CAMPANHAS = {
         "cupom": "ENTRETEMPOS10",
         # O PDF vai anexado à mão em cada conversa: o link do WhatsApp só leva texto.
         "pdf": "catalogos/ANNIS_ENTRETEMPOS_2026.pdf",
+        # Quem comprou há pouco não recebe: o desconto em cima de uma compra
+        # recente soa como "paguei mais caro". Janela móvel, conta do dia do
+        # envio, então nos repiques quem comprar com o cupom também sai.
+        "pausa_dias": 15,
     },
 }
 
@@ -2461,6 +2465,10 @@ if "Disparos" in abas:
     if not _base:
         st.info("Nenhuma cliente na base ainda. Use **Atualizar dados** na barra lateral.")
     else:
+        _pausa = _camp.get("pausa_dias")
+        _recentes = [c for c in _base if _pausa and c.get("dias_sem_comprar") is not None
+                     and c["dias_sem_comprar"] <= _pausa]
+        _base = [c for c in _base if c not in _recentes]
         _base = sorted(_base, key=lambda c: c["ultima"] or "", reverse=True)
         _enviadas = nuvem.ler_contatos()
         _chave = lambda c: f"disparo:{_camp_id}:{(c.get('email') or c.get('nome') or '').lower()}"
@@ -2474,6 +2482,8 @@ if "Disparos" in abas:
         _u1, _u2 = _usos_do_cupom(_camp["cupom"]), _usos_do_cupom(_camp["cupom_frete"])
         m4.metric("Usos do cupom", "—" if _u1 is None else f"{_u1} · frete {_u2 if _u2 is not None else '—'}",
                   help="Direto da Shopify: quantos pedidos usaram o cupom de 10%, e quantos o de frete.")
+        if _recentes:
+            st.caption(f"{len(_recentes)} fora da campanha por terem comprado nos últimos {_pausa} dias.")
         if _sem_fone:
             st.caption(f"{len(_sem_fone)} sem telefone na base; aparecem no fim, com o botão apagado.")
 
