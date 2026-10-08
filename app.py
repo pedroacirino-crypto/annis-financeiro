@@ -2336,7 +2336,7 @@ if "Plano" in abas:
 CAMPANHAS = {
     "entretempos": {
         "titulo": "Nova coleção · Entretempos",
-        "ate": "18/10",
+        "ate": "25/10",  # cupons estendidos de 18 para 25/10 em 08/10/2026
         # Catálogo online nominal (08/10/2026): a página lê o primeiro nome do
         # ?n= e todos os botões dela já aplicam o ENTRETEMPOS10. Só abre por
         # link: fora de menu, da busca e do sitemap da loja.
@@ -2372,11 +2372,12 @@ def _texto_campanha(c: dict, camp: dict) -> str:
         carinho = "É uma alegria ter você com a gente e fazer parte da sua história com a Annis."
     return (
         f"{abertura}\n\n{carinho}\n\n"
-        "Para agradecer, preparamos um presente especial: 10% OFF em toda a coleção Entretempos "
-        "e frete grátis na sua compra.\n\n"
+        # Primeiro disparo sem o frete grátis (decisão de 08/10/2026): o
+        # ENTRETEMPOSFRETE fica guardado para os repiques.
+        "Para agradecer, preparamos um presente especial: 10% OFF em toda a coleção Entretempos.\n\n"
         "Fizemos uma página especial para você conhecer a coleção, com os 10% já aplicados no checkout:\n"
         f"{link}\n\n"
-        f"Para o frete grátis, use o cupom {camp['cupom_frete']}. Os presentes valem até {camp['ate']}.\n\n"
+        f"O presente vale até {camp['ate']}.\n\n"
         "Junto com esta mensagem vai também o catálogo em PDF.\n\n"
         "Qualquer dúvida de tamanho ou prazo, é só responder aqui.\n\n"
         "Com carinho,\nAnnis"
