@@ -315,11 +315,13 @@ end $$;
 -- e gera a nota sozinha, alguns minutos depois do pedido. Enquanto houver
 -- pedido esperando nota ("aguarda_nf:<número>", anotado por avisos.checar),
 -- esta função pergunta à Olist; sem pedido esperando, não consulta nada.
+--   - nota pendente: manda para a SEFAZ pela API (uma vez por nota) e, se der
+--     erro, avisa o motivo;
 --   - nota autorizada: dispara o workflow que manda o PDF no grupo (ele tira a
 --     marca do pedido depois de enviar);
 --   - nota rejeitada pela SEFAZ: avisa uma vez;
---   - nota parada em "pendente" há 30 minutos: avisa uma vez (a autorização
---     automática não está confirmada no plano da Olist);
+--   - nota parada em "pendente" há 30 minutos: avisa uma vez (rede de
+--     segurança se a transmissão pela API não andar);
 --   - pedido há 3 dias sem nota: avisa e para de esperar.
 create or replace function avisos.notas() returns void
 language plpgsql security definer set search_path = extensions, public as $$
@@ -356,6 +358,19 @@ begin
       insert into avisos.enviados (id, tipo) values ('nfrej:' || idn, 'nota rejeitada');
 
     elsif (n ->> 'situacao')::int = 1 then
+      -- O plano da Olist gera a nota mas não transmite (confirmado com o
+      -- pedido #1144, 07/10/2026). Manda para a SEFAZ uma vez, como o botão
+      -- "Autorizar no SEFAZ"; a autorizada entra na próxima volta e vira PDF.
+      -- A marca vem antes do bloco para sobreviver ao erro e não repetir.
+      if not exists (select 1 from avisos.enviados where id = 'nfemit:' || idn) then
+        insert into avisos.enviados (id, tipo) values ('nfemit:' || idn, 'nota transmitida');
+        begin
+          perform avisos.olist('nota.fiscal.emitir', 'enviarEmail=N&id=' || idn);
+        exception when others then
+          perform avisos.telegram('NF ' || (n ->> 'numero') || ' do pedido #' || pedido
+            || ' não foi para a SEFAZ: ' || left(sqlerrm, 250) || E'\nAbrir a nota na Olist para ver e autorizar.');
+        end;
+      end if;
       insert into avisos.enviados (id, tipo) values ('nfpend:' || idn, 'nota pendente') on conflict do nothing;
       if exists (select 1 from avisos.enviados where id = 'nfpend:' || idn and criado < now() - interval '30 minutes')
          and not exists (select 1 from avisos.enviados where id = 'nfpend_aviso:' || idn) then
