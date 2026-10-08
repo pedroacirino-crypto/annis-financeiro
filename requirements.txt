@@ -10,4 +10,4 @@ psycopg2-binary>=2.9,<3
 # Sem isso ela puxa o commit novo para o disco e continua servindo o codigo
 # velho: aconteceu em 01/10 e de novo em 02/10/2026. A linha abaixo existe
 # so para ser trocada a cada publicacao que precisa valer de verdade.
-# reinicio: 2026-10-08T19:50 mensagem nova do disparo
+# reinicio: 2026-10-08T20:00 volta a mensagem do disparo
