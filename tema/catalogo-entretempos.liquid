@@ -42,6 +42,7 @@
     font-family: Poppins, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
   .annis-cat__desconto { flex: 1 1 100%; margin: 0 0 6px; text-align: center; font-family: Newsreader, serif; font-size: 19px; line-height: 1.3; }
   .annis-cat__desconto strong { font-weight: 600; }
+  .annis-cat__desconto small { display: block; font-family: Poppins, sans-serif; font-size: 12px; line-height: 1.5; margin-top: 4px; opacity: .85; }
   .annis-cat__botoes--vinho .annis-cat__desconto { color: var(--creme); }
   .annis-cat__botoes--creme .annis-cat__desconto { color: var(--vinho); }
   .annis-cat__botoes--vinho .annis-cat__botao { background: var(--creme); color: var(--vinho); }
@@ -69,34 +70,64 @@
       <img class="annis-cat__pagina" src="{{ arquivo | file_url }}" width="1080" height="1920"
         alt="Catálogo Entretempos, página {{ n | plus: 0 }}" {% if forloop.index > 1 %}loading="lazy"{% endif %} decoding="async">
 
+      {%- comment -%} Preço com os 10%, parcela sem juros e Pix, na mesma regra da página
+          de produto (até 6x sem juros com parcela mínima de R$ 50, 5% no Pix). {%- endcomment -%}
+      {%- liquid
+        assign h = ''
+        case n
+          when '04'
+            assign h = 'camisa-de-algodao-heranca-rosa'
+          when '06'
+            assign h = 'vestido-de-jacquard-relicario-vinho'
+          when '08'
+            assign h = 'colete-de-jacquard-trama-vinho'
+          when '10'
+            assign h = 'calca-de-jacquard-trama-vinho'
+          when '12'
+            assign h = 'bolsa-jacquard-reliquia-vinho'
+        endcase
+        if h != ''
+          assign com10 = all_products[h].price | times: 9 | divided_by: 10
+          assign pix10 = com10 | times: 95 | divided_by: 100
+          assign vezes = 1
+          assign parcela10 = com10
+          for k in (2..6)
+            assign parc = com10 | plus: k | minus: 1 | divided_by: k
+            if parc >= 5000
+              assign vezes = k
+              assign parcela10 = parc
+            endif
+          endfor
+        endif
+      -%}
       {%- case n -%}
         {%- when '04' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['camisa-de-algodao-heranca-rosa'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ com10 | money }}</strong><small>{% if vezes > 1 %}{{ vezes }}x de {{ parcela10 | money }} sem juros ou {% endif %}{{ pix10 | money }} no Pix</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-rosa">Comprar rosa</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-branca">Comprar branca</a>
           </div>
         {%- when '06' -%}
           <div class="annis-cat__botoes annis-cat__botoes--creme">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['vestido-de-jacquard-relicario-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ com10 | money }}</strong><small>{% if vezes > 1 %}{{ vezes }}x de {{ parcela10 | money }} sem juros ou {% endif %}{{ pix10 | money }} no Pix</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-cinza">Comprar cinza</a>
           </div>
         {%- when '08' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['colete-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ com10 | money }}</strong><small>{% if vezes > 1 %}{{ vezes }}x de {{ parcela10 | money }} sem juros ou {% endif %}{{ pix10 | money }} no Pix</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-marrom">Comprar marrom</a>
           </div>
         {%- when '10' -%}
           <div class="annis-cat__botoes annis-cat__botoes--creme">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['calca-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ com10 | money }}</strong><small>{% if vezes > 1 %}{{ vezes }}x de {{ parcela10 | money }} sem juros ou {% endif %}{{ pix10 | money }} no Pix</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-marrom">Comprar marrom</a>
           </div>
         {%- when '12' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['bolsa-jacquard-reliquia-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ com10 | money }}</strong><small>{% if vezes > 1 %}{{ vezes }}x de {{ parcela10 | money }} sem juros ou {% endif %}{{ pix10 | money }} no Pix</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-jacquard-reliquia-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-cinza">Comprar cinza</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-mostarda">Comprar mostarda</a>
