@@ -3,6 +3,7 @@
   Seção "Liquid personalizado" do modelo de página "entretempos".
 
   As páginas são as do PDF do catálogo (08/10/2026), uma imagem por página,
+  em pares (foto e preço) que ficam lado a lado no computador,
   idênticas ao que vai no WhatsApp: o texto do PDF é desenho, não letra, e
   refazer em fonte do site deixaria diferente. As imagens estão em Conteúdo >
   Arquivos com o nome entretempos-p01.webp a p13.
@@ -48,6 +49,22 @@
   .annis-cat__botoes--vinho .annis-cat__botao { background: var(--creme); color: var(--vinho); }
   .annis-cat__botoes--creme .annis-cat__botao { background: var(--vinho); color: var(--creme); }
   .annis-cat__faixa .annis-cat__botao { display: inline-block; margin-top: 20px; background: var(--creme); color: var(--vinho); max-width: none; padding: 14px 28px; }
+
+  /* Computador: o catálogo vira revista aberta, em páginas duplas (foto da
+     peça e página de preço lado a lado), na altura da tela. O preço com os
+     10% e os botões ficam embaixo de cada par, no fundo do site. */
+  @media (min-width: 750px) {
+    .annis-cat { --pag-h: min(calc(100vh - 170px), 940px); --pag-w: calc(var(--pag-h) * 9 / 16); padding: 40px 0 72px; }
+    .annis-cat__coluna { max-width: calc(var(--pag-w) * 2); }
+    .annis-cat__par { display: grid; grid-template-columns: 1fr 1fr; margin-top: 56px; }
+    .annis-cat__faixa + .annis-cat__par { margin-top: 40px; }
+    .annis-cat__par--uma { grid-template-columns: 1fr; width: var(--pag-w); margin-left: auto; margin-right: auto; }
+    .annis-cat__faixa { padding: 48px 72px; }
+    .annis-cat__par + .annis-cat__faixa { margin-top: 56px; }
+    .annis-cat__botoes { background: transparent; padding: 22px 0 0; }
+    .annis-cat__botoes .annis-cat__desconto { color: var(--vinho); }
+    .annis-cat__botoes .annis-cat__botao { background: var(--vinho); color: var(--creme); }
+  }
 </style>
 
 <div class="annis-cat">
@@ -67,8 +84,11 @@
     -%}
     {%- for n in paginas -%}
       {%- capture arquivo -%}entretempos-p{{ n }}.webp{%- endcapture -%}
+      {%- assign impar = n | plus: 0 | modulo: 2 -%}
+      {%- if impar == 1 -%}<div class="annis-cat__par{% if n == '13' %} annis-cat__par--uma{% endif %}">{%- endif -%}
       <img class="annis-cat__pagina" src="{{ arquivo | file_url }}" width="1080" height="1920"
-        alt="Catálogo Entretempos, página {{ n | plus: 0 }}" {% if forloop.index > 1 %}loading="lazy"{% endif %} decoding="async">
+        alt="Catálogo Entretempos, página {{ n | plus: 0 }}" {% if forloop.index > 2 %}loading="lazy"{% endif %} decoding="async">
+      {%- if impar == 0 or n == '13' -%}</div>{%- endif -%}
 
       {%- comment -%} Preço com os 10%, parcela sem juros e Pix, na mesma regra da página
           de produto (até 6x sem juros com parcela mínima de R$ 50, 5% no Pix). {%- endcomment -%}
