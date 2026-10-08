@@ -1,0 +1,125 @@
+{%- comment -%}
+  Catálogo Entretempos online, em annis.store/pages/entretempos.
+  Seção "Liquid personalizado" do modelo de página "entretempos".
+
+  As páginas são as do PDF do catálogo (08/10/2026), uma imagem por página,
+  idênticas ao que vai no WhatsApp: o texto do PDF é desenho, não letra, e
+  refazer em fonte do site deixaria diferente. As imagens estão em Conteúdo >
+  Arquivos com o nome entretempos-p01.webp a p13.
+
+  O nome da cliente vem do link (?n=Leticia) e só aparece nas faixas de cima e
+  de baixo, nas fontes do site. Sem nome, a página fica genérica. O nome não é
+  guardado em lugar nenhum.
+
+  Os botões de comprar levam pelo /discount/ENTRETEMPOS10, que aplica os 10%
+  antes de abrir a peça.
+{%- endcomment -%}
+
+{%- liquid
+  assign desconto = '/discount/ENTRETEMPOS10?redirect='
+-%}
+
+<style>
+  .annis-cat { --vinho: #5E2825; --creme: #F3E1D2; background: #FFF6F0; padding: 0 0 48px; }
+  .annis-cat * { box-sizing: border-box; }
+  .annis-cat__coluna { max-width: 480px; margin: 0 auto; }
+  .annis-cat__pagina { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: var(--creme); }
+  .annis-cat__faixa { padding: 36px 28px; text-align: center; font-family: Poppins, sans-serif; }
+  .annis-cat__faixa--vinho { background: var(--vinho); color: var(--creme); }
+  .annis-cat__faixa--creme { background: var(--creme); color: var(--vinho); }
+  .annis-cat__ola { font-family: Newsreader, serif; font-style: italic; font-size: 34px; line-height: 1.15; margin: 0 0 6px; }
+  .annis-cat__frase { font-family: Newsreader, serif; font-size: 22px; line-height: 1.35; margin: 0 0 14px; }
+  .annis-cat__nota { font-size: 13px; line-height: 1.6; margin: 0; opacity: .85; }
+  .annis-cat__botoes { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; padding: 0 20px 28px; }
+  .annis-cat__botoes--vinho { background: var(--vinho); }
+  .annis-cat__botoes--creme { background: var(--creme); }
+  .annis-cat__botao { flex: 1 1 130px; max-width: 200px; padding: 13px 10px; border-radius: 0; text-align: center; text-decoration: none;
+    font-family: Poppins, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+  .annis-cat__botoes--vinho .annis-cat__botao { background: var(--creme); color: var(--vinho); }
+  .annis-cat__botoes--creme .annis-cat__botao { background: var(--vinho); color: var(--creme); }
+  .annis-cat__faixa .annis-cat__botao { display: inline-block; margin-top: 20px; background: var(--creme); color: var(--vinho); max-width: none; padding: 14px 28px; }
+</style>
+
+<div class="annis-cat">
+  <div class="annis-cat__coluna">
+
+    <div class="annis-cat__faixa annis-cat__faixa--vinho">
+      <p class="annis-cat__ola" data-annis-ola hidden></p>
+      <p class="annis-cat__frase" data-annis-abre>A Entretempos chegou.</p>
+      <p class="annis-cat__nota">Os 10% de desconto já estão aplicados em todos os links desta página.</p>
+    </div>
+
+    {%- comment -%} Página, e depois dela os botões de comprar quando é página de preço. {%- endcomment -%}
+    {%- liquid
+      assign paginas = '01,02,03,04,05,06,07,08,09,10,11,12,13' | split: ','
+    -%}
+    {%- for n in paginas -%}
+      {%- capture arquivo -%}entretempos-p{{ n }}.webp{%- endcapture -%}
+      <img class="annis-cat__pagina" src="{{ arquivo | file_url }}" width="1080" height="1920"
+        alt="Catálogo Entretempos, página {{ n | plus: 0 }}" {% if forloop.index > 1 %}loading="lazy"{% endif %} decoding="async">
+
+      {%- case n -%}
+        {%- when '04' -%}
+          <div class="annis-cat__botoes annis-cat__botoes--vinho">
+            <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-rosa">Comprar rosa</a>
+            <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-branca">Comprar branca</a>
+          </div>
+        {%- when '06' -%}
+          <div class="annis-cat__botoes annis-cat__botoes--creme">
+            <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-vinho">Comprar vinho</a>
+            <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-cinza">Comprar cinza</a>
+          </div>
+        {%- when '08' -%}
+          <div class="annis-cat__botoes annis-cat__botoes--vinho">
+            <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-vinho">Comprar vinho</a>
+            <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-marrom">Comprar marrom</a>
+          </div>
+        {%- when '10' -%}
+          <div class="annis-cat__botoes annis-cat__botoes--creme">
+            <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-vinho">Comprar vinho</a>
+            <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-marrom">Comprar marrom</a>
+          </div>
+        {%- when '12' -%}
+          <div class="annis-cat__botoes annis-cat__botoes--vinho">
+            <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-jacquard-reliquia-vinho">Comprar vinho</a>
+            <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-cinza">Comprar cinza</a>
+            <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-mostarda">Comprar mostarda</a>
+          </div>
+      {%- endcase -%}
+    {%- endfor -%}
+
+    <div class="annis-cat__faixa annis-cat__faixa--vinho">
+      <p class="annis-cat__frase" data-annis-fecha>Qualquer dúvida de tamanho ou prazo, é só responder a nossa mensagem.</p>
+      <a class="annis-cat__botao" href="{{ desconto }}/collections/entretempos">Ver a coleção completa</a>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* Página só de link: fora dos menus, e aqui pedindo para buscador não
+     indexar. O tema não deixa a seção escrever no <head>, então entra por
+     script, que o Google lê ao renderizar. */
+  (function () {
+    var m = document.createElement('meta');
+    m.name = 'robots';
+    m.content = 'noindex, nofollow';
+    document.head.appendChild(m);
+  })();
+
+  /* Primeiro nome do link (?n=Leticia ou ?n=Letícia). Só letras, até 20,
+     primeira maiúscula; qualquer outra coisa é ignorada e a página fica
+     genérica. Entra como texto, nunca como HTML. */
+  (function () {
+    var bruto = new URLSearchParams(location.search).get('n') || '';
+    var nome = (bruto.trim().split(/\s+/)[0] || '').replace(/[^A-Za-zÀ-ÖØ-öø-ÿ'-]/g, '').slice(0, 20);
+    if (nome.length < 2) return;
+    nome = nome.toLowerCase().replace(/(^|-)(.)/g, function (m, a, b) { return a + b.toUpperCase(); });
+    var ola = document.querySelector('[data-annis-ola]');
+    ola.textContent = nome + ',';
+    ola.hidden = false;
+    document.querySelector('[data-annis-abre]').textContent = 'a Entretempos chegou, e este catálogo é para você.';
+    document.querySelector('[data-annis-fecha]').textContent =
+      nome + ', qualquer dúvida de tamanho ou prazo, é só responder a nossa mensagem.';
+  })();
+</script>

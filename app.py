@@ -2337,11 +2337,22 @@ CAMPANHAS = {
     "entretempos": {
         "titulo": "Nova coleção · Entretempos",
         "ate": "18/10",
-        "link": "annis.store/discount/ENTRETEMPOS10?redirect=/collections/entretempos",
+        # Catálogo online nominal (08/10/2026): a página lê o primeiro nome do
+        # ?n= e todos os botões dela já aplicam o ENTRETEMPOS10. Só abre por
+        # link: fora de menu, da busca e do sitemap da loja.
+        "link": "annis.store/pages/entretempos",
         "cupom_frete": "ENTRETEMPOSFRETE",
         "cupom": "ENTRETEMPOS10",
     },
 }
+
+
+def _link_campanha(c: dict, camp: dict) -> str:
+    """Link do catálogo com o primeiro nome da cliente, só letras."""
+    primeiro = (c.get("nome") or "").split()[0] if c.get("nome") else ""
+    primeiro = "".join(ch for ch in primeiro if ch.isalpha() or ch == "-").strip("-")
+    primeiro = "-".join(p.capitalize() for p in primeiro.split("-") if p)
+    return f"{camp['link']}?n={primeiro}" if len(primeiro) >= 2 else camp["link"]
 
 
 def _texto_campanha(c: dict, camp: dict) -> str:
@@ -2358,7 +2369,8 @@ def _texto_campanha(c: dict, camp: dict) -> str:
                     "com um desconto especial, só para quem já é de casa.")
     return (
         f"{saudacao}\n\n{abertura}\n\n"
-        f"10% em tudo até {camp['ate']}, já aplicado neste link:\n{camp['link']}\n\n"
+        f"Preparei o catálogo da coleção para você, com 10% em tudo até {camp['ate']} já aplicado:\n"
+        f"{_link_campanha(c, camp)}\n\n"
         f"E se quiser o frete por nossa conta, é só usar o cupom {camp['cupom_frete']} no checkout.\n\n"
         "Qualquer dúvida de tamanho ou prazo, é só me responder.\n\n"
         "Com carinho,\nAnnis"
@@ -2403,7 +2415,7 @@ def _card_disparo(c: dict, camp: dict, chave: str, enviado_em=None):
             )
         texto_final = st.text_area("Mensagem", value=texto, height=230, key=f"disp_{chave}",
                                    label_visibility="collapsed")
-        _botoes_acao(c, texto_final, "Abrir o link", "https://" + camp["link"])
+        _botoes_acao(c, texto_final, "Abrir o catálogo", "https://" + _link_campanha(c, camp))
         if texto_final != texto:
             st.caption("Texto editado. Os botões acima já usam a sua versão.")
         if enviado_em:
