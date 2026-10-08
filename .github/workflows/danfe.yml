@@ -1,0 +1,43 @@
+# DANFE em PDF no grupo do Telegram.
+#
+# Não tem agendamento: quem dispara é o Supabase (avisos.notas), na mesma
+# volta dos avisos de pedido, quando aparece nota autorizada de um pedido que
+# está aguardando nota. O script avisos/danfe.py abre a DANFE da Olist num
+# navegador, imprime em PDF e manda no grupo.
+name: DANFE no Telegram
+
+on:
+  workflow_dispatch:
+    inputs:
+      nota:
+        description: "Id da nota na Olist (só para teste; vazio = pendentes)"
+        required: false
+        default: ""
+
+concurrency:
+  group: danfe
+  cancel-in-progress: false
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar
+        run: |
+          pip install --quiet requests sqlalchemy psycopg2-binary playwright
+          playwright install --with-deps chromium
+
+      - name: Enviar notas
+        env:
+          OLIST_TOKEN: ${{ secrets.OLIST_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+        run: python avisos/danfe.py ${{ inputs.nota }}

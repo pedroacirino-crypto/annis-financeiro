@@ -4,9 +4,12 @@
 -- atrasou de 3 a 4 horas) nem de computador ligado:
 --   - a cada 2 minutos, pedido novo, Pix vencido sem pagamento e carrinho
 --     abandonado novo viram mensagem;
---   - todo dia às 23h de Brasília, fechamento com hoje, semana e mês.
+--   - todo dia às 23h de Brasília, fechamento com hoje, semana e mês;
+--   - na mesma volta de 2 minutos, enquanto houver pedido esperando nota
+--     fiscal, consulta a Olist e manda a DANFE em PDF no grupo (avisos.notas
+--     e o workflow danfe.yml).
 --
--- As credenciais (Shopify e Telegram) ficam no cofre do Supabase (vault),
+-- As credenciais (Shopify, Telegram, Olist, GitHub) ficam no cofre do Supabase (vault),
 -- com nomes annis_*, gravadas por avisos/configurar.py a partir do .env.
 -- Nada de segredo neste arquivo, que é público no GitHub.
 --
@@ -177,6 +180,11 @@ begin
     begin
       if not semear then perform avisos.telegram(texto); end if;
       insert into avisos.enviados (id, tipo) values (n ->> 'id', 'pedido') on conflict do nothing;
+      -- Pedido novo passa a esperar a nota fiscal (ver avisos.notas).
+      if not semear and n ->> 'displayFinancialStatus' <> 'EXPIRED' then
+        insert into avisos.enviados (id, tipo) values ('aguarda_nf:' || ltrim(n ->> 'name', '#'), 'aguarda nota')
+        on conflict do nothing;
+      end if;
     exception when others then
       perform avisos.anota_erro(sqlerrm);
       return;
@@ -201,6 +209,7 @@ begin
     begin
       if not semear then perform avisos.telegram(texto); end if;
       insert into avisos.enviados (id, tipo) values ('pix:' || (n ->> 'id'), 'pix vencido') on conflict do nothing;
+      delete from avisos.enviados where id = 'aguarda_nf:' || ltrim(n ->> 'name', '#');
     exception when others then
       perform avisos.anota_erro(sqlerrm);
       return;
@@ -249,8 +258,124 @@ begin
     insert into avisos.estado (chave, valor) values ('semeado', now()::text) on conflict do nothing;
   end if;
   delete from avisos.estado where chave = 'ultimo_erro';
+
+  -- Notas fiscais dos pedidos que estão esperando nota. Num bloco próprio:
+  -- problema na Olist não pode atrasar os avisos de pedido.
+  begin
+    perform avisos.notas();
+  exception when others then
+    perform avisos.anota_erro('notas: ' || sqlerrm);
+  end;
 exception when others then
   perform avisos.anota_erro(sqlerrm);
+end $$;
+
+-- Olist ERP, API 2.0. Parâmetros já no formato do corpo do POST (a=1&b=2).
+create or replace function avisos.olist(metodo text, parametros text) returns jsonb
+language plpgsql security definer set search_path = extensions, public as $$
+declare r http_response; j jsonb;
+begin
+  perform http_set_curlopt('CURLOPT_TIMEOUT_MS', '20000');
+  r := http_post(
+    'https://api.tiny.com.br/api2/' || metodo || '.php',
+    'token=' || urlencode(avisos.segredo('olist_token')) || '&formato=json&' || parametros,
+    'application/x-www-form-urlencoded');
+  if r.status <> 200 then
+    raise exception 'Olist %: HTTP %', metodo, r.status;
+  end if;
+  j := r.content::jsonb -> 'retorno';
+  -- Pesquisa sem resultado volta como erro na API 2.0 ("A consulta não retornou registros").
+  if j ->> 'status' <> 'OK' and coalesce(j ->> 'codigo_erro', '') <> '20' then
+    raise exception 'Olist %: %', metodo, left(j ->> 'erros', 300);
+  end if;
+  return j;
+end $$;
+
+-- Dispara o workflow danfe.yml, que imprime a DANFE em PDF e manda no grupo.
+create or replace function avisos.disparar_danfe() returns void
+language plpgsql security definer set search_path = extensions, public as $$
+declare r http_response;
+begin
+  perform http_set_curlopt('CURLOPT_TIMEOUT_MS', '15000');
+  r := http((
+    'POST',
+    'https://api.github.com/repos/pedroacirino-crypto/annis-financeiro/actions/workflows/danfe.yml/dispatches',
+    array[http_header('Authorization', 'Bearer ' || avisos.segredo('github_token')),
+          http_header('Accept', 'application/vnd.github+json'),
+          http_header('User-Agent', 'annis-avisos')],
+    'application/json',
+    '{"ref":"main"}'
+  )::http_request);
+  if r.status <> 204 then
+    raise exception 'GitHub: HTTP % %', r.status, left(r.content, 200);
+  end if;
+end $$;
+
+-- Nota fiscal dos pedidos novos, 07/10/2026. A Olist puxa o pedido da Shopify
+-- e gera a nota sozinha, alguns minutos depois do pedido. Enquanto houver
+-- pedido esperando nota ("aguarda_nf:<número>", anotado por avisos.checar),
+-- esta função pergunta à Olist; sem pedido esperando, não consulta nada.
+--   - nota autorizada: dispara o workflow que manda o PDF no grupo (ele tira a
+--     marca do pedido depois de enviar);
+--   - nota rejeitada pela SEFAZ: avisa uma vez;
+--   - nota parada em "pendente" há 30 minutos: avisa uma vez (a autorização
+--     automática não está confirmada no plano da Olist);
+--   - pedido há 3 dias sem nota: avisa e para de esperar.
+create or replace function avisos.notas() returns void
+language plpgsql security definer set search_path = extensions, public as $$
+declare
+  fuso constant text := 'America/Sao_Paulo';
+  ret jsonb; n jsonb; pedido text; idn text; precisa_pdf boolean := false; ultimo timestamptz;
+begin
+  if not exists (select 1 from avisos.enviados where id like 'aguarda_nf:%') then
+    return;
+  end if;
+
+  for pedido in delete from avisos.enviados
+                where id like 'aguarda_nf:%' and criado < now() - interval '3 days'
+                returning substr(id, 12) loop
+    perform avisos.telegram('Pedido #' || pedido || ' está há 3 dias sem nota fiscal autorizada na Olist.');
+  end loop;
+
+  ret := avisos.olist('notas.fiscais.pesquisa',
+    'tipoNota=S&dataInicial=' || to_char((now() at time zone fuso)::date - 3, 'DD/MM/YYYY'));
+
+  for n in select value -> 'nota_fiscal' from jsonb_array_elements(coalesce(ret -> 'notas_fiscais', '[]')) loop
+    pedido := n ->> 'numero_ecommerce';
+    idn := n ->> 'id';
+    continue when coalesce(pedido, '') = ''
+      or not exists (select 1 from avisos.enviados where id = 'aguarda_nf:' || pedido);
+
+    if (n ->> 'situacao')::int in (6, 7) then
+      precisa_pdf := true;
+
+    elsif (n ->> 'situacao')::int = 5
+          and not exists (select 1 from avisos.enviados where id = 'nfrej:' || idn) then
+      perform avisos.telegram('NF ' || (n ->> 'numero') || ' do pedido #' || pedido
+        || ' foi rejeitada pela SEFAZ. Abrir a nota na Olist para ver o motivo e corrigir.');
+      insert into avisos.enviados (id, tipo) values ('nfrej:' || idn, 'nota rejeitada');
+
+    elsif (n ->> 'situacao')::int = 1 then
+      insert into avisos.enviados (id, tipo) values ('nfpend:' || idn, 'nota pendente') on conflict do nothing;
+      if exists (select 1 from avisos.enviados where id = 'nfpend:' || idn and criado < now() - interval '30 minutes')
+         and not exists (select 1 from avisos.enviados where id = 'nfpend_aviso:' || idn) then
+        perform avisos.telegram('NF ' || (n ->> 'numero') || ' do pedido #' || pedido
+          || ' está pendente há 30 minutos. Falta autorizar na Olist: Vendas > Notas fiscais > autorizar pendentes.');
+        insert into avisos.enviados (id, tipo) values ('nfpend_aviso:' || idn, 'nota pendente avisada');
+      end if;
+    end if;
+  end loop;
+
+  -- Um disparo cobre todas as notas autorizadas; espera 10 minutos antes de
+  -- disparar de novo, para o GitHub ter tempo de mandar e tirar as marcas.
+  if precisa_pdf then
+    select em into ultimo from avisos.estado where chave = 'danfe_disparo';
+    if ultimo is null or ultimo < now() - interval '10 minutes' then
+      perform avisos.disparar_danfe();
+      insert into avisos.estado (chave, valor, em) values ('danfe_disparo', now()::text, now())
+      on conflict (chave) do update set valor = excluded.valor, em = now();
+    end if;
+  end if;
 end $$;
 
 -- Fechamento do dia, só site (vendas da loja física não passam pela Shopify).

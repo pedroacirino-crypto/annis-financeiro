@@ -4,7 +4,7 @@
     python avisos/configurar.py agendar    também liga o agendamento (pg_cron)
 
 Os segredos saem do .env (SHOPIFY_LOJA, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET,
-TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) e vão para o cofre do Supabase (vault)
+TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, OLIST_TOKEN, GITHUB_DISPATCH_TOKEN) e vão para o cofre do Supabase (vault)
 com nomes annis_*. Rodar de novo atualiza os valores.
 """
 
@@ -23,7 +23,12 @@ SEGREDOS = {
     "shopify_client_secret": "SHOPIFY_CLIENT_SECRET",
     "telegram_token": "TELEGRAM_BOT_TOKEN",
     "telegram_chat": "TELEGRAM_CHAT_ID",
+    "olist_token": "OLIST_TOKEN",
+    # Token do GitHub (fine-grained, só este repositório, Actions: escrita),
+    # usado pelo Supabase para disparar o workflow danfe.yml.
+    "github_token": "GITHUB_DISPATCH_TOKEN",
 }
+OPCIONAIS = {"github_token"}
 
 
 def main(agendar: bool) -> None:
@@ -32,6 +37,9 @@ def main(agendar: bool) -> None:
     with nuvem._conectar().begin() as con:
         for nome, var in SEGREDOS.items():
             valor = os.environ.get(var)
+            if not valor and nome in OPCIONAIS:
+                print(f"aviso: {var} ausente no .env, {nome} não foi gravado")
+                continue
             if not valor:
                 raise SystemExit(f"falta {var} no .env")
             existe = con.execute(text("select id from vault.secrets where name = :n"),
