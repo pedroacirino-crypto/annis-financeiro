@@ -23,6 +23,8 @@
 
 <style>
   .annis-cat { --vinho: #5E2825; --creme: #F3E1D2; background: #FFF6F0; padding: 0 0 48px; }
+  /* No celular o tema deixa margem dos lados; o catálogo vai de borda a borda. */
+  @media (max-width: 749px) { .annis-cat { width: 100vw; margin-left: calc(50% - 50vw); padding-bottom: 0; } }
   .annis-cat * { box-sizing: border-box; }
   .annis-cat__coluna { max-width: 480px; margin: 0 auto; }
   .annis-cat__pagina { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: var(--creme); }
@@ -31,7 +33,7 @@
   .annis-cat__faixa--creme { background: var(--creme); color: var(--vinho); }
   .annis-cat__ola { font-family: Newsreader, serif; font-style: italic; font-size: 34px; line-height: 1.15; margin: 0 0 6px; }
   .annis-cat__frase { font-family: Newsreader, serif; font-size: 22px; line-height: 1.35; margin: 0 0 14px; }
-  .annis-cat__texto { font-family: Newsreader, serif; font-size: 17px; line-height: 1.5; margin: 0 0 12px; }
+  .annis-cat__texto { font-family: Newsreader, serif; font-size: 22px; line-height: 1.35; margin: 0 0 14px; }
   .annis-cat__nota { font-size: 13px; line-height: 1.6; margin: 18px 0 0; opacity: .85; }
   .annis-cat__botoes { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; padding: 0 20px 28px; }
   .annis-cat__botoes--vinho { background: var(--vinho); }
@@ -55,7 +57,7 @@
       <p class="annis-cat__frase" data-annis-abre>A Entretempos chegou.</p>
       <p class="annis-cat__texto">É uma alegria ter você com a gente e fazer parte da sua história com a Annis.</p>
       <p class="annis-cat__texto">Para agradecer, preparamos um presente especial: 10% OFF em toda a coleção Entretempos e frete grátis na sua compra, para você descobrir suas novas peças favoritas.</p>
-      <p class="annis-cat__nota">Os preços do catálogo são sem desconto: os 10% entram sozinhos no carrinho, pelos links desta página. Para o frete grátis, use o cupom ENTRETEMPOSFRETE no checkout.</p>
+      <p class="annis-cat__nota">Os 10% se aplicam no checkout. Use o cupom ENTRETEMPOSFRETE para ter frete grátis.</p>
     </div>
 
     {%- comment -%} Página, e depois dela os botões de comprar quando é página de preço. {%- endcomment -%}
