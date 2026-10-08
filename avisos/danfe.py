@@ -114,9 +114,11 @@ def main(so_id: str = None) -> None:
         navegador = p.chromium.launch()
         for n in notas:
             link = olist("nota.fiscal.obter.link", id=n["id"])["link_nfe"]
-            arquivo = os.path.join(pasta, f"NF-{n['numero']}.pdf")
+            # Padrão do Pedro para salvar: "NF ANNIS_145", número sem os zeros à esquerda.
+            nome = f"NF ANNIS_{int(n['numero'])}.pdf"
+            arquivo = os.path.join(pasta, nome)
             pdf_da_danfe(navegador, link, arquivo)
-            telegram(arquivo, f"NF {n['numero']}.pdf", legenda(n))
+            telegram(arquivo, nome, legenda(n))
             if not so_id:
                 anotar(n)
             print(f"NF {n['numero']} enviada")
