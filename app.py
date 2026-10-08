@@ -672,17 +672,40 @@ def _link_recuperacao(url: str) -> str:
     return url if "locale=" in url else f"{url}{'&' if '?' in url else '?'}locale=pt-BR"
 
 
+# A loja usa dois formatos de título. Em metade, o traço separa a coleção
+# ("Top de Jacquard Azul - Giverny"); na outra, separa a cor ("Vestido de
+# Jacquard Monet - Dia", "Colete de Jacquard Trama - Vinho"). Em 07/10/2026 o
+# Monet Dia saiu na mensagem como "Vestido Dia": é a cor depois do traço que
+# diz qual dos dois formatos é.
+_CORES = {"azul", "bege", "branca", "branco", "cinza", "cru", "dia", "grafite",
+          "marrom", "mostarda", "noite", "oliva", "preta", "preto", "rosa", "rosé",
+          "vermelha", "vermelho", "vinho"}
+
+
+def _partes_titulo(titulo: str) -> tuple:
+    """(tipo, coleção, cor) do título; cor é None no formato com coleção no fim."""
+    titulo = (titulo or "").replace(" — ", " - ").strip()
+    if " - " not in titulo:
+        return titulo, None, None
+    antes, depois = (p.strip() for p in titulo.split(" - ", 1))
+    tipo = antes.split()[0]
+    if depois.lower() in _CORES:
+        return tipo, antes.split()[-1], depois
+    return tipo, depois, None
+
+
 def _nome_curto(titulo: str) -> str:
-    """'Top de Jacquard Azul - Giverny' vira 'Top Giverny'.
+    """'Top de Jacquard Azul - Giverny' vira 'Top Giverny'; 'Vestido de
+    Jacquard Monet - Dia' vira 'Vestido Monet Dia'.
 
     O título do catálogo é feito para busca; na mensagem ele soa robótico.
-    Tipo da peça + coleção é como a cliente chama o produto.
+    Tipo da peça + coleção é como a cliente chama o produto. Quando a cor é
+    o que diferencia as versões da coleção (Monet Dia e Noite), ela fica.
     """
-    titulo = (titulo or "").strip()
-    if " - " in titulo:
-        tipo, colecao = titulo.split(" - ", 1)
-        return f"{tipo.split()[0]} {colecao.strip()}"
-    return titulo
+    tipo, colecao, cor = _partes_titulo(titulo)
+    if not colecao:
+        return tipo
+    return f"{tipo} {colecao} {cor}" if cor else f"{tipo} {colecao}"
 
 
 def _artigo(nome: str) -> str:
@@ -717,16 +740,16 @@ def _lista_produtos(itens_txt: str) -> tuple:
     esperando"; duas viram "eles ficaram". Sem isso a mensagem sai errada
     justamente no caso mais comum, que é carrinho de item único.
     """
-    partes = []
+    partes, colecoes = [], set()
     for pedaco in (itens_txt or "").split(", "):
         titulo = pedaco.split("x ", 1)[-1] if "x " in pedaco else pedaco
         curto = _nome_curto(titulo)
         if curto:
             partes.append(curto)
+            colecoes.add(_partes_titulo(titulo)[1])
     if not partes:
         return "as peças que separou", None, "elas ficaram"
 
-    colecoes = {p.split()[-1] for p in partes}
     colecao = colecoes.pop() if len(colecoes) == 1 else None
 
     com_artigo = [f"{_artigo(p)} {p}" for p in partes]
