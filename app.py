@@ -2343,6 +2343,8 @@ CAMPANHAS = {
         "link": "annis.store/pages/entretempos",
         "cupom_frete": "ENTRETEMPOSFRETE",
         "cupom": "ENTRETEMPOS10",
+        # O PDF vai anexado à mão em cada conversa: o link do WhatsApp só leva texto.
+        "pdf": "catalogos/ANNIS_ENTRETEMPOS_2026.pdf",
     },
 }
 
@@ -2356,23 +2358,27 @@ def _link_campanha(c: dict, camp: dict) -> str:
 
 
 def _texto_campanha(c: dict, camp: dict) -> str:
-    primeiro = (c.get("nome") or "").split()[0] if c.get("nome") else ""
-    saudacao = f"Oi, {primeiro}! Tudo bem? 🤎" if primeiro else "Oi! Tudo bem? 🤎"
-    # Quem devolveu peça recebe a abertura que reconhece isso. É a chance de
+    # Mesmo texto da faixa de abertura da página do catálogo (08/10/2026), para
+    # a cliente reconhecer a voz quando abrir o link. O nome sai igual ao do link.
+    link = _link_campanha(c, camp)
+    primeiro = link.split("?n=", 1)[1] if "?n=" in link else ""
+    abertura = f"{primeiro}, a Entretempos chegou." if primeiro else "A Entretempos chegou."
+    # Quem devolveu peça recebe a frase que reconhece isso. É a chance de
     # recuperar quem saiu frustrada, e fingir que não aconteceu soa pior.
     if c.get("estornos"):
-        abertura = ("Chegou a Entretempos, a nova coleção da Annis. Sei que a última peça "
-                    "não ficou do jeito que você queria, e quis te mostrar a coleção nova "
-                    "com um desconto especial.")
+        carinho = ("Sei que a última peça não ficou do jeito que você queria, e é uma alegria "
+                   "poder te mostrar o que criamos de novo.")
     else:
-        abertura = ("Chegou a Entretempos, a nova coleção da Annis, e eu quis te mostrar "
-                    "com um desconto especial, só para quem já é de casa.")
+        carinho = "É uma alegria ter você com a gente e fazer parte da sua história com a Annis."
     return (
-        f"{saudacao}\n\n{abertura}\n\n"
-        f"Preparei o catálogo da coleção para você, com 10% em tudo até {camp['ate']} já aplicado:\n"
-        f"{_link_campanha(c, camp)}\n\n"
-        f"E se quiser o frete por nossa conta, é só usar o cupom {camp['cupom_frete']} no checkout.\n\n"
-        "Qualquer dúvida de tamanho ou prazo, é só me responder.\n\n"
+        f"{abertura}\n\n{carinho}\n\n"
+        "Para agradecer, preparamos um presente especial: 10% OFF em toda a coleção Entretempos "
+        "e frete grátis na sua compra.\n\n"
+        "Fizemos uma página especial para você conhecer a coleção, com os 10% já aplicados no checkout:\n"
+        f"{link}\n\n"
+        f"Para o frete grátis, use o cupom {camp['cupom_frete']}. Os presentes valem até {camp['ate']}.\n\n"
+        "Junto com esta mensagem vai também o catálogo em PDF.\n\n"
+        "Qualquer dúvida de tamanho ou prazo, é só responder aqui.\n\n"
         "Com carinho,\nAnnis"
     )
 
@@ -2416,6 +2422,8 @@ def _card_disparo(c: dict, camp: dict, chave: str, enviado_em=None):
         texto_final = st.text_area("Mensagem", value=texto, height=230, key=f"disp_{chave}",
                                    label_visibility="collapsed")
         _botoes_acao(c, texto_final, "Abrir o catálogo", "https://" + _link_campanha(c, camp))
+        if camp.get("pdf"):
+            st.caption("Antes de enviar, anexe o PDF do catálogo na conversa.")
         if texto_final != texto:
             st.caption("Texto editado. Os botões acima já usam a sua versão.")
         if enviado_em:
@@ -2441,6 +2449,13 @@ if "Disparos" in abas:
     _camp_id = st.selectbox("Campanha", list(CAMPANHAS), format_func=lambda k: CAMPANHAS[k]["titulo"],
                             key="disp_campanha")
     _camp = CAMPANHAS[_camp_id]
+    if _camp.get("pdf") and os.path.exists(_camp["pdf"]):
+        p1, p2 = st.columns([3, 1])
+        p1.info("Em cada conversa, anexe o catálogo em PDF depois de colar a mensagem. "
+                "O WhatsApp não deixa o link levar o arquivo junto.")
+        with open(_camp["pdf"], "rb") as _f:
+            p2.download_button("Baixar o PDF", _f.read(), file_name=os.path.basename(_camp["pdf"]),
+                               mime="application/pdf", use_container_width=True, key="disp_pdf")
     _base = db.clientes()
     if not _base:
         st.info("Nenhuma cliente na base ainda. Use **Atualizar dados** na barra lateral.")
