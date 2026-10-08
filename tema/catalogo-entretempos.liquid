@@ -12,7 +12,9 @@
   guardado em lugar nenhum.
 
   Os botões de comprar levam pelo /discount/ENTRETEMPOS10, que aplica os 10%
-  antes de abrir a peça.
+  antes de abrir a peça. O cupom vale para a loja inteira, então o botão do
+  final abre o Shop. As páginas do PDF mostram preço cheio; a linha "sai por"
+  embaixo de cada uma vem do preço do produto na Shopify, menos 10%.
 {%- endcomment -%}
 
 {%- liquid
@@ -35,6 +37,10 @@
   .annis-cat__botoes--creme { background: var(--creme); }
   .annis-cat__botao { flex: 1 1 130px; max-width: 200px; padding: 13px 10px; border-radius: 0; text-align: center; text-decoration: none;
     font-family: Poppins, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+  .annis-cat__desconto { flex: 1 1 100%; margin: 0 0 6px; text-align: center; font-family: Newsreader, serif; font-size: 19px; line-height: 1.3; }
+  .annis-cat__desconto strong { font-weight: 600; }
+  .annis-cat__botoes--vinho .annis-cat__desconto { color: var(--creme); }
+  .annis-cat__botoes--creme .annis-cat__desconto { color: var(--vinho); }
   .annis-cat__botoes--vinho .annis-cat__botao { background: var(--creme); color: var(--vinho); }
   .annis-cat__botoes--creme .annis-cat__botao { background: var(--vinho); color: var(--creme); }
   .annis-cat__faixa .annis-cat__botao { display: inline-block; margin-top: 20px; background: var(--creme); color: var(--vinho); max-width: none; padding: 14px 28px; }
@@ -46,7 +52,7 @@
     <div class="annis-cat__faixa annis-cat__faixa--vinho">
       <p class="annis-cat__ola" data-annis-ola hidden></p>
       <p class="annis-cat__frase" data-annis-abre>A Entretempos chegou.</p>
-      <p class="annis-cat__nota">Os 10% de desconto já estão aplicados em todos os links desta página.</p>
+      <p class="annis-cat__nota">Os preços nas páginas do catálogo são sem desconto. Os seus 10% já vão nos links desta página e aparecem no carrinho, em qualquer peça da loja.</p>
     </div>
 
     {%- comment -%} Página, e depois dela os botões de comprar quando é página de preço. {%- endcomment -%}
@@ -61,26 +67,31 @@
       {%- case n -%}
         {%- when '04' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['camisa-de-algodao-heranca-rosa'].price | times: 9 | divided_by: 10 | money }}</strong></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-rosa">Comprar rosa</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-branca">Comprar branca</a>
           </div>
         {%- when '06' -%}
           <div class="annis-cat__botoes annis-cat__botoes--creme">
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['vestido-de-jacquard-relicario-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-cinza">Comprar cinza</a>
           </div>
         {%- when '08' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['colete-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-marrom">Comprar marrom</a>
           </div>
         {%- when '10' -%}
           <div class="annis-cat__botoes annis-cat__botoes--creme">
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['calca-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-marrom">Comprar marrom</a>
           </div>
         {%- when '12' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
+            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['bolsa-jacquard-reliquia-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-jacquard-reliquia-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-cinza">Comprar cinza</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-mostarda">Comprar mostarda</a>
@@ -90,7 +101,7 @@
 
     <div class="annis-cat__faixa annis-cat__faixa--vinho">
       <p class="annis-cat__frase" data-annis-fecha>Qualquer dúvida de tamanho ou prazo, é só responder a nossa mensagem.</p>
-      <a class="annis-cat__botao" href="{{ desconto }}/collections/entretempos">Ver a coleção completa</a>
+      <a class="annis-cat__botao" href="{{ desconto }}/collections/shop">Ver toda a loja</a>
     </div>
 
   </div>
