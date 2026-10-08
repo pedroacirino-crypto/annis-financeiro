@@ -13,8 +13,9 @@
 
   Os botões de comprar levam pelo /discount/ENTRETEMPOS10, que aplica os 10%
   antes de abrir a peça. O cupom vale para a loja inteira, então o botão do
-  final abre o Shop. As páginas do PDF mostram preço cheio; a linha "sai por"
-  embaixo de cada uma vem do preço do produto na Shopify, menos 10%.
+  final abre o Shop. As páginas do PDF mostram preço cheio; por isso há um traço por
+  cima do preço da imagem (posição medida no PDF) e, embaixo, o preço cheio
+  riscado e o preço com os 10%, os dois lidos do produto na Shopify.
 {%- endcomment -%}
 
 {%- liquid
@@ -37,8 +38,14 @@
   .annis-cat__botoes--creme { background: var(--creme); }
   .annis-cat__botao { flex: 1 1 130px; max-width: 200px; padding: 13px 10px; border-radius: 0; text-align: center; text-decoration: none;
     font-family: Poppins, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
-  .annis-cat__desconto { flex: 1 1 100%; margin: 0 0 6px; text-align: center; font-family: Newsreader, serif; font-size: 19px; line-height: 1.3; }
-  .annis-cat__desconto strong { font-weight: 600; }
+  .annis-cat__quadro { position: relative; margin-bottom: -1px; }
+  .annis-cat__risco { position: absolute; height: .3%; transform: translateY(-50%) rotate(-4deg); pointer-events: none; }
+  .annis-cat__risco--creme { background: var(--creme); }
+  .annis-cat__risco--vinho { background: var(--vinho); }
+  .annis-cat__desconto { flex: 1 1 100%; margin: 0 0 8px; text-align: center; font-family: Newsreader, serif; line-height: 1.2; }
+  .annis-cat__desconto s { font-size: 17px; opacity: .75; margin-right: 8px; }
+  .annis-cat__desconto strong { font-size: 32px; font-weight: 500; }
+  .annis-cat__desconto small { display: block; font-family: Poppins, sans-serif; font-size: 12px; letter-spacing: .04em; margin-top: 4px; opacity: .85; }
   .annis-cat__botoes--vinho .annis-cat__desconto { color: var(--creme); }
   .annis-cat__botoes--creme .annis-cat__desconto { color: var(--vinho); }
   .annis-cat__botoes--vinho .annis-cat__botao { background: var(--creme); color: var(--vinho); }
@@ -61,37 +68,56 @@
     -%}
     {%- for n in paginas -%}
       {%- capture arquivo -%}entretempos-p{{ n }}.webp{%- endcapture -%}
-      <img class="annis-cat__pagina" src="{{ arquivo | file_url }}" width="1080" height="1920"
+      {%- liquid
+        assign risco = ''
+        case n
+          when '04'
+            assign risco = 'left:6.4%;width:26.5%;top:84.4%|creme'
+          when '06'
+            assign risco = 'left:6.2%;width:26.6%;top:83.4%|vinho'
+          when '08'
+            assign risco = 'left:5.4%;width:27%;top:84.4%|creme'
+          when '10'
+            assign risco = 'left:5.4%;width:26.5%;top:84.3%|vinho'
+          when '12'
+            assign risco = 'left:7.2%;width:27.2%;top:84.7%|creme'
+        endcase
+        assign partes = risco | split: '|'
+      -%}
+      <div class="annis-cat__quadro">
+        <img class="annis-cat__pagina" src="{{ arquivo | file_url }}" width="1080" height="1920"
         alt="Catálogo Entretempos, página {{ n | plus: 0 }}" {% if forloop.index > 1 %}loading="lazy"{% endif %} decoding="async">
+        {%- if risco != '' -%}<span class="annis-cat__risco annis-cat__risco--{{ partes[1] }}" style="{{ partes[0] }}"></span>{%- endif -%}
+      </div>
 
       {%- case n -%}
         {%- when '04' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['camisa-de-algodao-heranca-rosa'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto"><s>{{ all_products['camisa-de-algodao-heranca-rosa'].price | money }}</s><strong>{{ all_products['camisa-de-algodao-heranca-rosa'].price | times: 9 | divided_by: 10 | money }}</strong><small>com os seus 10%, já no carrinho</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-rosa">Comprar rosa</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/camisa-de-algodao-heranca-branca">Comprar branca</a>
           </div>
         {%- when '06' -%}
           <div class="annis-cat__botoes annis-cat__botoes--creme">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['vestido-de-jacquard-relicario-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto"><s>{{ all_products['vestido-de-jacquard-relicario-vinho'].price | money }}</s><strong>{{ all_products['vestido-de-jacquard-relicario-vinho'].price | times: 9 | divided_by: 10 | money }}</strong><small>com os seus 10%, já no carrinho</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/vestido-de-jacquard-relicario-cinza">Comprar cinza</a>
           </div>
         {%- when '08' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['colete-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto"><s>{{ all_products['colete-de-jacquard-trama-vinho'].price | money }}</s><strong>{{ all_products['colete-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong><small>com os seus 10%, já no carrinho</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/colete-de-jacquard-trama-marrom">Comprar marrom</a>
           </div>
         {%- when '10' -%}
           <div class="annis-cat__botoes annis-cat__botoes--creme">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['calca-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto"><s>{{ all_products['calca-de-jacquard-trama-vinho'].price | money }}</s><strong>{{ all_products['calca-de-jacquard-trama-vinho'].price | times: 9 | divided_by: 10 | money }}</strong><small>com os seus 10%, já no carrinho</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/calca-de-jacquard-trama-marrom">Comprar marrom</a>
           </div>
         {%- when '12' -%}
           <div class="annis-cat__botoes annis-cat__botoes--vinho">
-            <p class="annis-cat__desconto">Com os seus 10%, sai por <strong>{{ all_products['bolsa-jacquard-reliquia-vinho'].price | times: 9 | divided_by: 10 | money }}</strong></p>
+            <p class="annis-cat__desconto"><s>{{ all_products['bolsa-jacquard-reliquia-vinho'].price | money }}</s><strong>{{ all_products['bolsa-jacquard-reliquia-vinho'].price | times: 9 | divided_by: 10 | money }}</strong><small>com os seus 10%, já no carrinho</small></p>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-jacquard-reliquia-vinho">Comprar vinho</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-cinza">Comprar cinza</a>
             <a class="annis-cat__botao" href="{{ desconto }}/products/bolsa-de-jacquard-reliquia-mostarda">Comprar mostarda</a>

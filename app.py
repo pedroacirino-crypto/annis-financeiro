@@ -2356,23 +2356,27 @@ def _link_campanha(c: dict, camp: dict) -> str:
 
 
 def _texto_campanha(c: dict, camp: dict) -> str:
-    primeiro = (c.get("nome") or "").split()[0] if c.get("nome") else ""
-    saudacao = f"Oi, {primeiro}! Tudo bem? 🤎" if primeiro else "Oi! Tudo bem? 🤎"
-    # Quem devolveu peça recebe a abertura que reconhece isso. É a chance de
+    # Texto do Pedro de 08/10/2026, revisado. O nome sai do mesmo jeito que
+    # vai no link do catálogo, para a mensagem e a página baterem.
+    link = _link_campanha(c, camp)
+    primeiro = link.split("?n=", 1)[1] if "?n=" in link else ""
+    abertura = f"{primeiro}, a Entretempos chegou." if primeiro else "A Entretempos chegou."
+    # Quem devolveu peça recebe a frase que reconhece isso. É a chance de
     # recuperar quem saiu frustrada, e fingir que não aconteceu soa pior.
     if c.get("estornos"):
-        abertura = ("Chegou a Entretempos, a nova coleção da Annis. Sei que a última peça "
-                    "não ficou do jeito que você queria, e quis te mostrar a coleção nova "
-                    "com um desconto especial.")
+        carinho = ("Sei que a última peça não ficou do jeito que você queria, e é uma alegria "
+                   "poder te mostrar o que criamos de novo.")
     else:
-        abertura = ("Chegou a Entretempos, a nova coleção da Annis, e eu quis te mostrar "
-                    "com um desconto especial, só para quem já é de casa.")
+        carinho = "É uma alegria ter você com a gente e fazer parte da sua história com a Annis."
     return (
-        f"{saudacao}\n\n{abertura}\n\n"
-        f"Preparei o catálogo da coleção para você, com 10% em tudo até {camp['ate']} já aplicado:\n"
-        f"{_link_campanha(c, camp)}\n\n"
-        f"E se quiser o frete por nossa conta, é só usar o cupom {camp['cupom_frete']} no checkout.\n\n"
-        "Qualquer dúvida de tamanho ou prazo, é só me responder.\n\n"
+        f"{abertura}\n\n{carinho}\n\n"
+        "Para agradecer, preparamos um presente: 10% OFF em toda a coleção Entretempos e frete "
+        "grátis na sua compra, para você descobrir suas próximas peças favoritas.\n\n"
+        "Separamos o catálogo da coleção para você aqui, com os 10% já aplicados no carrinho:\n"
+        f"{link}\n\n"
+        f"Para o frete grátis, use o cupom {camp['cupom_frete']} no checkout. "
+        f"Os dois presentes valem até {camp['ate']}.\n\n"
+        "Qualquer dúvida de tamanho ou prazo, é só responder esta mensagem.\n\n"
         "Com carinho,\nAnnis"
     )
 
