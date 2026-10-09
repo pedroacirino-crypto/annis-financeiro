@@ -10,6 +10,9 @@
      Depende do bloco Mídias do produto em Carrossel com Paginação:
      Miniaturas.
   3. Zoom no celular, na tela cheia: o do tema mais toque para ampliar.
+  4. Botão "Fale conosco" embaixo do carrinho, para o WhatsApp da loja
+     (+55 43 8455-7263), nas peças com a tag Ateliê, as sob encomenda: hoje
+     só a Loulou (09/10/2026). A mensagem já vem escrita com o nome da peça.
   Fonte versionada em tema/pagina-de-produto.liquid, no repositório do painel.
 {%- endcomment -%}
 {%- liquid
@@ -70,6 +73,10 @@
   {%- endif -%}
   <p>{{ pix | money }} no Pix</p>
 </div>
+{%- if product.tags contains 'Ateliê' -%}
+  {%- capture texto_whats -%}Oi! Vim pelo site e quero saber mais sobre o {{ product.title }}.{%- endcapture -%}
+  <a class="annis-fale" href="https://wa.me/554384557263?text={{ texto_whats | url_encode }}" target="_blank" rel="noopener">Fale conosco</a>
+{%- endif -%}
 <style>
   product-price .price{font-weight:600;font-size:15px;letter-spacing:.01em}
   product-price .compare-at-price{font-size:12px;margin-left:.4em}
@@ -80,6 +87,13 @@
   .annis-ver{margin-left:.6em;opacity:.65;text-decoration:underline;text-underline-offset:2px}
   .annis-parcelas table{margin:6px 0 2px;border-collapse:collapse;font-size:inherit;line-height:1.7;font-variant-numeric:tabular-nums}
   .annis-parcelas td{padding:0 1.5em 0 0;white-space:nowrap}
+
+  /* Fale conosco: nasce escondido junto do preço e o script põe logo depois
+     dos botões de compra. Mesmo tamanho e letra do botão do carrinho, só
+     com contorno. */
+  .annis-fale{display:none}
+  .buy-buttons-block + .annis-fale{display:flex;align-items:center;justify-content:center;height:52px;margin-top:-4px;border:1px solid #68380A;color:#68380A;background:transparent;font-family:Poppins,sans-serif;font-size:12px;text-transform:uppercase;text-decoration:none;transition:background .2s,color .2s}
+  .buy-buttons-block + .annis-fale:hover{background:#68380A;color:#FFF6F0}
 
   /* Computador: galeria como a da Aluf. A foto fica sempre inteira, em 2:3
      (a proporção das fotos da Annis), com a altura que sobra na tela abaixo
@@ -168,6 +182,15 @@
   }
 </style>
 <script>
+  /* Fale conosco embaixo do carrinho (peças do Ateliê). */
+  (function () {
+    function poe() {
+      var a = document.querySelector('.annis-fale'), b = document.querySelector('.buy-buttons-block');
+      if (a && b) b.after(a);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', poe); else poe();
+  })();
+
   /* Onde a foto começa na tela com a página no topo, para a galeria usar só
      a altura que sobra. A galeria é fixa ao rolar, então só mede no topo;
      aberta já rolada, fica com 130px até a página voltar ao topo. */
