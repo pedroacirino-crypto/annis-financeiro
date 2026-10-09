@@ -127,27 +127,40 @@ def main(so_id: str = None) -> None:
             arquivo = os.path.join(pasta, nome)
             pdf_da_danfe(navegador, link, arquivo)
             # Desde 09/10/2026 a nota vai para a pasta do pedido no Drive e entra
-            # no PDF do dia (avisos/envios.py); no grupo, só se o Drive não
-            # estiver configurado, como era antes.
+            # no PDF do dia (avisos/envios.py). No grupo fica só um resumo com os
+            # checks de nota e etiqueta; o PDF avulso só se o Drive cair.
+            salva = False
             if drive.configurado() and n.get("numero_ecommerce"):
-                cliente = olist("nota.fiscal.obter", id=n["id"])["nota_fiscal"]
-                n["cpf"], n["chave_acesso"] = cliente["cliente"].get("cpf_cnpj"), cliente.get("chave_acesso")
-                drive.salvar(drive.pasta_do_pedido(n.get("nome"), n["cpf"], n["numero_ecommerce"],
-                                                   n.get("data_emissao")), nome, arquivo)
-            else:
+                try:
+                    cliente = olist("nota.fiscal.obter", id=n["id"])["nota_fiscal"]
+                    n["cpf"], n["chave_acesso"] = cliente["cliente"].get("cpf_cnpj"), cliente.get("chave_acesso")
+                    drive.salvar(drive.pasta_do_pedido(n.get("nome"), n["cpf"], n["numero_ecommerce"],
+                                                       n.get("data_emissao")), nome, arquivo)
+                    salva = True
+                except Exception as erro:
+                    print("Drive:", erro)
+            if not salva:
                 telegram(arquivo, nome, legenda(n))
             if not so_id:
                 anotar(n)
             print(f"NF {n['numero']} salva")
+            if so_id or not n.get("numero_ecommerce"):
+                continue
+
+            linhas = [f"Pedido #{n['numero_ecommerce']} · {(n.get('nome') or '').strip().title()}",
+                      f"✓ Nota {int(n['numero'])} emitida" + (" e salva no Drive" if salva else " (PDF acima, Drive falhou)")]
             # Com a nota autorizada, a etiqueta dos Correios sai em seguida
-            # (avisos/etiqueta.py). Só roda com as credenciais dos Correios
-            # configuradas; erro na etiqueta não segura a nota.
-            if not so_id and etiqueta.configurado() and n.get("numero_ecommerce"):
+            # (avisos/etiqueta.py). Erro na etiqueta não segura a nota.
+            if etiqueta.configurado():
                 try:
-                    print("etiqueta", etiqueta.processar(n["numero_ecommerce"], nota=n))
+                    codigo = etiqueta.processar(n["numero_ecommerce"], nota=n)
+                    if codigo == "manual":
+                        linhas.append("• Etiqueta à mão: tem Loulou, sob encomenda. Gerar quando a peça ficar pronta")
+                    else:
+                        linhas.append(f"✓ Etiqueta {codigo} emitida e salva no Drive")
                 except Exception as erro:
-                    mensagem(f"Etiqueta do pedido #{n['numero_ecommerce']} não saiu: {str(erro)[:300]}\n"
-                             "Gerar à mão no Meu Correios.")
+                    linhas.append(f"✗ Etiqueta não saiu: {str(erro)[:250]}. Gerar à mão no Meu Correios")
+            mensagem("\n".join(linhas))
         navegador.close()
 
 if __name__ == "__main__":

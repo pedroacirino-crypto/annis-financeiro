@@ -137,9 +137,20 @@ def main(forcar: bool = False) -> None:
         with open(final, "wb") as f:
             junto.write(f)
 
-        numeros = ", ".join(f"#{p['numero']}" for p in lista)
-        danfe.telegram(final, nome, f"Envios de {agora:%d/%m} · {len(lista)} pedido(s): {numeros}\n"
-                                    "Etiquetas nas primeiras folhas, notas na mesma ordem.")
+        # Lista de tudo que está no PDF, na ordem das etiquetas. A legenda do
+        # Telegram aceita até 1.024 caracteres; passando disso, vai em mensagem.
+        linhas = [f"Envios de {agora:%d/%m} · {len(lista)} pedido(s)",
+                  "Etiquetas nas primeiras folhas, notas na mesma ordem:"]
+        for i, p in enumerate(lista, 1):
+            nome_cli = ((p["pedido"].get("shippingAddress") or {}).get("name") or "").strip().title()
+            servico = ((p["pedido"].get("shippingLines") or {}).get("nodes") or [{}])[0].get("title", "")
+            linhas.append(f"{i}. #{p['numero']} · {nome_cli} · {servico} {p['codigo']}")
+        texto = "\n".join(linhas)
+        if len(texto) <= 1000:
+            danfe.telegram(final, nome, texto)
+        else:
+            danfe.telegram(final, nome, linhas[0])
+            danfe.mensagem(texto)
 
     for p in lista:
         anotar(p["numero"])

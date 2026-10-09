@@ -339,10 +339,7 @@ def processar(numero: str, nota: dict = None, simular: bool = False) -> str:
             return feito.split()[1] if len(feito.split()) > 1 else feito
     pedido = pedido_shopify(numero)
     if so_a_mao(pedido) and not simular:
-        from avisos import danfe
-        _anotar(numero, "manual")
-        danfe.mensagem(f"Pedido #{numero} tem Loulou, que é sob encomenda: a etiqueta não sai sozinha. "
-                       "Gerar quando a peça ficar pronta.")
+        _anotar(numero, "manual")  # o resumo do pedido no grupo avisa (danfe.py)
         return "manual"
     nota = nota or nota_do_pedido(numero)
     if not nota.get("chave_acesso"):
