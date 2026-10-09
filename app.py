@@ -2387,7 +2387,9 @@ def _texto_campanha(c: dict, camp: dict) -> str:
         # Primeiro disparo sem o frete grátis (decisão de 08/10/2026): o
         # ENTRETEMPOSFRETE fica guardado para os repiques.
         "Fizemos uma página especial para você conhecer a coleção, com os 10% já aplicados no checkout:\n"
-        f"{link}\n\n"
+        # Com https:// na frente: sem ele o iPhone não reconhece o domínio
+        # .store e o link chega como texto, sem clique (teste de 09/10/2026).
+        f"https://{link}\n\n"
         f"A cortesia vale até {camp['ate']}.\n\n"
         "Junto com esta mensagem vai também o catálogo em PDF.\n\n"
         "Este é o novo número oficial da Annis. Salve o contato e, qualquer dúvida de tamanho ou "
