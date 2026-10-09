@@ -2368,7 +2368,10 @@ def _texto_campanha(c: dict, camp: dict) -> str:
     # contato. O nome sai igual ao do link.
     link = _link_campanha(c, camp)
     primeiro = link.split("?n=", 1)[1] if "?n=" in link else ""
-    abertura = f"{primeiro}, a Entretempos chegou." if primeiro else "A Entretempos chegou."
+    # A mensagem sai de um número que a cliente ainda não tem salvo, então a
+    # primeira frase já diz de quem é (Pedro, 09/10/2026).
+    abertura = (f"{primeiro}, a Entretempos, nova coleção da Annis, chegou." if primeiro
+                else "A Entretempos, nova coleção da Annis, chegou.")
     # Quem devolveu peça recebe a frase que reconhece isso. É a chance de
     # recuperar quem saiu frustrada, e fingir que não aconteceu soa pior.
     if c.get("estornos"):
