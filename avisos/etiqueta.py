@@ -46,6 +46,7 @@ CONTRATO = "9912705946"
 REMETENTE = {
     "nome": "ANNIS",
     "cpfCnpj": "58859303000144",
+    "email": "contato@annis.store",
     "endereco": {
         "cep": "86050450", "logradouro": "Rua João Wyclif", "numero": "111",
         "complemento": "sala 1005", "bairro": "Gleba Fazenda Palhano",
@@ -53,18 +54,18 @@ REMETENTE = {
     },
 }
 
-# Embalagem e peso. O Pedro manda as medidas reais depois; até lá valem só
-# para o ambiente de teste dos Correios, e em produção o módulo se recusa a
-# rodar. Peso em gramas, medidas em centímetros (formato 2 = caixa/pacote).
+# Embalagem e peso: o mesmo que a loja preenche no Meu Correios. Em todas as
+# 21 vendas postadas pelo contrato de 28/09 a 05/10/2026 foi caixa de
+# 10 x 34 x 45 cm com peso informado 1, com 1 ou 3 peças (lido da API em
+# 09/10). Envelope só aparece nas devoluções. A agência pesa na postagem.
 EMBALAGEM = {
-    "altura_cm": None,
-    "largura_cm": None,
-    "comprimento_cm": None,
-    "peso_caixa_g": None,
-    "peso_por_peca_g": None,
+    "altura_cm": 10,
+    "largura_cm": 34,
+    "comprimento_cm": 45,
+    "peso_caixa_g": 1,
+    "peso_por_peca_g": 0,
 }
-EMBALAGEM_TESTE = {"altura_cm": 8, "largura_cm": 25, "comprimento_cm": 30,
-                   "peso_caixa_g": 200, "peso_por_peca_g": 500}
+EMBALAGEM_TESTE = EMBALAGEM
 
 URLS = {"hom": "https://apihom.correios.com.br", "prod": "https://api.correios.com.br"}
 
@@ -74,7 +75,11 @@ def configurado() -> bool:
     isso a rotina da nota nem tenta: senão cada nota viraria aviso de erro."""
     if not all(os.environ.get(k) for k in ("CORREIOS_USUARIO", "CORREIOS_CODIGO_ACESSO", "CORREIOS_CARTAO")):
         return False
-    return _ambiente() != "prod" or all(v for v in EMBALAGEM.values())
+    # Interruptor: a variável CORREIOS_AMBIENTE do GitHub fica "desligado" até o
+    # Pedro dar o ok, para não sair etiqueta em dobro com a feita à mão.
+    if _ambiente() not in URLS:
+        return False
+    return _ambiente() != "prod" or all(v is not None for v in EMBALAGEM.values())
 
 
 def _ambiente() -> str:
@@ -82,7 +87,7 @@ def _ambiente() -> str:
 
 
 def _embalagem() -> dict:
-    if all(v for v in EMBALAGEM.values()):
+    if all(v is not None for v in EMBALAGEM.values()):
         return EMBALAGEM
     if _ambiente() == "prod":
         raise RuntimeError("Embalagem sem medidas e peso: preencher EMBALAGEM em avisos/etiqueta.py")
@@ -331,7 +336,13 @@ def processar(numero: str, nota: dict = None, simular: bool = False) -> str:
         etiqueta_pdf(pre["id"], arquivo)
         danfe.telegram(arquivo, os.path.basename(arquivo),
                        f"Etiqueta {servico} · pedido {pedido['name']}\n{nome} · {codigo}")
-    rastreio_na_shopify(pedido, codigo)
+    try:
+        rastreio_na_shopify(pedido, codigo)
+    except Exception as erro:
+        # A etiqueta já foi para o grupo; falta só o rastreio no pedido (por
+        # exemplo, sem a permissão de envios no app da Shopify).
+        danfe.mensagem(f"Etiqueta do pedido {pedido['name']} saiu ({codigo}), mas o rastreio não entrou "
+                       f"na Shopify: {str(erro)[:200]}\nLançar o rastreio à mão no pedido.")
     return codigo
 
 
