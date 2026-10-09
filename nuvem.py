@@ -845,12 +845,24 @@ def codigos_de_cupom() -> set:
 # o portal, pela conexão direta. Pedido do Pedro em 09/10/2026, para saber
 # quem abriu o link e não só quem usou o cupom.
 
-TABELA_CLIQUES = "cliques_campanha"
+TABELA_CLIQUES = "site.cliques_campanha"
 
 
 def garantir_cliques() -> None:
+    """Tabela num esquema próprio, `site`, o único exposto na API pública do
+    Supabase: o resto do banco continua fora do alcance da chave do site."""
     from sqlalchemy import text
     with _conectar().begin() as con:
+        con.execute(text("CREATE SCHEMA IF NOT EXISTS site"))
+        con.execute(text("GRANT USAGE ON SCHEMA site TO anon"))
+        con.execute(text("""
+            DO $$ BEGIN
+              IF to_regclass('public.cliques_campanha') IS NOT NULL
+                 AND to_regclass('site.cliques_campanha') IS NULL THEN
+                ALTER TABLE public.cliques_campanha SET SCHEMA site;
+              END IF;
+            END $$
+        """))
         con.execute(text(f"""
             CREATE TABLE IF NOT EXISTS {TABELA_CLIQUES} (
                 id         BIGSERIAL PRIMARY KEY,
@@ -863,12 +875,12 @@ def garantir_cliques() -> None:
             )
         """))
         con.execute(text(f"ALTER TABLE {TABELA_CLIQUES} ENABLE ROW LEVEL SECURITY"))
-        con.execute(text(f"""
+        con.execute(text("""
             DO $$ BEGIN
-              IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = '{TABELA_CLIQUES}'
-                             AND policyname = 'site_so_grava') THEN
-                CREATE POLICY site_so_grava ON {TABELA_CLIQUES} FOR INSERT TO anon
-                  WITH CHECK (campanha ~ '^[a-z0-9-]{{1,30}}$'
+              IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'site'
+                             AND tablename = 'cliques_campanha' AND policyname = 'site_so_grava') THEN
+                CREATE POLICY site_so_grava ON site.cliques_campanha FOR INSERT TO anon
+                  WITH CHECK (campanha ~ '^[a-z0-9-]{1,30}$'
                               AND evento IN ('visita', 'comprar', 'ver_loja')
                               AND coalesce(length(nome), 0) <= 40
                               AND coalesce(length(produto), 0) <= 120
@@ -876,10 +888,9 @@ def garantir_cliques() -> None:
               END IF;
             END $$
         """))
+        con.execute(text(f"REVOKE ALL ON {TABELA_CLIQUES} FROM anon, authenticated"))
         con.execute(text(f"GRANT INSERT ON {TABELA_CLIQUES} TO anon"))
-        con.execute(text(f"GRANT USAGE ON SEQUENCE {TABELA_CLIQUES}_id_seq TO anon"))
-        con.execute(text(f"REVOKE SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON {TABELA_CLIQUES} FROM anon"))
-        con.execute(text(f"REVOKE ALL ON {TABELA_CLIQUES} FROM authenticated"))
+        con.execute(text("GRANT USAGE ON SEQUENCE site.cliques_campanha_id_seq TO anon"))
 
 
 def ler_cliques(campanha: str) -> List[dict]:

@@ -201,11 +201,12 @@
   /* Quem abriu e quem clicou em comprar (09/10/2026). Grava no banco do
      portal o nome do link, o evento e o tipo de aparelho, com a chave pública
      do Supabase: ela só consegue gravar nesta tabela, com campos curtos, e não
-     lê nada. A visita conta uma vez por aba aberta. keepalive deixa o clique
+     lê nada; a tabela fica no esquema `site`, o único exposto na API. A
+     chave publicável é feita para ficar no site. A visita conta uma vez por aba aberta. keepalive deixa o clique
      em comprar ser gravado mesmo com a página indo para o produto. */
   (function () {
     var BANCO = 'https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/cliques_campanha';
-    var CHAVE = 'COLE_AQUI_A_CHAVE_PUBLICA';
+    var CHAVE = 'sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW';
     if (CHAVE.indexOf('COLE_') === 0) return;
     var nome = ((new URLSearchParams(location.search).get('n') || '').trim().split(/\s+/)[0] || '')
       .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ'-]/g, '').slice(0, 40) || null;
@@ -215,7 +216,7 @@
       try {
         fetch(BANCO, {
           method: 'POST', keepalive: true,
-          headers: { apikey: CHAVE, Authorization: 'Bearer ' + CHAVE,
+          headers: { apikey: CHAVE, 'Content-Profile': 'site',
                      'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({ campanha: 'entretempos', nome: nome, evento: evento,
                                  produto: produto || null, aparelho: aparelho })
