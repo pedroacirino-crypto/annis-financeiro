@@ -31,6 +31,8 @@ import nuvem  # noqa: E402
 import shopify_client  # noqa: E402,F401  (carrega o .env)
 from sqlalchemy import text  # noqa: E402
 
+from avisos import etiqueta  # noqa: E402
+
 API = "https://api.tiny.com.br/api2/{}.php"
 AUTORIZADAS = {6, 7}  # Autorizada, Emitida DANFE (tabela de situações da API 2.0)
 
@@ -98,6 +100,11 @@ def telegram(arquivo: str, nome: str, texto: str) -> None:
         raise RuntimeError(f"Telegram: HTTP {r.status_code} {r.text[:200]}")
 
 
+def mensagem(texto: str) -> None:
+    requests.post(f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/sendMessage",
+                  data={"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": texto}, timeout=30)
+
+
 def main(so_id: str = None) -> None:
     notas = [n for n in notas_recentes() if int(n["situacao"]) in AUTORIZADAS]
     if so_id:
@@ -122,6 +129,15 @@ def main(so_id: str = None) -> None:
             if not so_id:
                 anotar(n)
             print(f"NF {n['numero']} enviada")
+            # Com a nota autorizada, a etiqueta dos Correios sai em seguida
+            # (avisos/etiqueta.py). Só roda com as credenciais dos Correios
+            # configuradas; erro na etiqueta não segura a nota.
+            if not so_id and etiqueta.configurado() and n.get("numero_ecommerce"):
+                try:
+                    print("etiqueta", etiqueta.processar(n["numero_ecommerce"], nota=n))
+                except Exception as erro:
+                    mensagem(f"Etiqueta do pedido #{n['numero_ecommerce']} não saiu: {str(erro)[:300]}\n"
+                             "Gerar à mão no Meu Correios.")
         navegador.close()
 
 
