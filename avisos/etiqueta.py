@@ -20,9 +20,10 @@ Rodar duas vezes não duplica: o pedido com etiqueta fica anotado como
 
 Variáveis: CORREIOS_USUARIO (CNPJ, só números), CORREIOS_CODIGO_ACESSO (o
 código de 40 caracteres do portal CWS, não a senha do Meu Correios),
-CORREIOS_CARTAO (cartão de postagem), CORREIOS_AMBIENTE (hom ou prod,
-padrão hom), CORREIOS_SERVICO_PAC e CORREIOS_SERVICO_SEDEX (padrão 03298 e
-03220, a confirmar no CWS), OLIST_TOKEN, SUPABASE_URL_BANCO, TELEGRAM_*.
+CORREIOS_CARTAO (cartão de postagem 0079350682), CORREIOS_AMBIENTE (hom ou
+prod; o código da Annis só vale em prod, o ambiente de teste pede outro
+login), CORREIOS_SERVICO_PAC e CORREIOS_SERVICO_SEDEX (03298 e 03220,
+conferidos no contrato em 09/10/2026), OLIST_TOKEN, SUPABASE_URL_BANCO, TELEGRAM_*.
 """
 
 import base64
@@ -69,7 +70,11 @@ URLS = {"hom": "https://apihom.correios.com.br", "prod": "https://api.correios.c
 
 
 def configurado() -> bool:
-    return all(os.environ.get(k) for k in ("CORREIOS_USUARIO", "CORREIOS_CODIGO_ACESSO", "CORREIOS_CARTAO"))
+    """Credenciais presentes e, em produção, embalagem com medidas reais. Sem
+    isso a rotina da nota nem tenta: senão cada nota viraria aviso de erro."""
+    if not all(os.environ.get(k) for k in ("CORREIOS_USUARIO", "CORREIOS_CODIGO_ACESSO", "CORREIOS_CARTAO")):
+        return False
+    return _ambiente() != "prod" or all(v for v in EMBALAGEM.values())
 
 
 def _ambiente() -> str:
@@ -197,20 +202,28 @@ def montar_prepostagem(pedido: dict, nota: dict) -> dict:
     }
 
 
+def _esperar_prepostado(id_prepostagem: str) -> None:
+    """A pré-postagem nasce "Pendente" (7) e vira "Pré-postado" (2) em alguns
+    segundos; rótulo pedido antes disso nunca sai (PPN-288, testado em 09/10)."""
+    for _ in range(24):
+        itens = _correios("GET", "/v2/prepostagens", params={"id": id_prepostagem}).get("itens") or [{}]
+        if itens[0].get("statusAtual") == 2:
+            return
+        time.sleep(5)
+    raise RuntimeError(f"Correios: pré-postagem {id_prepostagem} não saiu de Pendente em 2 minutos")
+
+
 def etiqueta_pdf(id_prepostagem: str, destino: str) -> None:
     """Pede o rótulo (assíncrono) e espera ficar pronto, até 2 minutos."""
+    _esperar_prepostado(id_prepostagem)
     recibo = _correios("POST", "/v1/prepostagens/rotulo/assincrono/pdf", json={
         "idsPrePostagem": [id_prepostagem], "numeroCartaoPostagem": os.environ["CORREIOS_CARTAO"],
         "tipoRotulo": "P", "formatoRotulo": "ET", "imprimeRemetente": "S", "layoutImpressao": "PADRAO",
     })["idRecibo"]
     for _ in range(24):
         time.sleep(5)
-        try:
-            r = _correios("GET", f"/v1/prepostagens/rotulo/download/assincrono/{recibo}")
-        except RuntimeError as erro:
-            if "HTTP 4" in str(erro) and "processamento" in str(erro).lower():
-                continue
-            raise
+        # Enquanto não fica pronto, a resposta vem só com "mensagem".
+        r = _correios("GET", f"/v1/prepostagens/rotulo/download/assincrono/{recibo}")
         if r.get("dados"):
             with open(destino, "wb") as f:
                 f.write(base64.b64decode(r["dados"]))
