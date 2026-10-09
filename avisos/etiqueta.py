@@ -4,9 +4,9 @@ Depois que a nota do pedido é autorizada (avisos/danfe.py), este módulo:
   1. cria a pré-postagem na API dos Correios, no contrato da Annis, com o
      serviço que a cliente escolheu no checkout (PAC ou SEDEX), o endereço do
      pedido e o número e a chave da nota;
-  2. lança o código de rastreio no pedido da Shopify, que manda o e-mail de
-     envio para a cliente;
-  3. gera a etiqueta em PDF e manda no grupo do Telegram, para imprimir.
+  2. salva a etiqueta em PDF na pasta do pedido no Drive (avisos/drive.py).
+O PDF do dia com todas as etiquetas e notas, e o rastreio na Shopify (sem
+e-mail para a cliente, por enquanto), ficam com avisos/envios.py, às 12h.
 
 Nada de entrega passa pela Olist: dela só vem a nota, que já é lida para a
 DANFE. A pré-postagem não cobra nada; o frete só é faturado quando o pacote é
@@ -291,7 +291,8 @@ def rastreio_na_shopify(pedido: dict, codigo: str) -> None:
         return  # já foi marcado como enviado à mão
     r = shopify_client._graphql(_ENVIO, {"f": {
         "lineItemsByFulfillmentOrder": [{"fulfillmentOrderId": i} for i in abertos],
-        "notifyCustomer": True,
+        # Sem e-mail para a cliente até existir a jornada pós-compra (Pedro, 09/10/2026).
+        "notifyCustomer": False,
         "trackingInfo": {"company": "Correios", "number": codigo,
                          "url": f"https://rastreamento.correios.com.br/app/index.php?objeto={codigo}"},
     }})["fulfillmentCreate"]
@@ -335,7 +336,7 @@ def processar(numero: str, nota: dict = None, simular: bool = False) -> str:
     if not simular:
         feito = _ja_tem(numero)
         if feito:
-            return feito.split()[-1]
+            return feito.split()[1] if len(feito.split()) > 1 else feito
     pedido = pedido_shopify(numero)
     if so_a_mao(pedido) and not simular:
         from avisos import danfe
@@ -355,25 +356,18 @@ def processar(numero: str, nota: dict = None, simular: bool = False) -> str:
 
     pre = _correios("POST", "/v1/prepostagens", json=corpo)
     codigo = pre["codigoObjeto"]
-    _anotar(numero, codigo)  # antes do resto: rótulo e Shopify podem repetir, a pré-postagem não
+    # Anotado antes do resto: o PDF pode ser refeito, a pré-postagem não. O PDF
+    # do dia (avisos/envios.py) lê daqui o id da pré-postagem e o da nota.
+    _anotar(numero, f"{codigo} {pre['id']} {nota['id']}")
 
-    from avisos import danfe
-    servico = pedido["shippingLines"]["nodes"][0]["title"]
-    nome = (pedido["shippingAddress"].get("name") or "").strip().title()
-    with tempfile.TemporaryDirectory() as pasta:
-        arquivo = os.path.join(pasta, f"Etiqueta {pedido['name']} {codigo}.pdf")
-        etiqueta_pdf(pre["id"], arquivo)
-        danfe.telegram(arquivo, os.path.basename(arquivo),
-                       f"Etiqueta {servico} · pedido {pedido['name']}\n{nome} · {codigo}")
-    try:
-        rastreio_na_shopify(pedido, codigo)
-    except Exception as erro:
-        # A etiqueta já foi para o grupo; falta só o rastreio no pedido (por
-        # exemplo, sem a permissão de envios no app da Shopify).
-        danfe.mensagem(f"Etiqueta do pedido {pedido['name']} saiu ({codigo}), mas o rastreio não entrou "
-                       f"na Shopify: {str(erro)[:200]}\nLançar o rastreio à mão no pedido.")
+    from avisos import drive
+    if drive.configurado():
+        with tempfile.TemporaryDirectory() as pasta:
+            nome = f"Etiqueta {codigo}.pdf"
+            arquivo = os.path.join(pasta, nome)
+            etiqueta_pdf(pre["id"], arquivo)
+            drive.salvar(drive.pasta_do_pedido(nota.get("nome"), numero, nota.get("data_emissao")), nome, arquivo)
     return codigo
-
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]

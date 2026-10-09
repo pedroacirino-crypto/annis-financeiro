@@ -1,28 +1,27 @@
-# DANFE em PDF no grupo do Telegram, e em seguida a etiqueta dos Correios
-# (avisos/etiqueta.py, só com as credenciais CORREIOS_* configuradas).
+# PDF do dia para imprimir: etiquetas (4 por folha) e notas na mesma ordem,
+# com os pedidos pagos até as 12h que ainda não foram impressos.
 #
-# Não tem agendamento: quem dispara é o Supabase (avisos.notas), na mesma
-# volta dos avisos de pedido, quando aparece nota autorizada de um pedido que
-# está aguardando nota. O script avisos/danfe.py abre a DANFE da Olist num
-# navegador, imprime em PDF e manda no grupo.
-name: DANFE no Telegram
+# Sem agendamento aqui (o do GitHub atrasa horas): quem dispara é o Supabase,
+# às 12h05 de Brasília, de segunda a sexta (avisos.sql). O script pula
+# feriado nacional sozinho.
+name: Envios do dia
 
 on:
   workflow_dispatch:
     inputs:
-      nota:
-        description: "Id da nota na Olist (só para teste; vazio = pendentes)"
+      agora:
+        description: "Gerar mesmo fora de dia útil (teste)"
         required: false
-        default: ""
+        default: "nao"
 
 concurrency:
-  group: danfe
+  group: envios
   cancel-in-progress: false
 
 jobs:
-  enviar:
+  pdf:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -32,10 +31,10 @@ jobs:
 
       - name: Preparar
         run: |
-          pip install --quiet requests sqlalchemy psycopg2-binary playwright
+          pip install --quiet requests sqlalchemy psycopg2-binary playwright pypdf
           playwright install --with-deps chromium
 
-      - name: Enviar notas
+      - name: Montar e mandar o PDF
         env:
           OLIST_TOKEN: ${{ secrets.OLIST_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -48,6 +47,4 @@ jobs:
           CORREIOS_CODIGO_ACESSO: ${{ secrets.CORREIOS_CODIGO_ACESSO }}
           CORREIOS_CARTAO: ${{ secrets.CORREIOS_CARTAO }}
           CORREIOS_AMBIENTE: ${{ vars.CORREIOS_AMBIENTE }}
-          DRIVE_WEBAPP_URL: ${{ secrets.DRIVE_WEBAPP_URL }}
-          DRIVE_TOKEN: ${{ secrets.DRIVE_TOKEN }}
-        run: python avisos/danfe.py ${{ inputs.nota }}
+        run: python avisos/envios.py ${{ inputs.agora == 'sim' && '--agora' || '' }}

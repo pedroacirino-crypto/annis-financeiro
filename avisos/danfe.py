@@ -1,4 +1,5 @@
-"""DANFE em PDF no grupo do Telegram, 07/10/2026.
+"""DANFE em PDF de cada pedido, 07/10/2026; desde 09/10 vai para a pasta do
+pedido no Drive (avisos/drive.py) em vez do grupo do Telegram.
 
 A Olist gera e autoriza a nota do pedido da Shopify sozinha, mas o "link da
 nota" que a API devolve é uma página HTML, não um arquivo. O Telegram só anexa
@@ -31,7 +32,7 @@ import nuvem  # noqa: E402
 import shopify_client  # noqa: E402,F401  (carrega o .env)
 from sqlalchemy import text  # noqa: E402
 
-from avisos import etiqueta  # noqa: E402
+from avisos import drive, etiqueta  # noqa: E402
 
 API = "https://api.tiny.com.br/api2/{}.php"
 AUTORIZADAS = {6, 7}  # Autorizada, Emitida DANFE (tabela de situações da API 2.0)
@@ -125,10 +126,17 @@ def main(so_id: str = None) -> None:
             nome = f"NF ANNIS_{int(n['numero'])}.pdf"
             arquivo = os.path.join(pasta, nome)
             pdf_da_danfe(navegador, link, arquivo)
-            telegram(arquivo, nome, legenda(n))
+            # Desde 09/10/2026 a nota vai para a pasta do pedido no Drive e entra
+            # no PDF do dia (avisos/envios.py); no grupo, só se o Drive não
+            # estiver configurado, como era antes.
+            if drive.configurado() and n.get("numero_ecommerce"):
+                drive.salvar(drive.pasta_do_pedido(n.get("nome"), n["numero_ecommerce"], n.get("data_emissao")),
+                             nome, arquivo)
+            else:
+                telegram(arquivo, nome, legenda(n))
             if not so_id:
                 anotar(n)
-            print(f"NF {n['numero']} enviada")
+            print(f"NF {n['numero']} salva")
             # Com a nota autorizada, a etiqueta dos Correios sai em seguida
             # (avisos/etiqueta.py). Só roda com as credenciais dos Correios
             # configuradas; erro na etiqueta não segura a nota.
@@ -139,7 +147,6 @@ def main(so_id: str = None) -> None:
                     mensagem(f"Etiqueta do pedido #{n['numero_ecommerce']} não saiu: {str(erro)[:300]}\n"
                              "Gerar à mão no Meu Correios.")
         navegador.close()
-
 
 if __name__ == "__main__":
     main(sys.argv[1] if len(sys.argv) > 1 else None)

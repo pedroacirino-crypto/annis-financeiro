@@ -291,15 +291,15 @@ begin
   return j;
 end $$;
 
--- Dispara o workflow danfe.yml, que imprime a DANFE em PDF e manda no grupo.
-create or replace function avisos.disparar_danfe() returns void
+-- Dispara um workflow do repositório (danfe.yml, envios.yml).
+create or replace function avisos.disparar_workflow(arquivo text) returns void
 language plpgsql security definer set search_path = extensions, public as $$
 declare r http_response;
 begin
   perform http_set_curlopt('CURLOPT_TIMEOUT_MS', '15000');
   r := http((
     'POST',
-    'https://api.github.com/repos/pedroacirino-crypto/annis-financeiro/actions/workflows/danfe.yml/dispatches',
+    'https://api.github.com/repos/pedroacirino-crypto/annis-financeiro/actions/workflows/' || arquivo || '/dispatches',
     array[http_header('Authorization', 'Bearer ' || avisos.segredo('github_token')),
           http_header('Accept', 'application/vnd.github+json'),
           http_header('User-Agent', 'annis-avisos')],
@@ -307,8 +307,22 @@ begin
     '{"ref":"main"}'
   )::http_request);
   if r.status <> 204 then
-    raise exception 'GitHub: HTTP % %', r.status, left(r.content, 200);
+    raise exception 'GitHub %: HTTP % %', arquivo, r.status, left(r.content, 200);
   end if;
+end $$;
+
+-- Nota em PDF e etiqueta de cada pedido, na pasta do Drive.
+create or replace function avisos.disparar_danfe() returns void
+language sql security definer as $$ select avisos.disparar_workflow('danfe.yml') $$;
+
+-- PDF do dia (etiquetas e notas), 12h05 de segunda a sexta; feriado o script pula.
+create or replace function avisos.disparar_envios() returns void
+language plpgsql security definer as $$
+begin
+  perform avisos.disparar_workflow('envios.yml');
+exception when others then
+  perform avisos.anota_erro('envios: ' || sqlerrm);
+  perform avisos.telegram('O PDF dos envios de hoje não foi disparado: ' || left(sqlerrm, 200));
 end $$;
 
 -- Nota fiscal dos pedidos novos, 07/10/2026. A Olist puxa o pedido da Shopify
@@ -448,3 +462,4 @@ end $$;
 -- Agenda. 02h UTC é 23h em Brasília (sem horário de verão).
 select cron.schedule('annis-avisos', '*/2 * * * *', 'select avisos.checar()');
 select cron.schedule('annis-fechamento', '0 2 * * *', 'select avisos.fechamento()');
+select cron.schedule('annis-envios', '5 15 * * 1-5', 'select avisos.disparar_envios()');
