@@ -2502,6 +2502,44 @@ if "Disparos" in abas:
         if _sem_fone:
             st.caption(f"{len(_sem_fone)} sem telefone na base; aparecem no fim, com o botão apagado.")
 
+        # Quem abriu o link e quem clicou em comprar, gravado pela própria
+        # página da campanha (nuvem.ler_cliques). O link só leva o primeiro
+        # nome, então o cruzamento com quem recebeu é por primeiro nome: nome
+        # repetido aparece com todas as candidatas.
+        _cliques = nuvem.ler_cliques(_camp_id)
+        with st.expander(f"Quem abriu o link · {len({c['nome'] for c in _cliques if c['evento'] == 'visita'})} nomes",
+                         expanded=False):
+            if not _cliques:
+                st.caption("Ninguém abriu ainda, ou a página ainda não está gravando as visitas.")
+            else:
+                _por_primeiro = {}
+                for c in _base:
+                    if _chave(c) in _enviadas and c.get("nome"):
+                        _p = _link_campanha(c, _camp).split("?n=", 1)[-1]
+                        _por_primeiro.setdefault(_p, []).append(c["nome"])
+                _resumo = {}
+                for c in sorted(_cliques, key=lambda x: x["criado_em"]):
+                    r = _resumo.setdefault(c["nome"] or "(sem nome)", {"primeira": c["criado_em"], "visitas": 0,
+                                                                       "comprar": [], "aparelho": c["aparelho"]})
+                    if c["evento"] == "visita":
+                        r["visitas"] += 1
+                    elif c["evento"] == "comprar" and c["produto"] not in r["comprar"]:
+                        r["comprar"].append(c["produto"])
+                _linhas = []
+                for nome, r in sorted(_resumo.items(), key=lambda kv: kv[1]["primeira"], reverse=True):
+                    _linhas.append({
+                        "Nome no link": nome,
+                        "Quem recebeu": ", ".join(_por_primeiro.get(nome, [])) or "não está entre as enviadas",
+                        "Abriu em": pd.to_datetime(r["primeira"]).tz_convert("America/Sao_Paulo").strftime("%d/%m %H:%M"),
+                        "Visitas": r["visitas"],
+                        "Clicou em comprar": ", ".join(p.replace("-", " ") for p in r["comprar"]) or "",
+                        "Aparelho": r["aparelho"] or "",
+                    })
+                st.dataframe(pd.DataFrame(_linhas), hide_index=True, use_container_width=True)
+                _n_comprar = sum(1 for r in _resumo.values() if r["comprar"])
+                st.caption(f"{len(_resumo)} abriram, {_n_comprar} clicaram em comprar. "
+                           "Compra de fato só aparece no uso do cupom, acima.")
+
         f1, f2 = st.columns([1, 1])
         _so_devolveu = f1.checkbox("Só quem devolveu peça", value=False, key="disp_devolveu")
         _ver_enviadas = f2.checkbox("Mostrar já enviadas", value=False, key="disp_ver_enviadas")

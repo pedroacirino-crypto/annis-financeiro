@@ -834,3 +834,64 @@ def codigos_de_cupom() -> set:
             return {l[0] for l in con.execute(text(f"SELECT codigo FROM {TABELA_CUPONS}")).all()}
     except Exception:
         return set()
+
+
+# ─── Cliques nos links de campanha ──────────────────────────────────────────
+#
+# A página da campanha (tema/catalogo-entretempos.liquid) grava aqui cada
+# visita com o nome do link (?n=) e cada clique em comprar, direto do
+# navegador da cliente com a chave pública do Supabase. O banco só aceita
+# INSERT dessa chave, com campos curtos; ninguém lê nada pelo site. Quem lê é
+# o portal, pela conexão direta. Pedido do Pedro em 09/10/2026, para saber
+# quem abriu o link e não só quem usou o cupom.
+
+TABELA_CLIQUES = "cliques_campanha"
+
+
+def garantir_cliques() -> None:
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        con.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {TABELA_CLIQUES} (
+                id         BIGSERIAL PRIMARY KEY,
+                criado_em  TIMESTAMPTZ NOT NULL DEFAULT now(),
+                campanha   TEXT NOT NULL,
+                nome       TEXT,
+                evento     TEXT NOT NULL,
+                produto    TEXT,
+                aparelho   TEXT
+            )
+        """))
+        con.execute(text(f"ALTER TABLE {TABELA_CLIQUES} ENABLE ROW LEVEL SECURITY"))
+        con.execute(text(f"""
+            DO $$ BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = '{TABELA_CLIQUES}'
+                             AND policyname = 'site_so_grava') THEN
+                CREATE POLICY site_so_grava ON {TABELA_CLIQUES} FOR INSERT TO anon
+                  WITH CHECK (campanha ~ '^[a-z0-9-]{{1,30}}$'
+                              AND evento IN ('visita', 'comprar', 'ver_loja')
+                              AND coalesce(length(nome), 0) <= 40
+                              AND coalesce(length(produto), 0) <= 120
+                              AND coalesce(length(aparelho), 0) <= 20);
+              END IF;
+            END $$
+        """))
+        con.execute(text(f"GRANT INSERT ON {TABELA_CLIQUES} TO anon"))
+        con.execute(text(f"GRANT USAGE ON SEQUENCE {TABELA_CLIQUES}_id_seq TO anon"))
+        con.execute(text(f"REVOKE SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON {TABELA_CLIQUES} FROM anon"))
+        con.execute(text(f"REVOKE ALL ON {TABELA_CLIQUES} FROM authenticated"))
+
+
+def ler_cliques(campanha: str) -> List[dict]:
+    """Visitas e cliques da campanha, do mais recente ao mais antigo."""
+    if not configurado():
+        return []
+    from sqlalchemy import text
+    try:
+        garantir_cliques()
+        with _conectar().connect() as con:
+            return [dict(l) for l in con.execute(text(
+                f"SELECT criado_em, nome, evento, produto, aparelho FROM {TABELA_CLIQUES}"
+                f" WHERE campanha = :c ORDER BY criado_em DESC"), {"c": campanha}).mappings().all()]
+    except Exception:
+        return []
