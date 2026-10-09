@@ -366,7 +366,11 @@ def processar(numero: str, nota: dict = None, simular: bool = False) -> str:
             nome = f"Etiqueta {codigo}.pdf"
             arquivo = os.path.join(pasta, nome)
             etiqueta_pdf(pre["id"], arquivo)
-            drive.salvar(drive.pasta_do_pedido(nota.get("nome"), numero, nota.get("data_emissao")), nome, arquivo)
+            if not nota.get("cpf"):
+                from avisos import danfe
+                nota["cpf"] = danfe.olist("nota.fiscal.obter", id=nota["id"])["nota_fiscal"]["cliente"].get("cpf_cnpj")
+            drive.salvar(drive.pasta_do_pedido(nota.get("nome"), nota.get("cpf"), numero, nota.get("data_emissao")),
+                         nome, arquivo)
     return codigo
 
 if __name__ == "__main__":

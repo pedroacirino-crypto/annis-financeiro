@@ -130,8 +130,10 @@ def main(so_id: str = None) -> None:
             # no PDF do dia (avisos/envios.py); no grupo, só se o Drive não
             # estiver configurado, como era antes.
             if drive.configurado() and n.get("numero_ecommerce"):
-                drive.salvar(drive.pasta_do_pedido(n.get("nome"), n["numero_ecommerce"], n.get("data_emissao")),
-                             nome, arquivo)
+                cliente = olist("nota.fiscal.obter", id=n["id"])["nota_fiscal"]
+                n["cpf"], n["chave_acesso"] = cliente["cliente"].get("cpf_cnpj"), cliente.get("chave_acesso")
+                drive.salvar(drive.pasta_do_pedido(n.get("nome"), n["cpf"], n["numero_ecommerce"],
+                                                   n.get("data_emissao")), nome, arquivo)
             else:
                 telegram(arquivo, nome, legenda(n))
             if not so_id:

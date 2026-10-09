@@ -3,9 +3,9 @@
 A pasta é de outra conta Google, então quem grava é um App da Web do Apps
 Script nessa conta (avisos/drive.gs). Aqui só se manda o arquivo com o token.
 
-Organização, combinada com o Pedro em 09/10/2026: "Nome da cliente / #pedido ·
-data", com a NF e a etiqueta dentro. Sem CPF no nome da pasta: ele já está na
-nota, e nome de pasta fica à vista de quem acessa o Drive.
+Organização pedida pelo Pedro em 09/10/2026, como repositório por cliente:
+"Nome da cliente - CPF (só números) / #pedido · data", com a NF e a etiqueta
+dentro.
 
 Variáveis: DRIVE_WEBAPP_URL (endereço do App da Web) e DRIVE_TOKEN.
 """
@@ -20,10 +20,19 @@ def configurado() -> bool:
     return bool(os.environ.get("DRIVE_WEBAPP_URL") and os.environ.get("DRIVE_TOKEN"))
 
 
-def pasta_do_pedido(nome_cliente: str, pedido: str, data_br: str) -> list:
-    """["Maria Silva", "#1146 · 09-10-2026"]; data_br em dd/mm/aaaa."""
-    nome = " ".join((nome_cliente or "Sem nome").split()).title()[:80]
-    return [nome, f"#{str(pedido).lstrip('#')} · {(data_br or '').replace('/', '-')}"]
+def pasta_do_pedido(nome_cliente: str, cpf: str, pedido: str, data_br: str) -> list:
+    """["Maria Silva - 12345678900", "#1146 · 09-10-2026"]; data_br em dd/mm/aaaa.
+
+    Sem pedido da loja (venda do ateliê, por exemplo), a segunda pasta vira
+    "NF 123 · data" com o número passado em pedido como "NF 123"."""
+    import re
+    nome = re.sub(r"[\d.\-/]+", " ", nome_cliente or "")
+    nome = " ".join(nome.split()).title()[:80] or "Sem Nome"
+    doc = re.sub(r"\D", "", cpf or "")
+    topo = f"{nome} - {doc}" if doc else nome
+    rotulo = str(pedido or "").strip()
+    rotulo = rotulo if rotulo.upper().startswith("NF") else f"#{rotulo.lstrip('#')}"
+    return [topo, f"{rotulo} · {(data_br or '').replace('/', '-')}"]
 
 
 def salvar(caminho: list, nome: str, arquivo: str) -> str:
