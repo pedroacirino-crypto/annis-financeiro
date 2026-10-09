@@ -29,6 +29,11 @@
   .annis-cat { box-shadow: 0 0 0 100vmax #FFF6F0; clip-path: inset(0 -100vmax); }
   /* No celular o tema deixa margem dos lados; o catálogo vai de borda a borda. */
   @media (max-width: 749px) { .annis-cat { width: 100vw; margin-left: calc(50% - 50vw); padding-bottom: 0; } }
+  /* No Android, qualquer pixel além da tela faz o navegador do WhatsApp
+     afastar o zoom e mostrar sobra dos lados (o iPhone não faz isso). Corta
+     o que passar da largura só nesta página (teste de 09/10/2026). */
+  html, body { overflow-x: clip; }
+  @supports not (overflow: clip) { html, body { overflow-x: hidden; } }
   .annis-cat * { box-sizing: border-box; }
   .annis-cat__coluna { max-width: 480px; margin: 0 auto; }
   .annis-cat__pagina { display: block; width: 100%; aspect-ratio: 9 / 16; height: auto; background: var(--creme); }
