@@ -2362,28 +2362,33 @@ def _link_campanha(c: dict, camp: dict) -> str:
 
 
 def _texto_campanha(c: dict, camp: dict) -> str:
-    # Mesmo texto da faixa de abertura da página do catálogo (08/10/2026), para
-    # a cliente reconhecer a voz quando abrir o link. O nome sai igual ao do link.
+    # O desconto é uma cortesia para celebrar o lançamento com quem já conhece
+    # a Annis, não um agradecimento (texto revisto pelo Pedro em 09/10/2026).
+    # A mensagem sai do número novo da loja, por isso o pedido para salvar o
+    # contato. O nome sai igual ao do link.
     link = _link_campanha(c, camp)
     primeiro = link.split("?n=", 1)[1] if "?n=" in link else ""
     abertura = f"{primeiro}, a Entretempos chegou." if primeiro else "A Entretempos chegou."
     # Quem devolveu peça recebe a frase que reconhece isso. É a chance de
     # recuperar quem saiu frustrada, e fingir que não aconteceu soa pior.
     if c.get("estornos"):
-        carinho = ("Sei que a última peça não ficou do jeito que você queria, e é uma alegria "
-                   "poder te mostrar o que criamos de novo.")
+        meio = ("Sei que a última peça não ficou do jeito que você queria, e queremos muito te mostrar "
+                "o que criamos de novo. Para celebrar o lançamento com quem já faz parte da história "
+                "da Annis, preparamos uma cortesia para você: 10% OFF em toda a coleção Entretempos.")
     else:
-        carinho = "É uma alegria ter você com a gente e fazer parte da sua história com a Annis."
+        meio = ("Para celebrar o lançamento, quisemos dividir este momento com quem já faz parte da "
+                "história da Annis. Por isso, preparamos uma cortesia para você: 10% OFF em toda a "
+                "coleção Entretempos.")
     return (
-        f"{abertura}\n\n{carinho}\n\n"
+        f"{abertura}\n\n{meio}\n\n"
         # Primeiro disparo sem o frete grátis (decisão de 08/10/2026): o
         # ENTRETEMPOSFRETE fica guardado para os repiques.
-        "Para agradecer, preparamos um presente especial: 10% OFF em toda a coleção Entretempos.\n\n"
         "Fizemos uma página especial para você conhecer a coleção, com os 10% já aplicados no checkout:\n"
         f"{link}\n\n"
-        f"O presente vale até {camp['ate']}.\n\n"
+        f"A cortesia vale até {camp['ate']}.\n\n"
         "Junto com esta mensagem vai também o catálogo em PDF.\n\n"
-        "Qualquer dúvida de tamanho ou prazo, é só responder aqui.\n\n"
+        "Este é o novo número oficial da Annis. Salve o contato e, qualquer dúvida de tamanho ou "
+        "prazo, é só responder aqui.\n\n"
         "Com carinho,\nAnnis"
     )
 
