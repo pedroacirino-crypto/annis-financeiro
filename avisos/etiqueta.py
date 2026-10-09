@@ -68,6 +68,13 @@ EMBALAGEM = {
 }
 EMBALAGEM_TESTE = EMBALAGEM
 
+# Peças feitas depois do pedido. Loulou: a etiqueta fica para quando a peça
+# ficar pronta, à mão, senão a cliente recebe o rastreio semanas antes do
+# envio (decisão do Pedro, 09/10/2026). Bolsa: produção de uns 10 dias, segue
+# automática, mas com 30 dias de validade em vez dos 14 padrão dos Correios.
+SO_A_MAO = ("loulou",)
+VALIDADE_DIAS = {"bolsa": 30}
+
 URLS = {"hom": "https://apihom.correios.com.br", "prod": "https://api.correios.com.br"}
 
 
@@ -173,6 +180,20 @@ def _servico(titulo: str) -> str:
     raise RuntimeError(f"frete '{titulo}' não é PAC nem SEDEX")
 
 
+def _validade(itens) -> dict:
+    """Data limite de postagem maior quando o pedido tem peça com produção."""
+    titulos = " ".join(i["title"] for i in itens).lower()
+    dias = max([d for p, d in VALIDADE_DIAS.items() if p in titulos], default=0)
+    if not dias:
+        return {}  # padrão dos Correios: criação + 14 dias
+    return {"prazoPostagem": (dt.date.today() + dt.timedelta(days=dias)).strftime("%d/%m/%Y")}
+
+
+def so_a_mao(pedido: dict) -> bool:
+    titulos = " ".join(i["title"] for i in pedido["lineItems"]["nodes"]).lower()
+    return any(p in titulos for p in SO_A_MAO)
+
+
 def montar_prepostagem(pedido: dict, nota: dict) -> dict:
     a = pedido["shippingAddress"]
     itens = pedido["lineItems"]["nodes"]
@@ -203,6 +224,7 @@ def montar_prepostagem(pedido: dict, nota: dict) -> dict:
         "cienteObjetoNaoProibido": "1",
         "modalidadePagamento": "2",  # à faturar, como no contrato
         "emiteDCe": "N",
+        **_validade(itens),
         "observacao": f"Pedido {pedido['name']}",
         "pedidoExternoOrigem": pedido["name"].lstrip("#"),
     }
@@ -315,6 +337,12 @@ def processar(numero: str, nota: dict = None, simular: bool = False) -> str:
         if feito:
             return feito.split()[-1]
     pedido = pedido_shopify(numero)
+    if so_a_mao(pedido) and not simular:
+        from avisos import danfe
+        _anotar(numero, "manual")
+        danfe.mensagem(f"Pedido #{numero} tem Loulou, que é sob encomenda: a etiqueta não sai sozinha. "
+                       "Gerar quando a peça ficar pronta.")
+        return "manual"
     nota = nota or nota_do_pedido(numero)
     if not nota.get("chave_acesso"):
         from avisos import danfe
