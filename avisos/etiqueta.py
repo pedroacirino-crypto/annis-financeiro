@@ -54,15 +54,16 @@ REMETENTE = {
     },
 }
 
-# Embalagem e peso: o mesmo que a loja preenche no Meu Correios. Em todas as
+# Embalagem e peso: a caixa é a que a loja usa no Meu Correios. Em todas as
 # 21 vendas postadas pelo contrato de 28/09 a 05/10/2026 foi caixa de
-# 10 x 34 x 45 cm com peso informado 1, com 1 ou 3 peças (lido da API em
-# 09/10). Envelope só aparece nas devoluções. A agência pesa na postagem.
+# 10 x 34 x 45 cm, com 1 ou 3 peças (lido da API em 09/10); envelope só nas
+# devoluções. O peso informado lá era "1", que a API guarda em gramas; o
+# Pedro confirmou que é 1 kg (09/10). A agência pesa de novo na postagem.
 EMBALAGEM = {
     "altura_cm": 10,
     "largura_cm": 34,
     "comprimento_cm": 45,
-    "peso_caixa_g": 1,
+    "peso_caixa_g": 1000,
     "peso_por_peca_g": 0,
 }
 EMBALAGEM_TESTE = EMBALAGEM
