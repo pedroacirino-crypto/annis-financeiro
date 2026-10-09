@@ -208,6 +208,7 @@
     var BANCO = 'https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/cliques_campanha';
     var CHAVE = 'sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW';
     if (CHAVE.indexOf('COLE_') === 0) return;
+    if (window.Shopify && Shopify.designMode) return;  // prévia do editor do tema não conta
     var nome = ((new URLSearchParams(location.search).get('n') || '').trim().split(/\s+/)[0] || '')
       .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ'-]/g, '').slice(0, 40) || null;
     var ua = navigator.userAgent;
