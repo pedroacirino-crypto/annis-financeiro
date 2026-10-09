@@ -2424,6 +2424,11 @@ def _card_disparo(c: dict, camp: dict, chave: str, enviado_em=None):
                 f"<div style='text-align:right;font-family:Poppins;font-size:0.65rem;color:{MARROM_CLARO}'>já gastou</div>",
                 unsafe_allow_html=True,
             )
+        _outra = db.quem_recebe_diferente(c.get("email"), c.get("nome"))
+        if _outra:
+            st.warning(f"Comprou no nome de {c.get('nome')}, mas o pedido foi entregue para {_outra}. "
+                       f"O e-mail e o telefone podem ser de {_outra.split()[0]}: confira para quem vai a "
+                       "mensagem e ajuste o nome no texto se for o caso.")
         texto_final = st.text_area("Mensagem", value=texto, height=230, key=f"disp_{chave}",
                                    label_visibility="collapsed")
         _botoes_acao(c, texto_final, "Abrir o catálogo", "https://" + _link_campanha(c, camp))

@@ -350,7 +350,7 @@ def upsert_pedidos(itens: List[dict]) -> int:
             it.get("name", ""),
             it.get("createdAt", ""),
             (c.get("email") or "").strip().lower(),
-            nome_de_contato(it),
+            (c.get("displayName") or "").strip(),
             (end.get("city") or "").strip(),
             (end.get("provinceCode") or end.get("province") or "").strip(),
             ", ".join(partes),
@@ -451,34 +451,36 @@ def upsert_abandonados(itens: List[dict]) -> int:
     return n
 
 
-def nome_de_contato(pedido: dict) -> str:
-    """Nome de quem atende pelo e-mail e pelo telefone do pedido.
-
-    A conta, quem paga e quem recebe podem ser pessoas diferentes. No #1133 a
-    conta tinha o e-mail e o telefone da Lígia, que recebeu, mas o nome do
-    Gustavo, que pagou (09/10/2026): o portal chamava a Lígia de Gustavo, e o
-    disparo sairia "Gustavo, a Entretempos chegou" para o WhatsApp dela. Vale
-    o nome que aparece no e-mail; sem pista, o da conta, como antes.
-    """
+def _palavras(t) -> set:
     import unicodedata
+    t = unicodedata.normalize("NFD", (t or "").lower())
+    t = "".join(ch for ch in t if unicodedata.category(ch) != "Mn")
+    for sep in "._-+0123456789":
+        t = t.replace(sep, " ")
+    return {w for w in t.split() if len(w) > 2}
 
-    def palavras(t):
-        t = unicodedata.normalize("NFD", (t or "").lower())
-        t = "".join(ch for ch in t if unicodedata.category(ch) != "Mn")
-        for sep in "._-+0123456789":
-            t = t.replace(sep, " ")
-        return {w for w in t.split() if len(w) > 2}
 
-    conta = ((pedido.get("customer") or {}).get("displayName") or "").strip()
-    nomes = [conta,
-             ((pedido.get("shippingAddress") or {}).get("name") or "").strip(),
-             ((pedido.get("billingAddress") or {}).get("name") or "").strip()]
-    email = ((pedido.get("customer") or {}).get("email") or pedido.get("email") or "").split("@")[0]
-    dica = palavras(email)
-    for nome in nomes:
-        if nome and palavras(nome) & dica:
-            return nome
-    return conta or next((n for n in nomes if n), "")
+def quem_recebe_diferente(email: str, nome: str) -> "str | None":
+    """Nome de quem recebeu os pedidos deste e-mail, quando não é a pessoa do
+    cadastro. Serve de alerta nos Disparos: no #1133 o cadastro é do Gustavo
+    (quem pagou), mas o e-mail e o telefone são da Lígia, que recebeu
+    (09/10/2026). O Pedro preferiu manter o nome de quem comprou e só avisar.
+    """
+    import json
+    if not email:
+        return None
+    con = _conn()
+    linhas = con.execute("SELECT raw_json FROM shopify_orders WHERE email = ?", (email.lower(),)).fetchall()
+    con.close()
+    meu = _palavras(nome)
+    for (bruto,) in linhas:
+        try:
+            entrega = ((json.loads(bruto or "{}").get("shippingAddress") or {}).get("name") or "").strip()
+        except Exception:
+            continue
+        if entrega and meu and not (_palavras(entrega) & meu):
+            return entrega
+    return None
 
 
 def _normalizar(texto: str) -> str:
