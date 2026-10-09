@@ -75,7 +75,7 @@
 </div>
 {%- if product.tags contains 'Ateliê' -%}
   {%- capture texto_whats -%}Oi! Vim pelo site e quero saber mais sobre o {{ product.title }}.{%- endcapture -%}
-  <a class="annis-fale" href="https://wa.me/554384557263?text={{ texto_whats | url_encode }}" target="_blank" rel="noopener">Fale conosco</a>
+  <a class="annis-fale" href="https://wa.me/554384557263?text={{ texto_whats | url_encode | replace: '+', '%20' }}" target="_blank" rel="noopener">Fale conosco</a>
 {%- endif -%}
 <style>
   product-price .price{font-weight:600;font-size:15px;letter-spacing:.01em}
