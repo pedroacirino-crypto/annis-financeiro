@@ -13,6 +13,10 @@ on:
         description: "Gerar mesmo fora de dia útil (teste)"
         required: false
         default: "nao"
+      modo:
+        description: "pdf (12h05) ou baixa (marca como enviado o que os Correios já receberam)"
+        required: false
+        default: "pdf"
 
 concurrency:
   group: envios
@@ -47,4 +51,4 @@ jobs:
           CORREIOS_CODIGO_ACESSO: ${{ secrets.CORREIOS_CODIGO_ACESSO }}
           CORREIOS_CARTAO: ${{ secrets.CORREIOS_CARTAO }}
           CORREIOS_AMBIENTE: ${{ vars.CORREIOS_AMBIENTE }}
-        run: python avisos/envios.py ${{ inputs.agora == 'sim' && '--agora' || '' }}
+        run: python avisos/envios.py ${{ inputs.modo == 'baixa' && '--baixa' || '' }} ${{ inputs.agora == 'sim' && '--agora' || '' }}

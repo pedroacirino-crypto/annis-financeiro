@@ -291,8 +291,9 @@ begin
   return j;
 end $$;
 
--- Dispara um workflow do repositório (danfe.yml, envios.yml).
-create or replace function avisos.disparar_workflow(arquivo text) returns void
+-- Dispara um workflow do repositório (danfe.yml, envios.yml), com entradas opcionais.
+drop function if exists avisos.disparar_workflow(text);
+create or replace function avisos.disparar_workflow(arquivo text, entradas jsonb default null) returns void
 language plpgsql security definer set search_path = extensions, public as $$
 declare r http_response;
 begin
@@ -304,22 +305,31 @@ begin
           http_header('Accept', 'application/vnd.github+json'),
           http_header('User-Agent', 'annis-avisos')],
     'application/json',
-    '{"ref":"main"}'
+    jsonb_build_object('ref', 'main', 'inputs', coalesce(entradas, '{}'::jsonb))::text
   )::http_request);
   if r.status <> 204 then
     raise exception 'GitHub %: HTTP % %', arquivo, r.status, left(r.content, 200);
   end if;
 end $$;
 
+-- Baixa na Shopify do que os Correios já receberam (postado), três vezes ao dia.
+create or replace function avisos.disparar_baixa() returns void
+language plpgsql security definer as $$
+begin
+  perform avisos.disparar_workflow('envios.yml', '{"modo": "baixa"}');
+exception when others then
+  perform avisos.anota_erro('baixa: ' || sqlerrm);
+end $$;
+
 -- Nota em PDF e etiqueta de cada pedido, na pasta do Drive.
 create or replace function avisos.disparar_danfe() returns void
-language sql security definer as $$ select avisos.disparar_workflow('danfe.yml') $$;
+language sql security definer as $$ select avisos.disparar_workflow('danfe.yml', null) $$;
 
 -- PDF do dia (etiquetas e notas), 12h05 de segunda a sexta; feriado o script pula.
 create or replace function avisos.disparar_envios() returns void
 language plpgsql security definer as $$
 begin
-  perform avisos.disparar_workflow('envios.yml');
+  perform avisos.disparar_workflow('envios.yml', null);
 exception when others then
   perform avisos.anota_erro('envios: ' || sqlerrm);
   perform avisos.telegram('O PDF dos envios de hoje não foi disparado: ' || left(sqlerrm, 200));
@@ -463,3 +473,5 @@ end $$;
 select cron.schedule('annis-avisos', '*/2 * * * *', 'select avisos.checar()');
 select cron.schedule('annis-fechamento', '0 2 * * *', 'select avisos.fechamento()');
 select cron.schedule('annis-envios', '5 15 * * 1-5', 'select avisos.disparar_envios()');
+-- 9h, 17h e 20h de Brasília, de segunda a sábado: a postagem aparece nos Correios ao longo do dia.
+select cron.schedule('annis-baixa', '0 12,20,23 * * 1-6', 'select avisos.disparar_baixa()');

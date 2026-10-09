@@ -7,8 +7,9 @@ depois as DANFEs na mesma ordem, para casar etiqueta e nota na hora de
 embalar. Pedido pago depois das 12h fica para o dia útil seguinte; fim de
 semana e feriado nacional não têm PDF.
 
-Junto, cada pedido do PDF é marcado como enviado na Shopify com o rastreio,
-sem e-mail para a cliente (a jornada pós-compra ainda vai ser desenhada).
+A baixa na Shopify (pedido marcado como enviado, com rastreio e sem e-mail
+para a cliente) não acontece aqui: só depois que os Correios registram a
+postagem, em "python avisos/envios.py --baixa", algumas vezes por dia.
 
 Quem chama é o workflow envios.yml, disparado pelo Supabase às 12h05 de
 segunda a sexta (avisos.sql). Pedido impresso fica anotado como
@@ -16,6 +17,7 @@ segunda a sexta (avisos.sql). Pedido impresso fica anotado como
 
     python avisos/envios.py            PDF do dia (respeita fim de semana e feriado)
     python avisos/envios.py --agora    gera mesmo fora de dia útil (teste)
+    python avisos/envios.py --baixa    dá baixa na Shopify do que já foi postado
 """
 
 import datetime as dt
@@ -154,13 +156,52 @@ def main(forcar: bool = False) -> None:
 
     for p in lista:
         anotar(p["numero"])
-        try:
-            etiqueta.rastreio_na_shopify(p["pedido"], p["codigo"])
-        except Exception as erro:
-            danfe.mensagem(f"Pedido #{p['numero']} foi para o PDF, mas não foi marcado como enviado na Shopify: "
-                           f"{str(erro)[:200]}")
     print(f"PDF com {len(lista)} pedidos")
 
 
+def baixa() -> None:
+    """Marca como enviado na Shopify só o que os Correios já receberam.
+
+    O painel de pedidos da Shopify é onde a loja vê o que já saiu e o que
+    falta. Marcar às 12h, junto do PDF, diria "enviado" antes da coleta; por
+    isso a baixa espera a pré-postagem virar POSTADO (status 3) nos Correios
+    (pedido do Pedro, 09/10/2026). Sem e-mail para a cliente. Etiqueta que
+    vence sem postagem (status 4) é avisada uma vez no grupo.
+    """
+    with nuvem._conectar().connect() as con:
+        rows = con.execute(text("""
+            select substr(e.id, 5), e.tipo from avisos.enviados e
+            where e.id like 'etq:%' and e.tipo like 'etiqueta % % %'
+              and not exists (select 1 from avisos.enviados b where b.id = 'baixa:' || substr(e.id, 5))
+        """)).fetchall()
+    erros = []
+    for numero, tipo in rows:
+        _, codigo, id_pre, _nota = tipo.split()[:4]
+        itens = etiqueta._correios("GET", "/v2/prepostagens", params={"id": id_pre}).get("itens") or [{}]
+        status = itens[0].get("statusAtual")
+        if status == 3:
+            try:
+                etiqueta.rastreio_na_shopify(etiqueta.pedido_shopify(numero), codigo)
+            except Exception as erro:
+                erros.append(f"#{numero}: {str(erro)[:150]}")
+                continue
+            marca = "enviado (postado nos Correios)"
+        elif status in (4, 5):
+            if status == 4:
+                danfe.mensagem(f"A etiqueta {codigo} do pedido #{numero} venceu sem ser postada. "
+                               "Gerar outra antes de mandar.")
+            marca = "etiqueta vencida" if status == 4 else "etiqueta cancelada"
+        else:
+            continue
+        with nuvem._conectar().begin() as con:
+            con.execute(text("insert into avisos.enviados (id, tipo) values (:id, :t) on conflict do nothing"),
+                        {"id": f"baixa:{numero}", "t": marca})
+        print(f"#{numero}: {marca}")
+    if erros:
+        danfe.mensagem("Postados nos Correios, mas sem baixa na Shopify:\n" + "\n".join(erros))
+
 if __name__ == "__main__":
-    main(forcar="--agora" in sys.argv)
+    if "--baixa" in sys.argv:
+        baixa()
+    else:
+        main(forcar="--agora" in sys.argv)
