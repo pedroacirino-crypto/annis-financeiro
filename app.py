@@ -2343,8 +2343,10 @@ CAMPANHAS = {
         "link": "annis.store/pages/entretempos",
         "cupom_frete": "ENTRETEMPOSFRETE",
         "cupom": "ENTRETEMPOS10",
-        # O PDF vai anexado à mão em cada conversa: o link do WhatsApp só leva texto.
-        "pdf": "catalogos/ANNIS_ENTRETEMPOS_2026.pdf",
+        # Sem PDF a partir da segunda leva (11/10/2026): na primeira, com o
+        # catálogo inteiro dentro do WhatsApp, quase ninguém abriu o link. Agora
+        # a mensagem leva só para a página. Para voltar a anexar, descomente.
+        # "pdf": "catalogos/ANNIS_ENTRETEMPOS_2026.pdf",
         # Quem comprou há pouco não recebe: o desconto em cima de uma compra
         # recente soa como "paguei mais caro". Janela móvel, conta do dia do
         # envio, então nos repiques quem comprar com o cupom também sai.
@@ -2391,7 +2393,6 @@ def _texto_campanha(c: dict, camp: dict) -> str:
         # .store e o link chega como texto, sem clique (teste de 09/10/2026).
         f"https://{link}\n\n"
         f"A cortesia vale até {camp['ate']}.\n\n"
-        "Junto com esta mensagem vai também o catálogo em PDF.\n\n"
         "Este é o novo número oficial da Annis. Salve o contato e, qualquer dúvida de tamanho ou "
         "prazo, é só responder aqui.\n\n"
         "Com carinho,\nAnnis"
