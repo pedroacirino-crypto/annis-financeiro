@@ -54,6 +54,7 @@ begin
   if t is not null and e > now() + interval '10 minutes' then
     return t;
   end if;
+  perform http_set_curlopt('CURLOPT_CONNECTTIMEOUT_MS', '10000');
   perform http_set_curlopt('CURLOPT_TIMEOUT_MS', '20000');
   r := http_post(
     'https://' || avisos.segredo('shopify_loja') || '.myshopify.com/admin/oauth/access_token',
@@ -76,6 +77,7 @@ create or replace function avisos.shopify(consulta text, variaveis jsonb default
 language plpgsql security definer set search_path = extensions, public as $$
 declare r http_response; j jsonb;
 begin
+  perform http_set_curlopt('CURLOPT_CONNECTTIMEOUT_MS', '10000');
   perform http_set_curlopt('CURLOPT_TIMEOUT_MS', '20000');
   r := http((
     'POST',
@@ -94,19 +96,35 @@ begin
   return j -> 'data';
 end $$;
 
+-- Três tentativas, com 10 s para conectar. O `http` do Postgres deixa só 1 s
+-- de conexão por padrão (o CURLOPT_TIMEOUT_MS vale para a resposta, não para
+-- conectar), e em 10/10/2026 o fechamento das 23h morreu num pico de
+-- lentidão do Telegram: "Failed to connect ... after 1002 ms".
 create or replace function avisos.telegram(texto text) returns void
 language plpgsql security definer set search_path = extensions, public as $$
-declare r http_response;
+declare r http_response; tentativa int := 0; erro text;
 begin
-  perform http_set_curlopt('CURLOPT_TIMEOUT_MS', '15000');
-  r := http_post(
-    'https://api.telegram.org/bot' || avisos.segredo('telegram_token') || '/sendMessage',
-    jsonb_build_object('chat_id', avisos.segredo('telegram_chat'), 'text', texto,
-                       'disable_web_page_preview', true)::text,
-    'application/json');
-  if r.status <> 200 then
-    raise exception 'Telegram: HTTP % %', r.status, left(r.content, 200);
-  end if;
+  loop
+    tentativa := tentativa + 1;
+    begin
+      perform http_set_curlopt('CURLOPT_CONNECTTIMEOUT_MS', '10000');
+      perform http_set_curlopt('CURLOPT_TIMEOUT_MS', '20000');
+      r := http_post(
+        'https://api.telegram.org/bot' || avisos.segredo('telegram_token') || '/sendMessage',
+        jsonb_build_object('chat_id', avisos.segredo('telegram_chat'), 'text', texto,
+                           'disable_web_page_preview', true)::text,
+        'application/json');
+      if r.status = 200 then
+        return;
+      end if;
+      erro := 'HTTP ' || r.status || ' ' || left(r.content, 200);
+    exception when others then
+      erro := sqlerrm;
+    end;
+    exit when tentativa >= 3;
+    perform pg_sleep(5);
+  end loop;
+  raise exception 'Telegram, depois de 3 tentativas: %', erro;
 end $$;
 
 -- Itens: "- Colete de Jacquard Trama - Vinho · M" (quantidade quando passa de 1)
@@ -417,6 +435,98 @@ begin
   end if;
 end $$;
 
+-- Calendário de postagem: dia útil é segunda a sexta fora dos feriados
+-- nacionais (a mesma lista de avisos/envios.py; Correios e loja parados).
+create or replace function avisos.dia_util(d date) returns boolean
+language sql immutable as $$
+  select extract(isodow from d) < 6 and d <> all (array[
+    '2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01',
+    '2026-06-04','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25',
+    '2027-01-01','2027-02-08','2027-02-09','2027-03-26','2027-04-21','2027-05-01',
+    '2027-05-27','2027-09-07','2027-10-12','2027-11-02','2027-11-15','2027-11-20','2027-12-25'
+  ]::date[])
+$$;
+
+create or replace function avisos.somar_dias_uteis(d date, n int) returns date
+language plpgsql immutable as $$
+declare r date := d; faltam int := n;
+begin
+  while faltam > 0 loop
+    r := r + 1;
+    if avisos.dia_util(r) then faltam := faltam - 1; end if;
+  end loop;
+  return r;
+end $$;
+
+-- Status dos pedidos para o fechamento (12/10/2026, pedido do Pedro): o que
+-- tem de ser postado no próximo dia útil, o que está atrasado e o que está
+-- em produção. Prazo de postagem: pago em dia útil até 12h, posta no mesmo
+-- dia; depois disso, no fim de semana ou no feriado, no dia útil seguinte.
+-- Peça sob encomenda soma os dias úteis de produção escritos na descrição
+-- ("produzida em até 10 dias úteis", "Prazo de produção 10 dias úteis").
+-- Postado é pedido marcado como enviado na Shopify, o que a baixa faz quando
+-- os Correios registram a coleta, ou com baixa anotada em avisos.enviados.
+create or replace function avisos.status_pedidos() returns text
+language plpgsql security definer set search_path = extensions, public as $$
+declare
+  fuso constant text := 'America/Sao_Paulo';
+  hoje date := (now() at time zone fuso)::date;
+  amanha date := avisos.somar_dias_uteis(hoje, 1);
+  dias text[] := array['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+  d jsonb; postar text := ''; atraso text := ''; producao text := '';
+  n_postar int := 0; n_atraso int := 0; n_producao int := 0;
+  r record;
+begin
+  d := avisos.shopify($q$
+    query($q: String!) {
+      orders(first: 100, sortKey: CREATED_AT, query: $q) {
+        nodes { name createdAt cancelledAt test
+          shippingAddress { name } customer { displayName }
+          shippingLines(first: 1) { nodes { title } }
+          lineItems(first: 20) { nodes { product { descriptionHtml } } } }
+      }
+    }$q$, jsonb_build_object('q', 'fulfillment_status:unfulfilled financial_status:paid created_at:>='
+                              || to_char(hoje - 90, 'YYYY-MM-DD')));
+  for r in
+    with p as (
+      select n ->> 'name' as nome,
+             (n ->> 'createdAt')::timestamptz at time zone fuso as quando,
+             initcap(lower(coalesce(n -> 'shippingAddress' ->> 'name', n -> 'customer' ->> 'displayName', ''))) as cliente,
+             coalesce(n -> 'shippingLines' -> 'nodes' -> 0 ->> 'title', '') as frete,
+             (select coalesce(max((regexp_match(
+                        replace(replace(regexp_replace(li -> 'product' ->> 'descriptionHtml', '<[^>]+>', ' ', 'g'),
+                                        '&nbsp;', ' '), chr(160), ' '),
+                        'produ[^.]{0,80}?([0-9]+)\s*dias?\s+úteis', 'i'))[1]::int), 0)
+                from jsonb_array_elements(n -> 'lineItems' -> 'nodes') li) as dias_producao
+      from jsonb_array_elements(d -> 'orders' -> 'nodes') n
+      where n ->> 'cancelledAt' is null and not coalesce((n ->> 'test')::boolean, false)
+        and not exists (select 1 from avisos.enviados e
+                        where e.id = 'baixa:' || ltrim(n ->> 'name', '#') and e.tipo like 'enviado%')
+    ), b as (
+      select *, case when avisos.dia_util(quando::date) and extract(hour from quando) < 12
+                     then quando::date else avisos.somar_dias_uteis(quando::date, 1) end as base
+      from p
+    )
+    select *, avisos.somar_dias_uteis(base, dias_producao) as prazo from b order by 7, 1
+  loop
+    if r.prazo <= hoje then
+      n_atraso := n_atraso + 1;
+      atraso := atraso || E'\n- ' || r.nome || ' ' || r.cliente || ' · era até ' || to_char(r.prazo, 'DD/MM');
+    elsif r.prazo = amanha then
+      n_postar := n_postar + 1;
+      postar := postar || E'\n- ' || r.nome || ' ' || r.cliente || case when r.frete <> '' then ' · ' || r.frete else '' end;
+    else
+      n_producao := n_producao + 1;
+      producao := producao || E'\n- ' || r.nome || ' ' || r.cliente || ' · postar até ' || to_char(r.prazo, 'DD/MM');
+    end if;
+  end loop;
+  return E'Status dos pedidos'
+    || E'\nPara postar ' || dias[extract(isodow from amanha)::int] || ' ' || to_char(amanha, 'DD/MM') || ': '
+      || n_postar || postar
+    || E'\nAtrasados: ' || n_atraso || atraso
+    || case when n_producao > 0 then E'\nSob encomenda, em produção: ' || n_producao || producao else '' end;
+end $$;
+
 -- Fechamento do dia, só site (vendas da loja física não passam pela Shopify).
 create or replace function avisos.fechamento() returns text
 language plpgsql security definer set search_path = extensions, public as $$
@@ -465,6 +575,12 @@ begin
       || case when m_n = 1 then ' pedido' else ' pedidos' end || ' · ' || avisos.brl(m_v)
       || case when m_n > 0 then ' · ticket ' || avisos.brl(round(m_v / m_n, 2)) else '' end
     || E'\n\nCarrinhos abandonados hoje: ' || carrinhos;
+  -- O status vem num bloco próprio; se a consulta falhar, o fechamento sai assim mesmo.
+  begin
+    texto := texto || E'\n\n' || avisos.status_pedidos();
+  exception when others then
+    texto := texto || E'\n\nStatus dos pedidos: não consegui montar (' || left(sqlerrm, 120) || ')';
+  end;
   perform avisos.telegram(texto);
   return texto;
 end $$;
