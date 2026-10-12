@@ -163,9 +163,12 @@ def render():
     meses_vis = meses_pnl[-janela:]
     base = tc.set_index("mes").loc[meses_vis].reset_index()
     if por_canal:
-        st.info(md(f"Visão **{visao.lower()}**: receita, taxas, imposto e CMV só do canal, fechando na margem de contribuição. "
-                   "Meta, agência, aluguel e o resto das despesas são da empresa toda e não se dividem por canal, "
-                   "então o resultado, o caixa e a projeção aparecem só no consolidado."))
+        st.info(md(f"Visão **{visao.lower()}**: receita, taxas, imposto e CMV só do canal, que dão a margem de contribuição. "
+                   + ("Meta e agência entram inteiros no digital, porque trazem tráfego para o site, e o digital fecha num "
+                      "resultado. " if visao == omni.DIGITAL else
+                      "Meta e agência ficam no digital, então o físico fecha na margem. ")
+                   + "Aluguel e o resto das despesas são da empresa toda e não se dividem por canal: o resultado "
+                   "da empresa, o caixa e a projeção aparecem só no consolidado."))
     fx_vis = fx[fx.mes.isin(meses_vis)]
 
     e1, e2 = st.columns(2)
@@ -174,12 +177,15 @@ def render():
         st.altair_chart(grafico_linhas(base, {
             "receita_liquida": ("Receita líquida", COR["receita"]),
             "margem_bruta": ("Margem bruta", COR["margem"]),
-            **({} if por_canal else {"resultado": ("Resultado", COR["resultado"])}),
+            **({} if visao == omni.FISICO else
+               {"resultado": ("Resultado do digital" if por_canal else "Resultado", COR["resultado"])}),
         }), use_container_width=True)
         mb = base.margem_bruta.sum() / base.receita_liquida.sum() if base.receita_liquida.sum() else 0
         if por_canal:
             st.caption(md(f"No período: receita {brl(base.receita_liquida.sum())}, margem de contribuição "
-                          f"**{brl(base.margem_bruta.sum())}** ({pct(mb)} da receita)."))
+                          f"**{brl(base.margem_bruta.sum())}** ({pct(mb)} da receita)"
+                          + (f", Meta e agência {brl(base.marketing.sum())}, resultado do digital **{brl(base.resultado.sum())}**."
+                             if visao == omni.DIGITAL else ".")))
         else:
             st.caption(md(f"No período: receita {brl(base.receita_liquida.sum())}, margem bruta {pct(mb)}, resultado **{brl(base.resultado.sum())}**. "
                           f"Fora do site (maquininha e Pix direto) foi {pct(base.receita_fisica.sum() / base.receita_liquida.sum() if base.receita_liquida.sum() else 0)} da receita."))
@@ -228,7 +234,7 @@ def render():
         linhas = {}
         LINHAS_CANAL = {
             "Digital": {"pedidos", "receita_bruta", "receita_site", "desconto_pix", "estornos", "receita_liquida",
-                        "taxas_pagarme", "imposto", "cmv_site", "margem_bruta"},
+                        "taxas_pagarme", "imposto", "cmv_site", "margem_bruta", "marketing", "resultado"},
             "Físico": {"receita_bruta", "receita_maquininha", "receita_pix_direto", "receita_liquida",
                        "taxas_stone", "imposto", "cmv_fisico_estimado", "margem_bruta"},
         }
@@ -296,7 +302,8 @@ def render():
 
         if por_canal:
             wide = wide.rename(index={"Margem bruta": "Margem de contribuição",
-                                      "Margem bruta %": "Margem de contribuição %"})
+                                      "Margem bruta %": "Margem de contribuição %",
+                                      "Resultado": "Resultado do digital"})
         vis = wide.reset_index().rename(columns={"index": ""})
         tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560,
                titulo="PnL por competência" + (f" · {visao.lower()}" if por_canal else ""), fixas_direita=2 if mostra_mtd else 1)

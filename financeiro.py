@@ -1729,9 +1729,10 @@ def projetar(fluxo: pd.DataFrame, meses: int, receita_liquida_mensal: float,
 #
 # O PnL consolidado não muda. Por canal, cada um leva só o que é dele:
 # receita, desconto, estorno, taxa do meio de pagamento, imposto na mesma
-# alíquota e CMV. Meta, agência e o resto das despesas são da empresa toda e
-# não se dividem por canal sem uma regra de rateio, então a última linha do
-# canal é a margem de contribuição, não o resultado.
+# alíquota e CMV, e isso dá a margem de contribuição. Meta e agência vão
+# inteiros para o digital, porque trazem tráfego para o site (decisão do
+# Pedro, 12/10/2026), e o digital fecha num resultado. Aluguel e o resto das
+# despesas são da empresa toda e não se dividem: o físico fecha na margem.
 
 def pnl_por_canal(t: pd.DataFrame, canal: str, imposto: float = IMPOSTO_PADRAO) -> pd.DataFrame:
     """A tabela do PnL com as mesmas colunas, recortada no canal."""
@@ -1763,10 +1764,10 @@ def pnl_por_canal(t: pd.DataFrame, canal: str, imposto: float = IMPOSTO_PADRAO) 
         c["cmv"] = t.cmv_fisico_estimado
     c["imposto"] = c.receita_liquida * imposto
     c["margem_bruta"] = c.receita_liquida - c.taxas - c.imposto - c.cmv
-    c["marketing"] = zero
+    c["marketing"] = t.marketing if canal == "Digital" else zero
     c["despesas_outras"] = zero
-    c["despesas"] = zero
-    c["resultado"] = c.margem_bruta
+    c["despesas"] = c.marketing
+    c["resultado"] = c.margem_bruta - c.marketing
     c["resultado_acumulado"] = c.resultado.cumsum()
     return c
 
@@ -1790,7 +1791,9 @@ def orcado_por_canal(orc: dict, canal: str, imposto: float = IMPOSTO_PADRAO) -> 
         linhas = {"Maquininha (líquido de MDR)": maq, "Pix direto e link": pix,
                   "(-) Taxas Stone": 0.0, "(-) CMV fora do site (estimado)": cmv}
     imp = liquida * imposto
+    margem = liquida - taxas - imp - cmv
+    meta = g("(-) Meta e agência") if canal == "Digital" else 0.0
     linhas.update({"Receita bruta": bruta, "Receita líquida": liquida, "(-) Imposto": imp,
-                   "(-) CMV": cmv, "Margem bruta": liquida - taxas - imp - cmv,
-                   "Resultado": liquida - taxas - imp - cmv})
+                   "(-) CMV": cmv, "Margem bruta": margem, "(-) Meta e agência": meta,
+                   "Resultado": margem - meta})
     return linhas
