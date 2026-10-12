@@ -198,6 +198,10 @@ def congelar_orcamento(mes: str, meta: str = None, roas: str = None) -> None:
     if not linhas:
         print(f"o plano não alcança {mes}")
         return
+    # O caixa do mês congela junto com o PnL; sem isso ele seria recalculado a
+    # cada leitura e mudaria quando entrasse extrato novo do próprio mês.
+    caixa = financeiro.caixa_orcado(mes, congelado=False)
+    linhas = {**linhas, **{financeiro.CAIXA_CONGELADO + k: v for k, v in caixa.items()}}
     n = dados_fin.salvar_orcamento(mes, linhas)
     print(f"orçamento de {mes} congelado, {n} linhas.\n")
     _mostrar_premissas()

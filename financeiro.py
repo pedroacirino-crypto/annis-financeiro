@@ -518,8 +518,11 @@ def mes_fechado() -> str:
     if fim is None:
         return datetime.now().strftime("%Y-%m")
     ultimo = calendar.monthrange(fim.year, fim.month)[1]
+    # Mês anterior pelo período, não por MonthBegin: no dia 9 o MonthBegin
+    # volta para o dia 1 do mesmo mês, e em 12/10/2026, com o extrato até
+    # 09/10, outubro passou por fechado e novembro virou o mês corrente.
     return fim.strftime("%Y-%m") if fim.day >= ultimo else \
-        (fim - pd.offsets.MonthBegin(1)).strftime("%Y-%m")
+        str(pd.Period(fim, "M") - 1)
 
 
 @memo()
@@ -688,15 +691,28 @@ def _premissas_do_painel():
     return p
 
 
+CAIXA_CONGELADO = "caixa · "
+
+
 @memo()
-def caixa_orcado(mes: str) -> dict:
+def caixa_orcado(mes: str, congelado: bool = True) -> dict:
     """A linha do fluxo de caixa projetado, nas colunas da tabela de caixa.
+
+    Vem do orçamento congelado quando ele tem as linhas de caixa (gravadas
+    com o prefixo `caixa · ` desde 12/10/2026). Antes disso o caixa orçado
+    era recalculado a cada leitura e mudava sozinho quando entrava extrato
+    novo do mês corrente, que mexe no estoque de partida da simulação.
 
     A taxa da Pagar.me não é saída: ela já vem descontada do que liquida.
     Por isso Site entra líquido dela, como no realizado, e o imposto vai na
     coluna própria. A identidade fecha: Site mais fora do site, menos
     estoque, despesa e imposto, dá o saldo do mês do plano.
     """
+    if congelado:
+        orc = orcamentos().get(mes, {})
+        fixo = {k[len(CAIXA_CONGELADO):]: v for k, v in orc.items() if k.startswith(CAIXA_CONGELADO)}
+        if fixo:
+            return fixo
     import plano
     p = _premissas_do_painel()
     if p is None:
@@ -1133,6 +1149,17 @@ def orcamentos() -> dict:
     if df.empty:
         return {}
     return {m: dict(zip(g.linha, g.valor)) for m, g in df.groupby("mes")}
+
+
+def orcamento_congelado_em(mes: str):
+    """Quando o orçamento do mês foi congelado, ou None."""
+    try:
+        import dados_fin
+        df = dados_fin.ler_orcamento()
+    except Exception:
+        return None
+    df = df[df.mes == mes]
+    return None if df.empty else pd.to_datetime(df.congelado_em).min()
 
 
 def fim_dos_custos():

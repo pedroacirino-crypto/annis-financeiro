@@ -220,7 +220,14 @@ def render():
         # já entrou até hoje. Linha que o plano não projeta fica vazia em
         # vez de inventada.
         orc = fin.orcamentos().get(corrente, {})
-        dia = ex.data.max().day if ex.data.max().strftime("%Y-%m") == corrente else 0
+        # O dia do mês vem do calendário de Brasília, não do último movimento do
+        # extrato: em 12/10/2026 o extrato acabava numa sexta, 09/10, porque o
+        # feriado e o fim de semana não tiveram movimento, e a coluna do
+        # realizado ficava escondida. Até quando o extrato foi lido vai escrito
+        # embaixo da tabela.
+        hoje_br = pd.Timestamp.now(tz="America/Sao_Paulo")
+        dia = hoje_br.day if hoje_br.strftime("%Y-%m") == corrente else 0
+        extrato_ate = ex.data.max()
         # Mês pela metade antes do dia 10 não diz nada: medido nos seis meses
         # fechados, no dia 5 já tinha entrado entre 0% e 35% do mês. Até lá a
         # coluna do realizado nem aparece e vale só a projeção. Regra do
@@ -230,7 +237,11 @@ def render():
         mtd = t[t.mes == corrente] if mostra_mtd else t.iloc[0:0]
         # O plano projeta o CMV inteiro, sem separar site de físico: ele vai
         # para a linha do total, e as duas de detalhe ficam vazias no orçado.
-        de_para = {"(-) CMV total": "(-) CMV"}
+        # O plano projeta a maquininha já líquida da taxa da Stone, então no
+        # orçado a linha de taxa é zero (está dentro da maquininha), não vazia.
+        de_para = {"(-) CMV total": "(-) CMV", "Maquininha e link no cartão": "Maquininha (líquido de MDR)"}
+        if orc and "(-) Taxas Stone" not in orc:
+            orc = {**orc, "(-) Taxas Stone": 0.0}
         campos = dict((r, c) for r, c, _ in LINHAS_PNL)
         eh_dinheiro = dict((r, d) for r, _, d in LINHAS_PNL)
         col_orc, col_mtd = [], []
@@ -252,6 +263,7 @@ def render():
             else:
                 col_mtd.append("")
         rot_orc = f"{mes_curto(corrente)} orçado"
+        congelado_em = fin.orcamento_congelado_em(corrente)
         rot_mtd = f"{mes_curto(corrente)} até dia {dia}"
         wide[rot_orc] = col_orc
         if mostra_mtd:
@@ -262,20 +274,22 @@ def render():
                titulo="PnL por competência", fixas_direita=2 if mostra_mtd else 1)
         st.caption(md(
             f"As duas últimas colunas são o mês que está correndo e ficam paradas enquanto o resto rola. "
-            f"**{rot_orc}** é a projeção congelada em "
-            f"{'hoje' if not orc else ''}{pd.Timestamp.now():%d/%m/%Y}, feita antes do mês começar, e não se mexe mais. "
+            + (f"**{rot_orc}** é a projeção congelada em {congelado_em:%d/%m/%Y} e não se mexe mais. "
+               if congelado_em is not None else
+               f"**{rot_orc}** ainda não foi congelado: é a projeção de hoje e muda com os dados. ")
             + (f"**{rot_mtd}** é mês pela metade: não compare com coluna de mês fechado. "
+               f"Os custos que saem do extrato da Stone estão lidos até {extrato_ate:%d/%m}. "
                if mostra_mtd else
                f"O realizado de {mes_curto(corrente)} entra a partir do dia {DIA_DO_MTD}: "
                "antes disso o mês mal começou e o número engana mais do que informa. ")
-            + "Linha vazia no orçado é linha que o plano não projeta, como receita por canal."))
+            + "No orçado a maquininha já vem líquida da taxa da Stone, por isso a taxa aparece zerada."))
         if pnl["cobertura_cmv"] < 0.999:
             faltam = ", ".join(f"{k} ({v})" for k, v in pnl["pecas_sem_custo"].items())
             st.caption(md(f"CMV do site cobre {pct(pnl['cobertura_cmv'])} das peças; sem ficha: {faltam}. "
                           f"Fora do site o CMV é estimado com a proporção do site, {pct(pnl['razao_cmv'])}."))
 
     with st.expander("Tabela: caixa mês a mês"):
-        st.caption(
+        st.caption(md(
             "Esta tabela é **caixa**: o dia em que o dinheiro entrou ou saiu da "
             "conta. **Site** é o que a Pagar.me liquidou, já sem taxa e sem "
             "antecipação, e o cartão cai sete dias depois da venda. Por isso "
@@ -283,7 +297,7 @@ def render():
             "dia em que foi vendida. Dezembro de 2025 vendeu R$ 10.954 e "
             "recebeu R$ 7.358; janeiro vendeu R$ 2.666 e recebeu R$ 8.223, "
             "porque o resto de dezembro caiu lá."
-        )
+        ))
         cx_hist = fx_vis[fx_vis.mes <= fin.mes_fechado()]
         cx = pd.DataFrame({
             "Mês": cx_hist.mes.map(mes_curto),
@@ -300,7 +314,9 @@ def render():
         # Mesma dupla do PnL: o mês corrente sai do meio e vira orçado e
         # realizado até hoje, presos na direita.
         cxo = fin.caixa_orcado(corrente)
-        cxm = fx[fx.mes == corrente] if mostra_mtd else fx.iloc[0:0]
+        # Do fluxo inteiro, não do `fx`: o `fx` para no último mês fechado e o
+        # realizado do mês corrente ficava sempre em branco.
+        cxm = fluxo[fluxo.mes == corrente] if mostra_mtd else fluxo.iloc[0:0]
         linha_orc = {"Mês": f"{mes_curto(corrente)} orçado",
                      **{k: brl(v) for k, v in cxo.items()}}
         linha_mtd = {"Mês": rot_mtd}
@@ -395,7 +411,7 @@ def render():
     fim_dado = ex.data.max()
     ultimo_dia = calendar.monthrange(fim_dado.year, fim_dado.month)[1]
     mes_base = fim_dado.strftime("%Y-%m") if fim_dado.day >= ultimo_dia else \
-        (fim_dado - pd.offsets.MonthBegin(1)).strftime("%Y-%m")
+        str(pd.Period(fim_dado, "M") - 1)
     linha_base = t[t.mes == mes_base]
     base_real = float(linha_base.receita_liquida.iloc[0]) if not linha_base.empty else 20000.0
 
