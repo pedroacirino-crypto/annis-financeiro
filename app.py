@@ -544,16 +544,27 @@ def fmt_curto(centavos: int) -> str:
 
 def barras_canal(df, x, y, canal, tooltip=None, altura=250):
     """Barras empilhadas por canal: site no marrom da marca, loja num tom claro.
-    Para a visão consolidada do portal omni (12/10/2026)."""
-    return alt.Chart(df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-        x=alt.X(f"{x}:N", title=None, sort=None, scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
-                axis=alt.Axis(labelAngle=0, labelLimit=90)),
-        y=alt.Y(f"sum({y}):Q", title=None, axis=alt.Axis(tickCount=4)),
+    Para a visão consolidada do portal omni (12/10/2026). O total do mês vai
+    escrito em cima da barra e o eixo Y sai, como em `barras`."""
+    totais = df.groupby(x, sort=False)[y].sum().reset_index()
+    totais["Rotulo"] = totais[y].map(lambda v: fmt_curto(int(round(v * 100))))
+    teto = float(totais[y].max()) * 1.18 if len(totais) else 1.0
+    eixo_x = alt.X(f"{x}:N", title=None, sort=list(totais[x]),
+                   scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
+                   axis=alt.Axis(labelAngle=0, labelLimit=90))
+    escala_y = alt.Scale(domainMax=teto, nice=False)
+    pilha = alt.Chart(df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+        x=eixo_x,
+        y=alt.Y(f"sum({y}):Q", title=None, axis=None, scale=escala_y),
         color=alt.Color(f"{canal}:N", title=None, legend=alt.Legend(orient="top"),
                         scale=alt.Scale(domain=["Digital", "Físico"], range=[MARROM, "#C9A27E"])),
         order=alt.Order(f"{canal}:N", sort="ascending"),
         tooltip=tooltip or [],
-    ).properties(height=altura).configure_view(strokeWidth=0)
+    )
+    texto = alt.Chart(totais).mark_text(dy=-8, color=MARROM, fontSize=12).encode(
+        x=eixo_x, y=alt.Y(f"{y}:Q", scale=escala_y, axis=None), text="Rotulo:N",
+    )
+    return (pilha + texto).properties(height=altura).configure_view(strokeWidth=0)
 
 
 def barras(df, x, y, rotulo=None, rotulo_x="", rotulo_y="", tooltip=None, altura=250):
