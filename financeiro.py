@@ -608,6 +608,33 @@ def despesas_projetadas() -> dict:
     # o mês, ele é o número, não a estimativa.
     for categoria, valor in compromissos_por_categoria(mes_corrente()).items():
         saida[categoria] = valor
+    # Contrato renegociado: o próximo boleto da planilha manda sobre o último
+    # valor pago. Em 12/10/2026 a Olist caiu de R$ 199,80 para R$ 99,76 e a
+    # projeção seguia com o valor antigo, porque olhava só o extrato.
+    for categoria, valor in _contratos_na_planilha().items():
+        if categoria in saida:
+            saida[categoria] = valor
+    return saida
+
+
+# Categoria de contrato mensal e como ela aparece na planilha de contas.
+_CONTRATO_NA_PLANILHA = {"Sistemas": r"olist"}
+
+
+@memo()
+def _contratos_na_planilha() -> dict:
+    """Valor do próximo boleto ainda não pago de cada contrato, pela planilha."""
+    import dados_fin
+    df = dados_fin.ler_contas_a_pagar() if dados_fin.disponivel() else pd.DataFrame()
+    if df.empty:
+        return {}
+    df = df[(df.situacao.fillna("").str.upper() != "PAGO")
+            & (df.data >= pd.Timestamp(mes_corrente() + "-01"))].sort_values("data")
+    saida = {}
+    for categoria, padrao in _CONTRATO_NA_PLANILHA.items():
+        prox = df[df.descricao.str.contains(padrao, case=False, regex=True, na=False)]
+        if not prox.empty:
+            saida[categoria] = float(prox.valor.iloc[0])
     return saida
 
 

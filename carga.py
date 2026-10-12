@@ -61,17 +61,40 @@ def carregar_contas(caminho: str) -> None:
         return
     xls = pd.ExcelFile(caminho)
     partes = []
+    meses_pt = {"janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
+                "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
+
+    def valor(v):
+        # Célula digitada como número (960, 99.76) vem como float; como texto
+        # vem "R$ 1.040,00". Tratar as duas como texto fazia 99,76 virar 9.976.
+        if isinstance(v, (int, float)):
+            return float(v)
+        return float(str(v).replace("R$", "").replace(".", "").replace(",", ".").strip())
+
     for aba in xls.sheet_names:
         df = pd.read_excel(xls, sheet_name=aba)
         df.columns = [str(c).strip().upper() for c in df.columns]
         if "VALOR" not in df or "DATA" not in df:
             continue
-        df = df.dropna(subset=["VALOR", "DATA"])
+        df = df.dropna(subset=["VALOR"])
+        df = df[df["VALOR"].astype(str).str.strip() != ""]
+        datas = pd.to_datetime(df["DATA"])
+        # A aba é o mês. Data de outro mês dentro dela é erro de digitação
+        # (em 12/10/2026 a agência de novembro estava com 20/10 e duplicava a
+        # de outubro), e linha sem data ("PROGRAMAR") cai no fim do mês da aba.
+        mes_aba = meses_pt.get(aba.strip().lower())
+        if mes_aba:
+            ref = datas.dropna()
+            ano = int(ref.dt.year.mode().iloc[0]) if not ref.empty else pd.Timestamp.now().year
+            fim = pd.Timestamp(ano, mes_aba, 1) + pd.offsets.MonthEnd(0)
+            datas = datas.map(lambda d: fim if pd.isna(d) else
+                              d if d.month == mes_aba else pd.Timestamp(ano, mes_aba, min(d.day, fim.day)))
+        else:
+            df, datas = df[datas.notna()], datas[datas.notna()]
         partes.append(pd.DataFrame({
-            "data": pd.to_datetime(df["DATA"]),
+            "data": datas,
             "descricao": df["DESCRIÇÃO"].astype(str).str.strip(),
-            "valor": (df["VALOR"].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False)
-                      .str.replace(",", ".").astype(float)),
+            "valor": df["VALOR"].map(valor),
             "situacao": df["SITUAÇÃO"].fillna("").astype(str).str.strip().str.upper() if "SITUAÇÃO" in df else "",
             "observacao": df.iloc[:, 4].fillna("").astype(str) if df.shape[1] > 4 else "",
         }))

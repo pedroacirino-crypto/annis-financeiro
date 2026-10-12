@@ -319,7 +319,11 @@ def render():
         cxm = fluxo[fluxo.mes == corrente] if mostra_mtd else fluxo.iloc[0:0]
         linha_orc = {"Mês": f"{mes_curto(corrente)} orçado",
                      **{k: brl(v) for k, v in cxo.items()}}
-        linha_mtd = {"Mês": rot_mtd}
+        # O caixa sai inteiro do extrato: o rótulo é o dia até onde ele foi
+        # lido, não o de hoje. Em 12/10/2026 a linha dizia "até dia 12" com o
+        # extrato parado em 09/10, e o Site parecia baixo demais.
+        dia_cx = extrato_ate.day if extrato_ate.strftime("%Y-%m") == corrente else 0
+        linha_mtd = {"Mês": f"{mes_curto(corrente)} até dia {dia_cx} (extrato)"}
         if not cxm.empty:
             r = cxm.iloc[0]
             linha_mtd.update({
