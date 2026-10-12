@@ -2393,8 +2393,9 @@ def _texto_campanha(c: dict, camp: dict) -> str:
         # .store e o link chega como texto, sem clique (teste de 09/10/2026).
         f"https://{link}\n\n"
         f"A cortesia vale até {camp['ate']}.\n\n"
-        "Este é o novo número oficial da Annis. Salve o contato e, qualquer dúvida de tamanho ou "
-        "prazo, é só responder aqui.\n\n"
+        # Sem o "salve o número novo" a partir de 12/10/2026: as últimas saem do
+        # WhatsApp que a Annis usava antes, que as clientes já conhecem.
+        "Qualquer dúvida de tamanho ou prazo, é só responder aqui.\n\n"
         "Com carinho,\nAnnis"
     )
 
