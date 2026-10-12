@@ -21,6 +21,7 @@ import streamlit as st
 
 import extrato
 import financeiro as fin
+import omni
 import plano
 from ui import tabela, versao_publicada
 
@@ -122,6 +123,12 @@ def render():
     d = _dados(versao_publicada())
     pnl = d["pnl"]
     t = pnl["tabela"]
+    # Seletor do canto superior direito (portal omni, 12/10/2026). O PnL e os
+    # gráficos da seção 1 mostram o canal escolhido; caixa, despesas e a
+    # projeção são da empresa toda e continuam consolidados.
+    visao = st.session_state.get("visao", omni.CONSOLIDADO) or omni.CONSOLIDADO
+    por_canal = visao != omni.CONSOLIDADO
+    tc = fin.pnl_por_canal(t, visao)
     fluxo = d["fluxo"]
     fx = fluxo[fluxo.mes <= hoje].copy()
     ex = d["extrato"]
@@ -138,7 +145,10 @@ def render():
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Aportes das sócias", mil(ap.valor.sum()), help=f"Ana {brl(ap[ap.quem == 'Ana'].valor.sum())} · Isa {brl(ap[ap.quem == 'Isa'].valor.sum())} · pagas do bolso antes da conta {brl(ap[ap.quem.str.contains('bolso')].valor.sum())}")
-    k2.metric("Receita líquida desde o início", mil(t.receita_liquida.sum()), help="Site líquido de desconto Pix e estornos, mais maquininha e Pix direto.")
+    k2.metric("Receita líquida desde o início" + (f" · {visao.lower()}" if por_canal else ""), mil(tc.receita_liquida.sum()),
+              help={"Digital": "Site líquido de desconto Pix e estornos.",
+                    "Físico": "Maquininha, link no cartão e Pix direto."}.get(
+                  visao, "Site líquido de desconto Pix e estornos, mais maquininha e Pix direto."))
     k3.metric("Caixa hoje", brl(fx.caixa.iloc[-1]), help="Aportes mais tudo que entrou, menos tudo que saiu. Bate com o saldo da conta.")
     k4.metric("Acumulado operacional", mil(acumulado), help="Tudo que a operação gerou menos tudo que gastou, sem aportes. Quando chegar a zero, o capital voltou.")
 
@@ -151,7 +161,11 @@ def render():
     janela = st.select_slider("Período", options=[6, 12, 18, len(meses_pnl)], value=min(12, len(meses_pnl)),
                               format_func=lambda n: "tudo" if n == len(meses_pnl) else f"últimos {n} meses")
     meses_vis = meses_pnl[-janela:]
-    base = t.set_index("mes").loc[meses_vis].reset_index()
+    base = tc.set_index("mes").loc[meses_vis].reset_index()
+    if por_canal:
+        st.info(md(f"Visão **{visao.lower()}**: receita, taxas, imposto e CMV só do canal, fechando na margem de contribuição. "
+                   "Meta, agência, aluguel e o resto das despesas são da empresa toda e não se dividem por canal, "
+                   "então o resultado, o caixa e a projeção aparecem só no consolidado."))
     fx_vis = fx[fx.mes.isin(meses_vis)]
 
     e1, e2 = st.columns(2)
@@ -160,11 +174,15 @@ def render():
         st.altair_chart(grafico_linhas(base, {
             "receita_liquida": ("Receita líquida", COR["receita"]),
             "margem_bruta": ("Margem bruta", COR["margem"]),
-            "resultado": ("Resultado", COR["resultado"]),
+            **({} if por_canal else {"resultado": ("Resultado", COR["resultado"])}),
         }), use_container_width=True)
         mb = base.margem_bruta.sum() / base.receita_liquida.sum() if base.receita_liquida.sum() else 0
-        st.caption(md(f"No período: receita {brl(base.receita_liquida.sum())}, margem bruta {pct(mb)}, resultado **{brl(base.resultado.sum())}**. "
-                      f"Fora do site (maquininha e Pix direto) foi {pct(base.receita_fisica.sum() / base.receita_liquida.sum() if base.receita_liquida.sum() else 0)} da receita."))
+        if por_canal:
+            st.caption(md(f"No período: receita {brl(base.receita_liquida.sum())}, margem de contribuição "
+                          f"**{brl(base.margem_bruta.sum())}** ({pct(mb)} da receita)."))
+        else:
+            st.caption(md(f"No período: receita {brl(base.receita_liquida.sum())}, margem bruta {pct(mb)}, resultado **{brl(base.resultado.sum())}**. "
+                          f"Fora do site (maquininha e Pix direto) foi {pct(base.receita_fisica.sum() / base.receita_liquida.sum() if base.receita_liquida.sum() else 0)} da receita."))
     with e2:
         st.subheader("Caixa: o que entrou e o que saiu")
         cx = fx_vis[["mes", "recebido", "saidas", "saldo_operacional"]].copy()
@@ -208,7 +226,14 @@ def render():
         b = base.set_index("mes")
         b = b.loc[[m for m in b.index if m <= fechado]]
         linhas = {}
-        for rotulo, col, dinheiro in LINHAS_PNL:
+        LINHAS_CANAL = {
+            "Digital": {"pedidos", "receita_bruta", "receita_site", "desconto_pix", "estornos", "receita_liquida",
+                        "taxas_pagarme", "imposto", "cmv_site", "margem_bruta"},
+            "Físico": {"receita_bruta", "receita_maquininha", "receita_pix_direto", "receita_liquida",
+                       "taxas_stone", "imposto", "cmv_fisico_estimado", "margem_bruta"},
+        }
+        linhas_vis = [l for l in LINHAS_PNL if not por_canal or l[1] in LINHAS_CANAL[visao]]
+        for rotulo, col, dinheiro in linhas_vis:
             if col not in b:
                 continue
             tot = b[col].sum()
@@ -219,7 +244,7 @@ def render():
         # Orçado: projeção congelada antes do mês começar. Realizado: o que
         # já entrou até hoje. Linha que o plano não projeta fica vazia em
         # vez de inventada.
-        orc = fin.orcamentos().get(corrente, {})
+        orc = fin.orcado_por_canal(fin.orcamentos().get(corrente, {}), visao)
         # O dia do mês vem do calendário de Brasília, não do último movimento do
         # extrato: em 12/10/2026 o extrato acabava numa sexta, 09/10, porque o
         # feriado e o fim de semana não tiveram movimento, e a coluna do
@@ -234,7 +259,7 @@ def render():
         # Pedro, 30/09/2026.
         DIA_DO_MTD = 10
         mostra_mtd = dia >= DIA_DO_MTD
-        mtd = t[t.mes == corrente] if mostra_mtd else t.iloc[0:0]
+        mtd = tc[tc.mes == corrente] if mostra_mtd else tc.iloc[0:0]
         # O plano projeta o CMV inteiro, sem separar site de físico: ele vai
         # para a linha do total, e as duas de detalhe ficam vazias no orçado.
         # O plano projeta a maquininha já líquida da taxa da Stone, então no
@@ -269,9 +294,12 @@ def render():
         if mostra_mtd:
             wide[rot_mtd] = col_mtd
 
+        if por_canal:
+            wide = wide.rename(index={"Margem bruta": "Margem de contribuição",
+                                      "Margem bruta %": "Margem de contribuição %"})
         vis = wide.reset_index().rename(columns={"index": ""})
         tabela(vis, num=[c for c in vis.columns if c != ""], altura_max=560,
-               titulo="PnL por competência", fixas_direita=2 if mostra_mtd else 1)
+               titulo="PnL por competência" + (f" · {visao.lower()}" if por_canal else ""), fixas_direita=2 if mostra_mtd else 1)
         st.caption(md(
             f"As duas últimas colunas são o mês que está correndo e ficam paradas enquanto o resto rola. "
             + (f"**{rot_orc}** é a projeção congelada em {congelado_em:%d/%m/%Y} e não se mexe mais. "
@@ -288,7 +316,7 @@ def render():
             st.caption(md(f"CMV do site cobre {pct(pnl['cobertura_cmv'])} das peças; sem ficha: {faltam}. "
                           f"Fora do site o CMV é estimado com a proporção do site, {pct(pnl['razao_cmv'])}."))
 
-    with st.expander("Tabela: caixa mês a mês"):
+    with st.expander("Tabela: caixa mês a mês" + (" (empresa toda)" if por_canal else "")):
         st.caption(md(
             "Esta tabela é **caixa**: o dia em que o dinheiro entrou ou saiu da "
             "conta. **Site** é o que a Pagar.me liquidou, já sem taxa e sem "
@@ -339,7 +367,7 @@ def render():
         tabela(cx, num=[c for c in cx.columns if c != "Mês"], altura_max=520,
                titulo="Caixa mês a mês", fixas_baixo=len(novas_linhas))
 
-    with st.expander("Tabela: despesas por categoria"):
+    with st.expander("Tabela: despesas por categoria" + (" (empresa toda)" if por_canal else "")):
         dc = pnl["despesas_por_categoria"]
         dc = dc.loc[[m for m in dc.index if m in meses_vis and m <= fechado and dc.loc[m].sum() > 0]]
         dc.index = [mes_curto(m) for m in dc.index]

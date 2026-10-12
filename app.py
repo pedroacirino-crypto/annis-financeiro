@@ -13,6 +13,7 @@ import json
 from datetime import date, timedelta, datetime
 
 import aba_resultado
+import omni
 import db
 import nuvem
 import pagarme_client
@@ -539,6 +540,20 @@ def fmt_pct(x: float, casas: int = 2) -> str:
 def fmt_curto(centavos: int) -> str:
     """Valor sem centavos e sem 'R$', para caber como rótulo em cima da barra."""
     return f"{centavos / 100:,.0f}".replace(",", ".")
+
+
+def barras_canal(df, x, y, canal, tooltip=None, altura=250):
+    """Barras empilhadas por canal: site no marrom da marca, loja num tom claro.
+    Para a visão consolidada do portal omni (12/10/2026)."""
+    return alt.Chart(df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+        x=alt.X(f"{x}:N", title=None, sort=None, scale=alt.Scale(paddingInner=0.35, paddingOuter=0.2),
+                axis=alt.Axis(labelAngle=0, labelLimit=90)),
+        y=alt.Y(f"sum({y}):Q", title=None, axis=alt.Axis(tickCount=4)),
+        color=alt.Color(f"{canal}:N", title=None, legend=alt.Legend(orient="top"),
+                        scale=alt.Scale(domain=["Digital", "Físico"], range=[MARROM, "#C9A27E"])),
+        order=alt.Order(f"{canal}:N", sort="ascending"),
+        tooltip=tooltip or [],
+    ).properties(height=altura).configure_view(strokeWidth=0)
 
 
 def barras(df, x, y, rotulo=None, rotulo_x="", rotulo_y="", tooltip=None, altura=250):
@@ -1659,10 +1674,28 @@ FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "
 # coisa da tela que pode significar que alguém de fora está aqui dentro.
 aviso_aparelho_novo()
 
-secao = st.segmented_control(
-    "Seção", ["Financeiro", "Trabalho"], default="Financeiro",
-    key="secao", label_visibility="collapsed",
-) or "Financeiro"
+_topo_esq, _topo_dir = st.columns([3, 2])
+with _topo_esq:
+    secao = st.segmented_control(
+        "Seção", ["Financeiro", "Trabalho"], default="Financeiro",
+        key="secao", label_visibility="collapsed",
+    ) or "Financeiro"
+# Portal omni (12/10/2026): o financeiro mostra site e loja juntos por padrão,
+# e o seletor no canto superior direito recorta só o digital (site) ou só o
+# físico (maquininha, link e Pix direto). Vale para todas as abas do
+# financeiro; o Trabalho não tem canal.
+visao = omni.CONSOLIDADO
+if secao == "Financeiro":
+    with _topo_dir:
+        try:
+            _canto = st.container(horizontal_alignment="right")
+        except TypeError:          # Streamlit antigo, sem alinhamento: fica à esquerda da coluna
+            _canto = st.container()
+        with _canto:
+            visao = st.segmented_control(
+                "Visão", omni.VISOES, default=omni.CONSOLIDADO,
+                key="visao", label_visibility="collapsed",
+            ) or omni.CONSOLIDADO
 
 nomes = FINANCEIRO if secao == "Financeiro" else TRABALHO
 abas = dict(zip(nomes, st.tabs(nomes)))
@@ -1676,171 +1709,238 @@ recip = recipient_id or None
 # ════════════════════════════════════════════════════════════════════════════
 if "Vendas" in abas:
   with abas["Vendas"]:
-    st.header("Quanto vendeu")
+    st.header("Quanto vendeu" + ("" if visao == omni.CONSOLIDADO else f" · {visao.lower()}"))
 
     chg_rows = db.query_charges(date_from=date_from_str, date_to=date_to_str)
     df_chg = pd.DataFrame(chg_rows)
+    if not df_chg.empty:
+        df_chg["created_at"] = para_brt(pd.to_datetime(df_chg["created_at"], errors="coerce", utc=True))
+    # Site e loja no mesmo formato (omni.py): uma linha por venda, em centavos.
+    vv = omni.vendas(visao, chg_rows, para_brt, date_from_str, date_to_str)
 
-    if df_chg.empty:
+    if vv.empty:
         st.info("ℹ️ Sem vendas no período. Use **Atualizar dados** na barra lateral.")
     else:
-        df_chg["created_at"] = para_brt(pd.to_datetime(df_chg["created_at"], errors="coerce", utc=True))
-        pagas = df_chg[df_chg["status"] == "paid"]
-        vendido = int(pagas["amount"].sum())
-        qtd = len(pagas)
+        vendido = int(vv["bruto"].sum())
+        qtd = len(vv)
+        dig = vv[vv.canal == omni.DIGITAL]
+        fis = vv[vv.canal == omni.FISICO]
+        pagas = df_chg[df_chg["status"] == "paid"] if not df_chg.empty else df_chg
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Vendido", fmt_brl(vendido))
         c2.metric("Vendas", qtd)
         c3.metric("Ticket médio", fmt_brl(int(vendido / qtd)) if qtd else "—")
-        # Compra, não cobrança: quatro Pix da mesma pessoa pelo mesmo valor em
-        # um minuto são uma compra perdida, e quem falhou e pagou em seguida
-        # não perdeu nada. Contando cobrança, a aprovação de setembro dava
-        # 70% em vez de 88% e a perda dava mais que o dobro.
-        perdidas = db.vendas_perdidas(date_from_str, date_to_str)
-        tentativas_extras = sum(p["tentativas"] for p in perdidas) - len(perdidas)
-        aprov = qtd / (qtd + len(perdidas)) * 100 if (qtd + len(perdidas)) else 0
-        c4.metric("Aprovação", fmt_pct(aprov, 0))
-        c4.caption(f"{len(perdidas)} de {qtd + len(perdidas)} não converteram")
+        if visao == omni.CONSOLIDADO:
+            st.caption(md(f"Site {fmt_brl(int(dig.bruto.sum()))} em {len(dig)} vendas · loja {fmt_brl(int(fis.bruto.sum()))} "
+                          f"em {len(fis)} (maquininha, link e Pix direto). O Pix direto só aparece até o último extrato da "
+                          "Stone carregado."))
+        elif visao == omni.FISICO:
+            st.caption("Maquininha e link no cartão pela API da Stone, todo dia; Pix direto pelo extrato da conta Stone, "
+                       "que só chega até o último extrato carregado.")
 
-        if perdidas:
-            valor_perdido = int(sum(p["amount"] for p in perdidas))
-            with st.expander(f"Ver as {len(perdidas)} vendas que não entraram ({fmt_brl(valor_perdido)})"):
-                pd_ = pd.DataFrame(perdidas)
-                pd_["valor"] = pd_["amount"].apply(fmt_brl)
-                pd_["quando"] = para_brt(
-                    pd.to_datetime(pd_["created_at"], errors="coerce", utc=True)
-                ).dt.strftime("%d/%m/%Y %H:%M")
-                pd_["tent"] = pd_["tentativas"].apply(lambda n: "" if n == 1 else f"{n}x")
-                pd_ = traduzir(pd_, {"status": STATUS_CHG_PT, "payment_method": METODO_PT})
-                tabela(
-                    pd_[["quando", "customer_name", "valor", "status", "payment_method", "tent"]]
-                    .rename(columns={
-                        "quando": "Quando", "customer_name": "Cliente", "valor": "Valor",
-                        "status": "Situação", "payment_method": "Meio", "tent": "Tentativas",
-                    }),
-                    num=("Valor",), altura_max=320,
-                )
-                st.caption(
-                    "Uma linha por compra, não por cobrança: tentativas da mesma "
-                    "pessoa pelo mesmo valor em até 24 horas contam uma vez, e quem "
-                    "pagou nos 7 dias seguintes saiu da lista."
-                    + (f" No período foram {tentativas_extras} tentativas repetidas."
-                       if tentativas_extras else "")
-                    + " Pendente ainda pode virar venda; falha e cancelada, não."
-                )
+        if omni.ver_digital(visao) and not pagas.empty:
+            qtd_site = len(pagas)
+            perdidas = db.vendas_perdidas(date_from_str, date_to_str)
+            tentativas_extras = sum(p["tentativas"] for p in perdidas) - len(perdidas)
+            aprov = qtd_site / (qtd_site + len(perdidas)) * 100 if (qtd_site + len(perdidas)) else 0
+            c4.metric("Aprovação" + (" no site" if visao == omni.CONSOLIDADO else ""), fmt_pct(aprov, 0))
+            c4.caption(f"{len(perdidas)} de {qtd_site + len(perdidas)} não converteram")
+
+            if perdidas:
+                valor_perdido = int(sum(p["amount"] for p in perdidas))
+                with st.expander(f"Ver as {len(perdidas)} vendas que não entraram ({fmt_brl(valor_perdido)})"):
+                    pd_ = pd.DataFrame(perdidas)
+                    pd_["valor"] = pd_["amount"].apply(fmt_brl)
+                    pd_["quando"] = para_brt(
+                        pd.to_datetime(pd_["created_at"], errors="coerce", utc=True)
+                    ).dt.strftime("%d/%m/%Y %H:%M")
+                    pd_["tent"] = pd_["tentativas"].apply(lambda n: "" if n == 1 else f"{n}x")
+                    pd_ = traduzir(pd_, {"status": STATUS_CHG_PT, "payment_method": METODO_PT})
+                    tabela(
+                        pd_[["quando", "customer_name", "valor", "status", "payment_method", "tent"]]
+                        .rename(columns={
+                            "quando": "Quando", "customer_name": "Cliente", "valor": "Valor",
+                            "status": "Situação", "payment_method": "Meio", "tent": "Tentativas",
+                        }),
+                        num=("Valor",), altura_max=320,
+                    )
+                    st.caption(
+                        "Uma linha por compra, não por cobrança: tentativas da mesma "
+                        "pessoa pelo mesmo valor em até 24 horas contam uma vez, e quem "
+                        "pagou nos 7 dias seguintes saiu da lista."
+                        + (f" No período foram {tentativas_extras} tentativas repetidas."
+                           if tentativas_extras else "")
+                        + " Pendente ainda pode virar venda; falha e cancelada, não."
+                    )
+
+
+        elif omni.ver_fisico(visao):
+            pix_f = int(fis[fis.meio == "Pix"].bruto.sum())
+            c4.metric("No Pix", fmt_pct(pix_f / vendido * 100, 0) if vendido else "—")
+            c4.caption("na loja não há tentativa recusada para medir aprovação")
 
         st.divider()
 
         # A ponte: o que foi vendido não é o que entra na conta.
         st.subheader("Do que vendeu, quanto sobra")
-        custo = db.custo_das_vendas(date_from_str, date_to_str)
-        if custo["bruto"]:
+        custo = db.custo_das_vendas(date_from_str, date_to_str) if omni.ver_digital(visao) else \
+            {"bruto": 0, "mdr": 0, "antecipacao": 0, "liquido": 0, "parcelas": 0, "custo_pct": 0}
+        stone = fis[fis.origem.isin(["Maquininha", "Link no cartão"])]
+        taxa_stone = int((stone.bruto - stone.liquido).sum()) if not stone.empty else 0
+        pix_fis = int(fis[fis.meio == "Pix"].bruto.sum()) if not fis.empty else 0
+        bruto_total = custo["bruto"] + int(stone.bruto.sum() if not stone.empty else 0) + pix_fis
+        if bruto_total:
+            taxa_total = custo["mdr"] + taxa_stone
+            liquido_total = custo["liquido"] + int(stone.liquido.sum() if not stone.empty else 0) + pix_fis
             b1, b2, b3 = st.columns(3)
-            b1.metric("− Taxa", fmt_brl(-custo["mdr"]))
+            b1.metric("− Taxa", fmt_brl(-taxa_total))
             b2.metric("− Antecipação", fmt_brl(-custo["antecipacao"]))
-            b3.metric("= Fica com você", fmt_brl(custo["liquido"]))
-            st.caption(
-                f"Custo total de **{fmt_pct(custo['custo_pct'])}** sobre o que vendeu, "
-                f"distribuído em {custo['parcelas']} parcelas a receber."
-            )
+            b3.metric("= Fica com você", fmt_brl(liquido_total))
+            partes = []
+            if omni.ver_digital(visao) and custo["bruto"]:
+                partes.append(f"no site, {fmt_pct(custo['custo_pct'])} distribuídos em {custo['parcelas']} parcelas a receber")
+            if omni.ver_fisico(visao) and (taxa_stone or pix_fis):
+                partes.append(f"na loja, {fmt_pct(taxa_stone / (bruto_total - custo['bruto']) * 100) if bruto_total - custo['bruto'] else '0%'} "
+                              "(a Stone repassa no dia útil seguinte, com a antecipação dentro da taxa; Pix direto não paga taxa)")
+            st.caption(md(f"Custo total de **{fmt_pct((taxa_total + custo['antecipacao']) / bruto_total * 100)}** sobre o que vendeu: "
+                          + "; ".join(partes) + "."))
         else:
             st.caption("Sem vendas com recebíveis no período.")
 
-        # Taxa contratada × taxa efetivamente paga
-        meios = db.custo_por_meio(date_from_str, date_to_str)
-        if meios:
-            st.markdown("###### Taxa contratada × taxa paga")
-            if True:
-                linhas = []
-                for m in meios:
-                    contratada, _ = TAXAS_CONTRATADAS["meios"].get(
-                        m["meio"], ("não informada", None)
+        if omni.ver_digital(visao):
+            # Taxa contratada × taxa efetivamente paga
+            meios = db.custo_por_meio(date_from_str, date_to_str)
+            if meios:
+                st.markdown("###### Taxa contratada × taxa paga")
+                if True:
+                    linhas = []
+                    for m in meios:
+                        contratada, _ = TAXAS_CONTRATADAS["meios"].get(
+                            m["meio"], ("não informada", None)
+                        )
+                        linhas.append({
+                            "Meio": METODO_PT.get(m["meio"], m["meio"]),
+                            "Contratada": contratada,
+                            "Taxa paga": fmt_pct(m["mdr_pct"]),
+                            "Antecipação paga": fmt_pct(m["antec_pct"]),
+                            "Custo total": fmt_pct(m["total_pct"]),
+                            "Bruto": fmt_brl(m["bruto"]),
+                        })
+                    tabela(pd.DataFrame(linhas),
+                           num=("Contratada", "Taxa paga", "Antecipação paga", "Custo total", "Bruto"))
+                    st.caption(
+                        f"Condições lidas do Dash em {TAXAS_CONTRATADAS['lidas_em']}: "
+                        f"antecipação {TAXAS_CONTRATADAS['antecipacao'][0]}, "
+                        f"crédito recebido em {TAXAS_CONTRATADAS['prazo_credito']}. "
+                        "A taxa de crédito varia por bandeira e parcelamento, então a paga "
+                        "fica naturalmente acima do piso contratado. A comparação serve "
+                        "para achar desvio grande, não para bater exato. "
+                        "Tarifas por transação (processamento, antifraude, transferência) "
+                        "não entram nestes percentuais."
                     )
-                    linhas.append({
-                        "Meio": METODO_PT.get(m["meio"], m["meio"]),
-                        "Contratada": contratada,
-                        "Taxa paga": fmt_pct(m["mdr_pct"]),
-                        "Antecipação paga": fmt_pct(m["antec_pct"]),
-                        "Custo total": fmt_pct(m["total_pct"]),
-                        "Bruto": fmt_brl(m["bruto"]),
-                    })
-                tabela(pd.DataFrame(linhas),
-                       num=("Contratada", "Taxa paga", "Antecipação paga", "Custo total", "Bruto"))
-                st.caption(
-                    f"Condições lidas do Dash em {TAXAS_CONTRATADAS['lidas_em']}: "
-                    f"antecipação {TAXAS_CONTRATADAS['antecipacao'][0]}, "
-                    f"crédito recebido em {TAXAS_CONTRATADAS['prazo_credito']}. "
-                    "A taxa de crédito varia por bandeira e parcelamento, então a paga "
-                    "fica naturalmente acima do piso contratado. A comparação serve "
-                    "para achar desvio grande, não para bater exato. "
-                    "Tarifas por transação (processamento, antifraude, transferência) "
-                    "não entram nestes percentuais."
-                )
-                st.caption(
-                    " · ".join(f"**{n}**: {md(v)}" for n, v in TAXAS_CONTRATADAS["avulsas"])
-                )
+                    st.caption(
+                        " · ".join(f"**{n}**: {md(v)}" for n, v in TAXAS_CONTRATADAS["avulsas"])
+                    )
+
+
+        if omni.ver_fisico(visao) and not stone.empty:
+            st.markdown("###### Taxa paga na Stone" + ("" if visao == omni.FISICO else " (loja)"))
+            st_ = stone.copy()
+            st_["Tipo"] = st_.apply(lambda r: "Débito" if r.meio == "Débito" else
+                                    ("Crédito à vista" if r.parcelas <= 1 else f"Crédito {int(r.parcelas)}x"), axis=1)
+            gq = st_.groupby(["origem", "Tipo"]).agg(bruto=("bruto", "sum"), liquido=("liquido", "sum"), n=("id", "count")).reset_index()
+            tabela(pd.DataFrame({
+                "Onde": gq.origem, "Tipo": gq.Tipo, "Vendas": gq.n,
+                "Taxa paga": ((gq.bruto - gq.liquido) / gq.bruto * 100).map(fmt_pct),
+                "Bruto": gq.bruto.map(fmt_brl), "Líquido": gq.liquido.map(fmt_brl),
+            }), num=("Vendas", "Taxa paga", "Bruto", "Líquido"))
+            st.caption("Taxa paga é bruto menos líquido da própria Stone, já com a antecipação do repasse no dia seguinte.")
 
         st.divider()
 
         g1, g2 = st.columns([2, 1], gap="large")
         with g1.container(border=True):
             st.subheader("Vendas por dia")
-            ts = pagas.copy()
-            ts["dia"] = ts["created_at"].dt.date
-            agg = ts.groupby("dia")["amount"].sum().reset_index().sort_values("dia")
+            ts = vv.copy()
+            ts["dia"] = ts["quando"].dt.date
+            agg = ts.groupby(["dia", "canal"])["bruto"].sum().reset_index().sort_values("dia")
             agg["Dia"] = pd.to_datetime(agg["dia"]).dt.strftime("%d/%m")
-            agg["Valor"] = agg["amount"] / 100
-            agg["Vendido"] = agg["amount"].apply(fmt_brl)
-            agg["Rotulo"] = agg["amount"].apply(fmt_curto)
-            st.altair_chart(
-                barras(agg, "Dia", "Valor", rotulo="Rotulo", tooltip=["Dia", "Vendido"]),
-                use_container_width=True,
-            )
+            agg["Valor"] = agg["bruto"] / 100
+            agg["Vendido"] = agg["bruto"].apply(fmt_brl)
+            if visao == omni.CONSOLIDADO and agg.canal.nunique() > 1:
+                st.altair_chart(barras_canal(agg, "Dia", "Valor", "canal", tooltip=["Dia", "canal", "Vendido"]),
+                                use_container_width=True)
+            else:
+                agg = agg.groupby(["dia", "Dia"], as_index=False)["bruto"].sum()
+                agg["Valor"] = agg["bruto"] / 100
+                agg["Vendido"] = agg["bruto"].apply(fmt_brl)
+                agg["Rotulo"] = agg["bruto"].apply(fmt_curto)
+                st.altair_chart(
+                    barras(agg, "Dia", "Valor", rotulo="Rotulo", tooltip=["Dia", "Vendido"]),
+                    use_container_width=True,
+                )
         with g2.container(border=True):
             st.subheader("Por meio")
-            mix = pagas.groupby("payment_method")["amount"].sum().reset_index()
-            mix["Meio"] = mix["payment_method"].apply(lambda v: METODO_PT.get(v, v))
-            mix["Valor"] = mix["amount"] / 100
-            mix["Vendido"] = mix["amount"].apply(fmt_brl)
+            mix = vv.assign(Meio=vv.apply(lambda r: r.meio if r.canal == omni.DIGITAL or r.meio == "Pix"
+                                          else f"{r.meio} ({r.origem.lower()})", axis=1)
+                            if visao == omni.CONSOLIDADO else vv.meio)
+            if visao == omni.CONSOLIDADO:
+                mix["Meio"] = mix.apply(lambda r: f"{r.Meio} · {'site' if r.canal == omni.DIGITAL else 'loja'}", axis=1)
+            mix = mix.groupby("Meio")["bruto"].sum().reset_index()
+            mix["Valor"] = mix["bruto"] / 100
+            mix["Vendido"] = mix["bruto"].apply(fmt_brl)
             st.altair_chart(
                 barras(mix.sort_values("Valor", ascending=False), "Meio", "Valor",
                        rotulo="Vendido", tooltip=["Meio", "Vendido"]),
                 use_container_width=True,
             )
 
-        with st.expander(f"Ver as {len(df_chg)} cobranças do período"):
-            det = df_chg.copy()
-            det["valor"] = det["amount"].apply(fmt_brl)
-            det["quando"] = det["created_at"].dt.strftime("%d/%m/%Y %H:%M")
-            # A Pagar.me não sabe o que foi vendido nem para onde: cidade e
-            # peças vêm do pedido da Shopify e, quando não houve pedido
-            # (cartão recusado não gera um), do carrinho abandonado daquela
-            # tentativa, que guarda as peças e o endereço.
-            casados = _pedido_por_cobranca()
-            det["cidade"] = det["id"].map(
-                lambda i: (lambda p: f"{p['cidade']}/{p['uf']}" if p and p.get("cidade") else "")(casados.get(i))
-            )
-            det["levou"] = det["id"].map(
-                lambda i: (casados.get(i) or {}).get("itens") or ""
-            )
-            det = traduzir(det, {"status": STATUS_CHG_PT, "payment_method": METODO_PT})
-            tabela(
-                det[["quando", "customer_name", "cidade", "levou", "valor",
-                     "status", "payment_method", "installments"]]
-                .rename(columns={
-                    "quando": "Quando", "customer_name": "Cliente", "cidade": "Cidade",
-                    "levou": "O que levou", "valor": "Valor",
-                    "status": "Situação", "payment_method": "Meio", "installments": "Parcelas",
-                }),
-                num=("Valor", "Parcelas"), altura_max=420,
-            )
-            st.caption(
-                "Cidade e peças vêm do pedido da loja e, quando o cartão foi recusado "
-                "e não houve pedido, do carrinho daquela tentativa. Fica vazio quando "
-                "a pessoa comprou depois, e aí a peça aparece na cobrança que valeu, "
-                "ou quando o carrinho é antigo demais para a Shopify ainda guardar."
-            )
+        if omni.ver_digital(visao) and not df_chg.empty:
+            with st.expander(f"Ver as {len(df_chg)} cobranças do período"):
+                det = df_chg.copy()
+                det["valor"] = det["amount"].apply(fmt_brl)
+                det["quando"] = det["created_at"].dt.strftime("%d/%m/%Y %H:%M")
+                # A Pagar.me não sabe o que foi vendido nem para onde: cidade e
+                # peças vêm do pedido da Shopify e, quando não houve pedido
+                # (cartão recusado não gera um), do carrinho abandonado daquela
+                # tentativa, que guarda as peças e o endereço.
+                casados = _pedido_por_cobranca()
+                det["cidade"] = det["id"].map(
+                    lambda i: (lambda p: f"{p['cidade']}/{p['uf']}" if p and p.get("cidade") else "")(casados.get(i))
+                )
+                det["levou"] = det["id"].map(
+                    lambda i: (casados.get(i) or {}).get("itens") or ""
+                )
+                det = traduzir(det, {"status": STATUS_CHG_PT, "payment_method": METODO_PT})
+                tabela(
+                    det[["quando", "customer_name", "cidade", "levou", "valor",
+                         "status", "payment_method", "installments"]]
+                    .rename(columns={
+                        "quando": "Quando", "customer_name": "Cliente", "cidade": "Cidade",
+                        "levou": "O que levou", "valor": "Valor",
+                        "status": "Situação", "payment_method": "Meio", "installments": "Parcelas",
+                    }),
+                    num=("Valor", "Parcelas"), altura_max=420,
+                )
+                st.caption(
+                    "Cidade e peças vêm do pedido da loja e, quando o cartão foi recusado "
+                    "e não houve pedido, do carrinho daquela tentativa. Fica vazio quando "
+                    "a pessoa comprou depois, e aí a peça aparece na cobrança que valeu, "
+                    "ou quando o carrinho é antigo demais para a Shopify ainda guardar."
+                )
+
+        if omni.ver_fisico(visao) and not fis.empty:
+            with st.expander(f"Ver as {len(fis)} vendas da loja no período"):
+                lf = fis.sort_values("quando", ascending=False)
+                tabela(pd.DataFrame({
+                    "Quando": lf.quando.dt.strftime("%d/%m/%Y %H:%M"),
+                    "Onde": lf.origem, "Meio": lf.meio,
+                    "Parcelas": lf.parcelas, "Cliente": lf.cliente,
+                    "Bruto": lf.bruto.map(fmt_brl), "Líquido": lf.liquido.map(fmt_brl),
+                }), num=("Parcelas", "Bruto", "Líquido"), altura_max=420)
+                st.caption("Na maquininha e no link a Stone só informa o cartão mascarado, não o nome. "
+                           "No Pix direto o nome é o de quem pagou, que pode não ser a cliente.")
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 2: RECUPERAR: fila de trabalho dos checkouts abandonados
@@ -2619,41 +2719,74 @@ if "Lista de espera" in abas:
 # ════════════════════════════════════════════════════════════════════════════
 if "A receber" in abas:
   with abas["A receber"]:
-    st.header("Quanto tem a receber, e quando")
+    st.header("Quanto tem a receber, e quando" + ("" if visao == omni.CONSOLIDADO else f" · {visao.lower()}"))
 
-    try:
-        bal = pagarme_client.get_balance(recip)
-        avail = bal.get("available_amount", 0)
-        waiting = bal.get("waiting_funds_amount", 0)
-    except Exception as e:
-        st.warning(f"Não foi possível buscar saldo da API: {e}")
-        avail = waiting = 0
+    avail = waiting = 0
+    ar = {"tarifas": 0}
+    agenda = []
+    if omni.ver_digital(visao):
+        try:
+            bal = pagarme_client.get_balance(recip)
+            avail = bal.get("available_amount", 0)
+            waiting = bal.get("waiting_funds_amount", 0)
+        except Exception as e:
+            st.warning(f"Não foi possível buscar saldo da API: {e}")
+        ar = db.compute_a_receber(recip)
+        agenda = db.agenda_recebimentos(recip)
+    # Loja: a Stone repassa no dia útil seguinte; falta o que foi vendido
+    # depois do último repasse que apareceu no extrato (omni.a_receber_fisico).
+    ar_fis = omni.a_receber_fisico() if omni.ver_fisico(visao) else pd.DataFrame()
+    fis_total = int(ar_fis.liquido.sum()) if not ar_fis.empty else 0
 
-    ar = db.compute_a_receber(recip)
     c1, c2, c3 = st.columns(3)
-    c1.metric("Já disponível para sacar", fmt_brl(avail))
-    c2.metric("Ainda a receber", fmt_brl(waiting))
-    c3.metric("Com tudo que está previsto", fmt_brl(avail + waiting),
-              help="O que já dá para sacar mais tudo que ainda vai cair, "
-                   "sem contar venda que ainda não aconteceu.")
+    if visao == omni.FISICO:
+        c1.metric("A receber da Stone", fmt_brl(fis_total),
+                  help="Venda da maquininha e do link feita depois do último repasse que aparece no extrato.")
+        ult = omni.ultimo_extrato()
+        c2.metric("Vendas a repassar", int(ar_fis.vendas.sum()) if not ar_fis.empty else 0)
+        c3.metric("Extrato lido até", ult.strftime("%d/%m") if ult is not None else "—")
+    else:
+        c1.metric("Já disponível para sacar", fmt_brl(avail),
+                  help="Saldo da Pagar.me que já pode ser transferido.")
+        c2.metric("Ainda a receber", fmt_brl(waiting + fis_total),
+                  help=("Pagar.me ainda por liquidar" + (f" mais {fmt_brl(fis_total)} de repasse da Stone" if fis_total else "")))
+        c3.metric("Com tudo que está previsto", fmt_brl(avail + waiting + fis_total),
+                  help="O que já dá para sacar mais tudo que ainda vai cair, "
+                       "sem contar venda que ainda não aconteceu.")
+    if omni.ver_fisico(visao):
+        st.caption("O repasse da Stone é previsão pelo extrato: a Stone paga no dia útil seguinte à venda, e o que foi "
+                   "vendido depois do último repasse visto no extrato aparece aqui. Se o extrato estiver atrasado, "
+                   "o dinheiro pode já ter caído.")
 
     st.divider()
     st.subheader("Agenda de recebimentos")
 
-    agenda = db.agenda_recebimentos(recip)
-    if not agenda:
+    linhas_ag = []
+    for a in agenda:
+        linhas_ag.append({"dia": pd.to_datetime(a["dia"]), "liquido": int(a["liquido"]),
+                          "parcelas": int(a["parcelas"]), "origem": "Site (Pagar.me)"})
+    if not ar_fis.empty:
+        for r in ar_fis.itertuples(index=False):
+            linhas_ag.append({"dia": pd.to_datetime(r.dia), "liquido": int(r.liquido),
+                              "parcelas": int(r.vendas), "origem": "Loja (Stone)"})
+    if not linhas_ag:
         st.info("Nada a receber no momento, tudo já liquidado.")
     else:
-        df_ag = pd.DataFrame(agenda)
-        df_ag["Data"] = pd.to_datetime(df_ag["dia"]).dt.strftime("%d/%m/%Y")
+        df_ag = pd.DataFrame(linhas_ag).groupby("dia").agg(
+            liquido=("liquido", "sum"), parcelas=("parcelas", "sum"),
+            origem=("origem", lambda o: " + ".join(sorted(set(o))))).reset_index().sort_values("dia")
+        df_ag["Data"] = df_ag["dia"].dt.strftime("%d/%m/%Y")
         df_ag["Valor"] = df_ag["liquido"].apply(lambda x: fmt_brl(int(x)))
         # Duas informações, não uma: Valor é o que entra naquele dia, Saldo
         # previsto é o que se acumula por cima do saldo de hoje. Não é "saldo
         # na conta" porque um saque derruba o número sem que nada tenha
         # mudado na previsão.
         df_ag["Saldo previsto"] = (avail + df_ag["liquido"].cumsum()).apply(lambda x: fmt_brl(int(x)))
+        colunas = ["Data", "Valor", "parcelas", "Saldo previsto"]
+        if visao == omni.CONSOLIDADO:
+            colunas.insert(1, "origem")
         tabela(
-            df_ag[["Data", "Valor", "parcelas", "Saldo previsto"]].rename(columns={"parcelas": "Parcelas"}),
+            df_ag[colunas].rename(columns={"parcelas": "Parcelas", "origem": "De onde"}),
             num=("Valor", "Parcelas", "Saldo previsto"),
         )
         graf = df_ag.copy()
@@ -2666,409 +2799,564 @@ if "A receber" in abas:
             )
         st.caption(
             f"**Valor** é o que entra no dia. **Saldo previsto** soma isso aos "
-            f"{md(fmt_brl(avail))} que já estão na conta hoje, e supõe que nada "
+            f"{md(fmt_brl(avail))} que já estão disponíveis na Pagar.me hoje, e supõe que nada "
             "seja sacado no meio do caminho. Valores líquidos, já descontadas "
-            f"taxa e antecipação. Tarifas pendentes de {md(fmt_brl(ar['tarifas']))} "
-            "são cobradas na liquidação."
+            "taxa e antecipação."
+            + (f" Tarifas pendentes de {md(fmt_brl(ar['tarifas']))} na Pagar.me são cobradas na liquidação."
+               if omni.ver_digital(visao) else "")
+            + (" Na loja, uma parcela é uma venda da Stone." if not ar_fis.empty else "")
         )
 
-    # Drill-down: cada parcela com a venda que a originou
-    pend_rows = db.a_receber_detalhado(recip)
-    if pend_rows:
+    if omni.ver_fisico(visao) and not ar_fis.empty:
+        vf = omni.vendas_fisicas()
+        pend = vf[vf.origem.isin(["Maquininha", "Link no cartão"]) & (vf.quando >= ar_fis.vendido_em.min())]
         st.divider()
-        st.subheader("De onde vem cada parcela")
+        st.subheader("Vendas da loja a repassar")
+        tabela(pd.DataFrame({
+            "Vendido em": pend.quando.dt.strftime("%d/%m/%Y %H:%M"), "Onde": pend.origem,
+            "Meio": pend.meio, "Parcelas": pend.parcelas,
+            "Bruto": pend.bruto.map(fmt_brl), "Líquido": pend.liquido.map(fmt_brl),
+        }), num=("Parcelas", "Bruto", "Líquido"))
 
-        df_pend = pd.DataFrame(pend_rows)
-        df_pend["Cai em"] = para_brt(
-            pd.to_datetime(df_pend["payment_date"], errors="coerce", utc=True)
-        ).dt.strftime("%d/%m/%Y")
-        df_pend["Vendido em"] = para_brt(
-            pd.to_datetime(df_pend["created_at"], errors="coerce", utc=True)
-        ).dt.strftime("%d/%m/%Y")
-        df_pend["Cliente"] = df_pend["customer_name"].fillna("").replace("", "—")
-        df_pend["Venda"] = df_pend["venda_total"].apply(
-            lambda x: fmt_brl(int(x)) if pd.notna(x) else "—"
-        )
-        df_pend["Parcela"] = df_pend.apply(
-            lambda r: f"{int(r['installment'])}/{int(r['venda_parcelas'])}"
-            if pd.notna(r["venda_parcelas"]) else str(int(r["installment"] or 1)),
-            axis=1,
-        )
-        df_pend["Meio"] = df_pend["payment_method"].apply(lambda v: METODO_PT.get(v, v))
-        for col, orig in [("Bruto", "amount"), ("Taxa", "fee"),
-                          ("Antecipação", "anticipation_fee"), ("Líquido", "liquido")]:
-            df_pend[col] = df_pend[orig].apply(lambda x: fmt_brl(int(x or 0)))
+    if omni.ver_digital(visao):
+        # Drill-down: cada parcela com a venda que a originou
+        pend_rows = db.a_receber_detalhado(recip)
+        if pend_rows:
+            st.divider()
+            st.subheader("De onde vem cada parcela")
 
-        datas = ["Todas"] + sorted(df_pend["Cai em"].unique().tolist())
-        escolha = st.selectbox("Filtrar por data de recebimento", datas, key="ar_data")
-        visao = df_pend if escolha == "Todas" else df_pend[df_pend["Cai em"] == escolha]
-
-        tabela(
-            visao[["Cai em", "Cliente", "Venda", "Parcela", "Vendido em",
-                   "Meio", "Bruto", "Taxa", "Antecipação", "Líquido"]],
-            num=("Venda", "Bruto", "Taxa", "Antecipação", "Líquido"), altura_max=460,
-        )
-        if (df_pend["customer_name"].isna() | (df_pend["customer_name"] == "")).any():
-            st.caption(
-                "Parcelas com cliente “—” vêm de vendas anteriores à janela "
-                "sincronizada. Clique em **Atualizar dados** para trazê-las."
+            df_pend = pd.DataFrame(pend_rows)
+            df_pend["Cai em"] = para_brt(
+                pd.to_datetime(df_pend["payment_date"], errors="coerce", utc=True)
+            ).dt.strftime("%d/%m/%Y")
+            df_pend["Vendido em"] = para_brt(
+                pd.to_datetime(df_pend["created_at"], errors="coerce", utc=True)
+            ).dt.strftime("%d/%m/%Y")
+            df_pend["Cliente"] = df_pend["customer_name"].fillna("").replace("", "—")
+            df_pend["Venda"] = df_pend["venda_total"].apply(
+                lambda x: fmt_brl(int(x)) if pd.notna(x) else "—"
             )
-        csv_p = visao.to_csv(index=False).encode("utf-8")
-        st.download_button("Exportar CSV", data=csv_p,
-                           file_name=f"a_receber_{date_to_str}.csv", mime="text/csv")
+            df_pend["Parcela"] = df_pend.apply(
+                lambda r: f"{int(r['installment'])}/{int(r['venda_parcelas'])}"
+                if pd.notna(r["venda_parcelas"]) else str(int(r["installment"] or 1)),
+                axis=1,
+            )
+            df_pend["Meio"] = df_pend["payment_method"].apply(lambda v: METODO_PT.get(v, v))
+            for col, orig in [("Bruto", "amount"), ("Taxa", "fee"),
+                              ("Antecipação", "anticipation_fee"), ("Líquido", "liquido")]:
+                df_pend[col] = df_pend[orig].apply(lambda x: fmt_brl(int(x or 0)))
+
+            datas = ["Todas"] + sorted(df_pend["Cai em"].unique().tolist())
+            escolha = st.selectbox("Filtrar por data de recebimento", datas, key="ar_data")
+            ar_vis = df_pend if escolha == "Todas" else df_pend[df_pend["Cai em"] == escolha]
+
+            tabela(
+                ar_vis[["Cai em", "Cliente", "Venda", "Parcela", "Vendido em",
+                       "Meio", "Bruto", "Taxa", "Antecipação", "Líquido"]],
+                num=("Venda", "Bruto", "Taxa", "Antecipação", "Líquido"), altura_max=460,
+            )
+            if (df_pend["customer_name"].isna() | (df_pend["customer_name"] == "")).any():
+                st.caption(
+                    "Parcelas com cliente “—” vêm de vendas anteriores à janela "
+                    "sincronizada. Clique em **Atualizar dados** para trazê-las."
+                )
+            csv_p = ar_vis.to_csv(index=False).encode("utf-8")
+            st.download_button("Exportar CSV", data=csv_p,
+                               file_name=f"a_receber_{date_to_str}.csv", mime="text/csv")
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 6: EXTRATO: no formato de extrato bancário, com saldo corrido
 # ════════════════════════════════════════════════════════════════════════════
+def _extrato_da_stone(so_fisico: bool):
+    """Conta Stone no período, do extrato carregado (omni.extrato_stone)."""
+    es = omni.extrato_stone(date_from_str, date_to_str, so_fisico=so_fisico)
+    ult = omni.ultimo_extrato()
+    if es.empty:
+        st.info("Sem movimento da conta Stone no período. O extrato da Stone entra por carga manual"
+                + (f" e está lido até {ult:%d/%m/%Y}." if ult is not None else "."))
+        return
+    cent = lambda v: int(round(float(v) * 100))
+    entradas = cent(es[es.valor > 0].valor.sum())
+    saidas = cent(es[es.valor < 0].valor.sum())
+    if so_fisico:
+        maq = cent(es[es.categoria == "Maquininha (líquido)"].valor.sum())
+        e1, e2, e3 = st.columns(3)
+        e1.metric("Entrou da loja", fmt_brl(entradas))
+        e2.metric("Repasse da maquininha", fmt_brl(maq))
+        e3.metric("Pix direto e link", fmt_brl(entradas - maq))
+    else:
+        abertura = cent(es.iloc[0].saldo_depois - es.iloc[0].valor) if pd.notna(es.iloc[0].saldo_depois) else None
+        fechamento = cent(es.iloc[-1].saldo_depois) if pd.notna(es.iloc[-1].saldo_depois) else None
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("Saldo em " + pd.Timestamp(date_from_str).strftime("%d/%m"), fmt_brl(abertura) if abertura is not None else "—")
+        e2.metric("Entradas", fmt_brl(entradas))
+        e3.metric("Saídas", fmt_brl(saidas))
+        e4.metric("Saldo final", fmt_brl(fechamento) if fechamento is not None else "—")
+    vis = es.iloc[::-1]
+    desc = vis.apply(lambda r: f"{str(r.contraparte or '').title()} · {r.categoria}" if r.categoria else str(r.contraparte or "").title(), axis=1)
+    linhas = {
+        "Data": vis.quando.dt.strftime("%d/%m/%Y"),
+        "Descrição": desc,
+        "Entrada": vis.valor.map(lambda v: fmt_brl(cent(v)) if v > 0 else ""),
+        "Saída": vis.valor.map(lambda v: fmt_brl(cent(v)) if v < 0 else ""),
+    }
+    if not so_fisico:
+        linhas["Saldo"] = vis.saldo_depois.map(lambda v: fmt_brl(cent(v)) if pd.notna(v) else "")
+    tabela(pd.DataFrame(linhas), num=("Entrada", "Saída", "Saldo"), altura_max=460)
+    st.caption(f"{len(es)} lançamentos da conta Stone, do extrato carregado"
+               + (f", lido até {ult:%d/%m/%Y}" if ult is not None else "") + ". "
+               + ("Só as entradas de venda da loja: o repasse da maquininha e do link no cartão, que a Stone faz no "
+                  "dia útil seguinte e já líquido, e o Pix direto de cliente."
+                  if so_fisico else
+                  "É a conta para onde vai todo o dinheiro: o repasse da Pagar.me (site), a maquininha, o Pix "
+                  "direto, e de onde saem todas as despesas."))
+
+
 if "Extrato" in abas:
   with abas["Extrato"]:
-    st.header("Extrato")
+    st.header("Extrato" + ("" if visao == omni.CONSOLIDADO else f" · {visao.lower()}"))
 
-    try:
-        saldo_api = pagarme_client.get_balance(recip).get("available_amount", 0)
-    except Exception as e:
-        st.warning(f"Não foi possível ler o saldo da API: {e}")
-        saldo_api = None
+    if visao == omni.FISICO:
+        _extrato_da_stone(so_fisico=True)
+    if visao == omni.CONSOLIDADO:
+        st.subheader("Conta Stone")
+        _extrato_da_stone(so_fisico=False)
+        st.divider()
+        st.subheader("Conta Pagar.me (site)")
+        st.caption("O dinheiro do site fica aqui até ser repassado para a conta Stone, onde aparece como Pagar.me.")
 
-    todos = db.extrato_bancario(recip)
-    if not todos:
-        st.info("Sem lançamentos. Use **Atualizar dados** na barra lateral.")
-    else:
-        # Saldo corrido somando do primeiro lançamento para frente, partindo de
-        # zero na abertura da conta.
-        #
-        # Ancorar no saldo atual da API e voltar seria o inverso natural, mas
-        # não fecha: a soma de todos os lançamentos dá um valor diferente do
-        # available_amount, e ancorar no fim joga essa diferença para o começo,
-        # produzindo saldos negativos no histórico inteiro. O teste que mostra
-        # isso: o primeiro par de lançamentos da conta é uma entrada de
-        # R$ 214,46 seguida de uma transferência de exatamente R$ 214,46 —
-        # começando do zero, o saldo sobe e volta a zero, como tem que ser.
-        # A soma dos lançamentos não chega ao saldo que a Pagar.me informa, a
-        # API é inconsistente aqui: os lançamentos disponíveis somam mais que o
-        # available_amount. Essa diferença vira o saldo de ABERTURA, não uma
-        # linha de ajuste no fim: extrato se lê como "saldo anterior →
-        # movimentos → saldo atual", e um ajuste na última linha pareceria uma
-        # transação recém-ocorrida. Como abertura, ele cai dentro de um conceito
-        # que todo extrato já tem, e o saldo final fica igual ao da conta.
-        soma_lancamentos = sum(l["valor"] or 0 for l in todos)
-        abertura_global = (saldo_api - soma_lancamentos) if saldo_api is not None else 0
+    if omni.ver_digital(visao):
+        try:
+            saldo_api = pagarme_client.get_balance(recip).get("available_amount", 0)
+        except Exception as e:
+            st.warning(f"Não foi possível ler o saldo da API: {e}")
+            saldo_api = None
 
-        saldo = abertura_global
-        for linha in todos:
-            linha["saldo_antes"] = saldo
-            saldo += linha["valor"] or 0
-            linha["saldo_depois"] = saldo
-
-        def descrever(r):
-            """Frase legível para cada lançamento, no lugar de um id solto."""
-            cliente = r.get("customer_name") or ""
-            parcela = ""
-            if r.get("installment") and r.get("venda_parcelas"):
-                parcela = f" · parcela {int(r['installment'])}/{int(r['venda_parcelas'])}"
-            venda = ""
-            if r.get("venda_total"):
-                venda = f" · venda de {fmt_brl(int(r['venda_total']))}"
-            tipo = r.get("type")
-
-            if tipo in ("payable", "external_settlement"):
-                antecipada = tipo == "external_settlement"
-                if r.get("tipo_recebivel") == "refund":
-                    base = "Estorno"
-                else:
-                    base = "Antecipação recebida" if antecipada else "Liquidação"
-                if cliente:
-                    return f"{base} de {cliente}{parcela}{venda}"
-                bandeira = (r.get("bandeira") or "").title()
-                return f"{base}{' (' + bandeira + ')' if bandeira else ''}{parcela}"
-            if tipo == "transfer":
-                return "Transferência para sua conta bancária"
-            if tipo == "fee_collection":
-                # A própria API descreve a tarifa; é melhor que um rótulo genérico.
-                return r.get("descricao_tarifa") or "Tarifa"
-            if tipo == "refund":
-                return f"Estorno{' de ' + cliente if cliente else ''}"
-            return TIPO_OP_PT.get(tipo, tipo or "Lançamento")
-
-        for r in todos:
-            r["descricao"] = descrever(r)
-
-        df_ext = pd.DataFrame(todos)
-        df_ext["quando"] = para_brt(
-            pd.to_datetime(df_ext["created_at"], errors="coerce", utc=True)
-        )
-        # Recorte do período depois de calcular o saldo, para o saldo corrido
-        # continuar verdadeiro mesmo olhando uma janela curta.
-        ini = pd.Timestamp(date_from_str, tz="America/Sao_Paulo")
-        fim = pd.Timestamp(date_to_str, tz="America/Sao_Paulo") + pd.Timedelta(days=1)
-        janela = df_ext[(df_ext["quando"] >= ini) & (df_ext["quando"] < fim)].copy()
-
-        if janela.empty:
-            st.info("Nenhuma movimentação nesse período.")
+        todos = db.extrato_bancario(recip)
+        if not todos:
+            st.info("Sem lançamentos. Use **Atualizar dados** na barra lateral.")
         else:
-            busca = st.text_input("Buscar por cliente ou descrição", key="ext_busca")
-            if busca:
-                janela = janela[
-                    janela["descricao"].str.contains(busca, case=False, na=False)
-                ]
+            # Saldo corrido somando do primeiro lançamento para frente, partindo de
+            # zero na abertura da conta.
+            #
+            # Ancorar no saldo atual da API e voltar seria o inverso natural, mas
+            # não fecha: a soma de todos os lançamentos dá um valor diferente do
+            # available_amount, e ancorar no fim joga essa diferença para o começo,
+            # produzindo saldos negativos no histórico inteiro. O teste que mostra
+            # isso: o primeiro par de lançamentos da conta é uma entrada de
+            # R$ 214,46 seguida de uma transferência de exatamente R$ 214,46 —
+            # começando do zero, o saldo sobe e volta a zero, como tem que ser.
+            # A soma dos lançamentos não chega ao saldo que a Pagar.me informa, a
+            # API é inconsistente aqui: os lançamentos disponíveis somam mais que o
+            # available_amount. Essa diferença vira o saldo de ABERTURA, não uma
+            # linha de ajuste no fim: extrato se lê como "saldo anterior →
+            # movimentos → saldo atual", e um ajuste na última linha pareceria uma
+            # transação recém-ocorrida. Como abertura, ele cai dentro de um conceito
+            # que todo extrato já tem, e o saldo final fica igual ao da conta.
+            soma_lancamentos = sum(l["valor"] or 0 for l in todos)
+            abertura_global = (saldo_api - soma_lancamentos) if saldo_api is not None else 0
 
-            entradas = int(janela[janela["valor"] > 0]["valor"].sum())
-            saidas = int(janela[janela["valor"] < 0]["valor"].sum())
-            abertura = int(janela.iloc[0]["saldo_antes"])
-            fechamento = int(janela.iloc[-1]["saldo_depois"])
+            saldo = abertura_global
+            for linha in todos:
+                linha["saldo_antes"] = saldo
+                saldo += linha["valor"] or 0
+                linha["saldo_depois"] = saldo
 
-            # O que ainda vai cair, para o extrato não parar no saldo de hoje.
-            # Só faz sentido quando a janela alcança hoje: olhando um mês
-            # fechado do passado, previsão futura não tem o que fazer ali.
-            hoje_brt = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
-            previsto = db.agenda_recebimentos(recip) if fim > hoje_brt else []
-            total_previsto = int(sum(p["liquido"] for p in previsto))
+            def descrever(r):
+                """Frase legível para cada lançamento, no lugar de um id solto."""
+                cliente = r.get("customer_name") or ""
+                parcela = ""
+                if r.get("installment") and r.get("venda_parcelas"):
+                    parcela = f" · parcela {int(r['installment'])}/{int(r['venda_parcelas'])}"
+                venda = ""
+                if r.get("venda_total"):
+                    venda = f" · venda de {fmt_brl(int(r['venda_total']))}"
+                tipo = r.get("type")
 
-            if previsto:
-                e1, e2, e3, e4, e5 = st.columns(5)
+                if tipo in ("payable", "external_settlement"):
+                    antecipada = tipo == "external_settlement"
+                    if r.get("tipo_recebivel") == "refund":
+                        base = "Estorno"
+                    else:
+                        base = "Antecipação recebida" if antecipada else "Liquidação"
+                    if cliente:
+                        return f"{base} de {cliente}{parcela}{venda}"
+                    bandeira = (r.get("bandeira") or "").title()
+                    return f"{base}{' (' + bandeira + ')' if bandeira else ''}{parcela}"
+                if tipo == "transfer":
+                    return "Transferência para sua conta bancária"
+                if tipo == "fee_collection":
+                    # A própria API descreve a tarifa; é melhor que um rótulo genérico.
+                    return r.get("descricao_tarifa") or "Tarifa"
+                if tipo == "refund":
+                    return f"Estorno{' de ' + cliente if cliente else ''}"
+                return TIPO_OP_PT.get(tipo, tipo or "Lançamento")
+
+            for r in todos:
+                r["descricao"] = descrever(r)
+
+            df_ext = pd.DataFrame(todos)
+            df_ext["quando"] = para_brt(
+                pd.to_datetime(df_ext["created_at"], errors="coerce", utc=True)
+            )
+            # Recorte do período depois de calcular o saldo, para o saldo corrido
+            # continuar verdadeiro mesmo olhando uma janela curta.
+            ini = pd.Timestamp(date_from_str, tz="America/Sao_Paulo")
+            fim = pd.Timestamp(date_to_str, tz="America/Sao_Paulo") + pd.Timedelta(days=1)
+            janela = df_ext[(df_ext["quando"] >= ini) & (df_ext["quando"] < fim)].copy()
+
+            if janela.empty:
+                st.info("Nenhuma movimentação nesse período.")
             else:
-                e1, e2, e3, e4 = st.columns(4)
-            e1.metric("Saldo em " + ini.strftime("%d/%m"), fmt_brl(abertura))
-            e2.metric("Entradas", fmt_brl(entradas))
-            e3.metric("Saídas", fmt_brl(saidas))
-            e4.metric("Saldo final", fmt_brl(fechamento))
-            if previsto:
-                e5.metric("Com o previsto", fmt_brl(fechamento + total_previsto),
-                          delta=fmt_brl(total_previsto),
-                          help="Saldo de hoje mais os recebíveis que ainda vão cair, "
-                               "supondo que nada seja sacado. Não entra venda que "
-                               "ainda não aconteceu.")
-            if abertura_global and janela.iloc[0]["id"] == todos[0]["id"]:
+                busca = st.text_input("Buscar por cliente ou descrição", key="ext_busca")
+                if busca:
+                    janela = janela[
+                        janela["descricao"].str.contains(busca, case=False, na=False)
+                    ]
+
+                entradas = int(janela[janela["valor"] > 0]["valor"].sum())
+                saidas = int(janela[janela["valor"] < 0]["valor"].sum())
+                abertura = int(janela.iloc[0]["saldo_antes"])
+                fechamento = int(janela.iloc[-1]["saldo_depois"])
+
+                # O que ainda vai cair, para o extrato não parar no saldo de hoje.
+                # Só faz sentido quando a janela alcança hoje: olhando um mês
+                # fechado do passado, previsão futura não tem o que fazer ali.
+                hoje_brt = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
+                previsto = db.agenda_recebimentos(recip) if fim > hoje_brt else []
+                total_previsto = int(sum(p["liquido"] for p in previsto))
+
+                if previsto:
+                    e1, e2, e3, e4, e5 = st.columns(5)
+                else:
+                    e1, e2, e3, e4 = st.columns(4)
+                e1.metric("Saldo em " + ini.strftime("%d/%m"), fmt_brl(abertura))
+                e2.metric("Entradas", fmt_brl(entradas))
+                e3.metric("Saídas", fmt_brl(saidas))
+                e4.metric("Saldo final", fmt_brl(fechamento))
+                if previsto:
+                    e5.metric("Com o previsto", fmt_brl(fechamento + total_previsto),
+                              delta=fmt_brl(total_previsto),
+                              help="Saldo de hoje mais os recebíveis que ainda vão cair, "
+                                   "supondo que nada seja sacado. Não entra venda que "
+                                   "ainda não aconteceu.")
+                if abertura_global and janela.iloc[0]["id"] == todos[0]["id"]:
+                    st.caption(
+                        f"O saldo anterior traz {md(fmt_brl(abs(abertura_global)))} que a "
+                        "Pagar.me não detalha em lançamentos: a soma do extrato dela "
+                        "não fecha com o saldo que ela mesma informa. Vale perguntar "
+                        "ao suporte da Stone o que compõe esse valor."
+                    )
+
+                st.divider()
+
+                ext_vis = janela.iloc[::-1].copy()   # mais recente primeiro, como banco
+                linhas_ext = pd.DataFrame({
+                    "Data": ext_vis["quando"].dt.strftime("%d/%m/%Y"),
+                    "Descrição": ext_vis["descricao"],
+                    "Entrada": ext_vis["valor"].apply(lambda v: fmt_brl(int(v)) if v > 0 else ""),
+                    "Saída": ext_vis["valor"].apply(lambda v: fmt_brl(int(v)) if v < 0 else ""),
+                    "Saldo": ext_vis["saldo_depois"].apply(lambda v: fmt_brl(int(v))),
+                })
+                # Previsão por cima, na mesma ordem do resto (mais recente primeiro),
+                # com o saldo correndo a partir do fechamento de hoje.
+                if previsto:
+                    corrido, futuras = fechamento, []
+                    for p in previsto:
+                        corrido += int(p["liquido"])
+                        futuras.append({
+                            "Data": pd.to_datetime(p["dia"]).strftime("%d/%m/%Y"),
+                            "Descrição": f"A receber · {p['parcelas']} "
+                                         + ("parcela" if p["parcelas"] == 1 else "parcelas"),
+                            "Entrada": fmt_brl(int(p["liquido"])), "Saída": "",
+                            "Saldo": fmt_brl(corrido),
+                        })
+                    linhas_ext = pd.concat(
+                        [pd.DataFrame(futuras[::-1]), linhas_ext], ignore_index=True
+                    )
+                # Fecha o extrato por baixo com o saldo de onde a leitura parte.
+                linhas_ext = pd.concat([
+                    linhas_ext,
+                    pd.DataFrame([{
+                        "Data": ini.strftime("%d/%m/%Y"),
+                        "Descrição": "Saldo anterior",
+                        "Entrada": "", "Saída": "",
+                        "Saldo": fmt_brl(abertura),
+                    }]),
+                ], ignore_index=True)
+                tabela(linhas_ext, num=("Entrada", "Saída", "Saldo"), altura_max=500)
                 st.caption(
-                    f"O saldo anterior traz {md(fmt_brl(abs(abertura_global)))} que a "
-                    "Pagar.me não detalha em lançamentos: a soma do extrato dela "
-                    "não fecha com o saldo que ela mesma informa. Vale perguntar "
-                    "ao suporte da Stone o que compõe esse valor."
+                    f"{len(ext_vis)} lançamentos · valores líquidos, já descontadas as taxas."
+                    + (f" As {len(previsto)} primeiras linhas são previsão: recebível "
+                       "confirmado que ainda não caiu. O saldo delas supõe que nada "
+                       "seja sacado até lá." if previsto else "")
+                )
+                st.download_button(
+                    "Exportar CSV",
+                    data=linhas_ext.to_csv(index=False).encode("utf-8"),
+                    file_name=f"extrato_{date_from_str}_{date_to_str}.csv",
+                    mime="text/csv",
                 )
 
-            st.divider()
-
-            visao = janela.iloc[::-1].copy()   # mais recente primeiro, como banco
-            linhas_ext = pd.DataFrame({
-                "Data": visao["quando"].dt.strftime("%d/%m/%Y"),
-                "Descrição": visao["descricao"],
-                "Entrada": visao["valor"].apply(lambda v: fmt_brl(int(v)) if v > 0 else ""),
-                "Saída": visao["valor"].apply(lambda v: fmt_brl(int(v)) if v < 0 else ""),
-                "Saldo": visao["saldo_depois"].apply(lambda v: fmt_brl(int(v))),
-            })
-            # Previsão por cima, na mesma ordem do resto (mais recente primeiro),
-            # com o saldo correndo a partir do fechamento de hoje.
-            if previsto:
-                corrido, futuras = fechamento, []
-                for p in previsto:
-                    corrido += int(p["liquido"])
-                    futuras.append({
-                        "Data": pd.to_datetime(p["dia"]).strftime("%d/%m/%Y"),
-                        "Descrição": f"A receber · {p['parcelas']} "
-                                     + ("parcela" if p["parcelas"] == 1 else "parcelas"),
-                        "Entrada": fmt_brl(int(p["liquido"])), "Saída": "",
-                        "Saldo": fmt_brl(corrido),
-                    })
-                linhas_ext = pd.concat(
-                    [pd.DataFrame(futuras[::-1]), linhas_ext], ignore_index=True
+            with st.expander("Ver lançamentos contábeis (recebíveis futuros e contrapartidas)"):
+                st.caption(
+                    "Estes não mexem no saldo: são o registro do recebível que ainda "
+                    "vai cair e a contrapartida das transferências. Aparecem aqui só "
+                    "para conferência."
                 )
-            # Fecha o extrato por baixo com o saldo de onde a leitura parte.
-            linhas_ext = pd.concat([
-                linhas_ext,
-                pd.DataFrame([{
-                    "Data": ini.strftime("%d/%m/%Y"),
-                    "Descrição": "Saldo anterior",
-                    "Entrada": "", "Saída": "",
-                    "Saldo": fmt_brl(abertura),
-                }]),
-            ], ignore_index=True)
-            tabela(linhas_ext, num=("Entrada", "Saída", "Saldo"), altura_max=500)
-            st.caption(
-                f"{len(visao)} lançamentos · valores líquidos, já descontadas as taxas."
-                + (f" As {len(previsto)} primeiras linhas são previsão: recebível "
-                   "confirmado que ainda não caiu. O saldo delas supõe que nada "
-                   "seja sacado até lá." if previsto else "")
-            )
-            st.download_button(
-                "Exportar CSV",
-                data=linhas_ext.to_csv(index=False).encode("utf-8"),
-                file_name=f"extrato_{date_from_str}_{date_to_str}.csv",
-                mime="text/csv",
-            )
-
-        with st.expander("Ver lançamentos contábeis (recebíveis futuros e contrapartidas)"):
-            st.caption(
-                "Estes não mexem no saldo: são o registro do recebível que ainda "
-                "vai cair e a contrapartida das transferências. Aparecem aqui só "
-                "para conferência."
-            )
-            cont = db.query_balance_operations(
-                date_from=date_from_str, date_to=date_to_str, recipient_id=recip
-            )
-            df_cont = to_df_ops([o for o in cont if o["status"] != "available"])
-            if df_cont.empty:
-                st.caption("Nada no período.")
-            else:
-                disp = traduzir(
-                    df_cont[["created_at", "type", "status", "amount_brl", "fee_brl", "net_brl"]].copy(),
-                    {"type": TIPO_OP_PT, "status": STATUS_OP_PT},
+                cont = db.query_balance_operations(
+                    date_from=date_from_str, date_to=date_to_str, recipient_id=recip
                 )
-                disp["created_at"] = disp["created_at"].dt.strftime("%d/%m/%Y %H:%M")
-                tabela(
-                    disp.rename(columns={
-                        "created_at": "Data/Hora", "type": "Tipo", "status": "Status",
-                        "amount_brl": "Bruto", "fee_brl": "Taxa", "net_brl": "Líquido",
-                    }),
-                    num=("Bruto", "Taxa", "Líquido"), altura_max=360,
-                )
+                df_cont = to_df_ops([o for o in cont if o["status"] != "available"])
+                if df_cont.empty:
+                    st.caption("Nada no período.")
+                else:
+                    disp = traduzir(
+                        df_cont[["created_at", "type", "status", "amount_brl", "fee_brl", "net_brl"]].copy(),
+                        {"type": TIPO_OP_PT, "status": STATUS_OP_PT},
+                    )
+                    disp["created_at"] = disp["created_at"].dt.strftime("%d/%m/%Y %H:%M")
+                    tabela(
+                        disp.rename(columns={
+                            "created_at": "Data/Hora", "type": "Tipo", "status": "Status",
+                            "amount_brl": "Bruto", "fee_brl": "Taxa", "net_brl": "Líquido",
+                        }),
+                        num=("Bruto", "Taxa", "Líquido"), altura_max=360,
+                    )
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 5: CONCILIAÇÃO
 # ════════════════════════════════════════════════════════════════════════════
+def _conciliacao_da_loja():
+    """Cada dia de venda na Stone contra o repasse na conta (omni.conciliacao_fisica)."""
+    c = omni.conciliacao_fisica(date_from_str, date_to_str)
+    if c.empty:
+        st.info("Sem venda da maquininha ou do link no período.")
+        return
+    resumo = c.groupby("situacao").agg(dias=("vendido_em", "count"), vendas=("vendas", "sum"),
+                                       liquido=("liquido", "sum")).reset_index()
+    tabela(pd.DataFrame({
+        "Situação": resumo.situacao, "Dias": resumo.dias, "Vendas": resumo.vendas,
+        "Líquido": resumo.liquido.map(fmt_brl),
+    }), num=("Dias", "Vendas", "Líquido"))
+    sem = c[c.situacao == "Sem repasse no extrato"]
+    if not sem.empty:
+        st.warning(f"{len(sem)} dia(s) de venda sem repasse correspondente no extrato, "
+                   f"{fmt_brl(int(sem.liquido.sum()))} no total. São os que valem investigar na Stone.")
+    else:
+        st.success("Todo dia de venda da loja tem repasse no extrato, pelo valor certo (ou ainda está no prazo).")
+    det = c.sort_values("vendido_em", ascending=False)
+    tabela(pd.DataFrame({
+        "Vendido em": det.vendido_em.dt.strftime("%d/%m/%Y"), "Vendas": det.vendas,
+        "Bruto": det.bruto.map(fmt_brl), "Líquido esperado": det.liquido.map(fmt_brl),
+        "Repassado": det.repassado.map(lambda v: fmt_brl(int(v)) if v else "—"),
+        "Repassado em": det.repassado_em.map(lambda d: d.strftime("%d/%m/%Y") if pd.notna(d) else "—"),
+        "Situação": det.situacao,
+    }), num=("Vendas", "Bruto", "Líquido esperado", "Repassado"), altura_max=420)
+    st.caption("O repasse da Stone não traz o número da venda e o link parcelado cai em mais de um lançamento, "
+               "então a conferência é por dia: o líquido vendido no dia tem que aparecer, somado, nos repasses "
+               "seguintes, com tolerância de R$ 1. **Pendente** é venda cujo repasse ainda não cabe no extrato "
+               "carregado. O Pix direto cai direto na conta e não tem o que conciliar.")
+
+
 if "Conciliação" in abas:
   with abas["Conciliação"]:
-    st.header("Conciliação")
-    st.caption(
-        "Confere se cada recebível apareceu no extrato pelo valor certo. "
-        "O que é (venda ou estorno) fica separado de em que pé está. "
-        "Misturar as duas coisas num rótulo só era o que confundia."
-    )
+    st.header("Conciliação" + ("" if visao == omni.CONSOLIDADO else f" · {visao.lower()}"))
 
-    pays_rows = db.query_payables(date_from=date_from_str, date_to=date_to_str, recipient_id=recip)
-    ops_rows  = db.query_balance_operations(date_from=date_from_str, date_to=date_to_str, recipient_id=recip)
+    if omni.ver_fisico(visao):
+        if visao == omni.CONSOLIDADO:
+            st.subheader("Loja: venda da Stone × repasse na conta")
+        _conciliacao_da_loja()
+        if visao == omni.CONSOLIDADO:
+            st.divider()
+            st.subheader("Site: recebível da Pagar.me × extrato da Pagar.me")
 
-    df_p = to_df_pay(pays_rows)
-    df_o = to_df_ops(ops_rows)
-
-    if df_p.empty or df_o.empty:
-        st.info("Sincronize dados de recebíveis e extrato para ver a conciliação.")
-    else:
-        # Um recebível antecipado gera DOIS lançamentos no extrato: o original e
-        # a reversão. Somar os dois dá zero e faria todo antecipado parecer
-        # divergente, por isso a comparação usa o lançamento original.
-        ops_agg = (
-            df_o.sort_values("created_at")
-            .groupby("movement_object_id")
-            .agg(valor_extrato=("amount", "first"), qtd_ops=("id", "count"))
-            .reset_index()
-            .rename(columns={"movement_object_id": "id"})
-        )
-        merged = df_p.merge(ops_agg, on="id", how="left")
-
-        # Nome do cliente, para a linha dizer de quem é.
-        chg = pd.DataFrame(db.query_charges())
-        if not chg.empty:
-            merged = merged.merge(
-                chg[["id", "customer_name"]].rename(columns={"id": "charge_id"}),
-                on="charge_id", how="left",
-            )
-        else:
-            merged["customer_name"] = None
-
-        def situacao(row):
-            """Em que pé está, só isso, sem dizer o que o registro é.
-
-            O status cru da API não serve de rótulo: um estorno de venda
-            cancelada volta como `prepaid`, que soa como dinheiro recebido
-            adiantado quando na verdade é uma dívida sendo descontada antes do
-            prazo original. Aqui `prepaid` e `waiting_funds` viram a mesma
-            coisa, pendente, e o sinal do valor diz o resto.
-            """
-            if pd.isna(row.get("valor_extrato")):
-                return "Sem lançamento"
-            if abs((row.get("amount") or 0) - (row.get("valor_extrato") or 0)) > 5:
-                return "Divergência"
-            return "Liquidado" if row.get("status") == "paid" else "Pendente"
-
-        merged["Situação"] = merged.apply(situacao, axis=1)
-        merged["Tipo"] = merged["amount"].apply(lambda v: "Venda" if v >= 0 else "Estorno")
-
-        # Resumo: quantidade e valor por situação, que é o que importa conferir.
-        resumo = (
-            merged.groupby(["Situação", "Tipo"])
-            .agg(qtd=("id", "count"), total=("amount", "sum"))
-            .reset_index()
-        )
-        resumo_disp = pd.DataFrame({
-            "Situação": resumo["Situação"],
-            "Tipo": resumo["Tipo"],
-            "Qtd": resumo["qtd"],
-            "Valor": resumo["total"].apply(lambda v: fmt_brl(int(v))),
-        })
-        tabela(resumo_disp, num=("Qtd", "Valor"))
-
-        divergentes = int((merged["Situação"] == "Divergência").sum())
-        sem_lanc = int((merged["Situação"] == "Sem lançamento").sum())
-        if divergentes or sem_lanc:
-            st.warning(
-                f"{divergentes} com valor divergente e {sem_lanc} sem lançamento "
-                "no extrato. São os que valem investigar."
-            )
-        else:
-            st.success("Nenhuma divergência: todos os recebíveis do período batem com o extrato.")
-
+    if omni.ver_digital(visao):
         st.caption(
-            "**Liquidado**: já caiu na conta. "
-            "**Pendente**: ainda vai cair (venda) ou ainda vai ser descontado (estorno). "
-            "**Divergência**: valor no extrato diferente do recebível. "
-            "**Sem lançamento**: recebível que não apareceu no extrato."
+            "Confere se cada recebível apareceu no extrato pelo valor certo. "
+            "O que é (venda ou estorno) fica separado de em que pé está. "
+            "Misturar as duas coisas num rótulo só era o que confundia."
         )
 
-        st.divider()
+        pays_rows = db.query_payables(date_from=date_from_str, date_to=date_to_str, recipient_id=recip)
+        ops_rows  = db.query_balance_operations(date_from=date_from_str, date_to=date_to_str, recipient_id=recip)
 
-        f1, f2 = st.columns(2)
-        with f1:
-            op_sit = ["Todas"] + sorted(merged["Situação"].unique().tolist())
-            f_sit = st.selectbox("Situação", op_sit, key="conc_sit")
-        with f2:
-            f_tipo = st.selectbox("Tipo", ["Todos", "Venda", "Estorno"], key="conc_tipo")
+        df_p = to_df_pay(pays_rows)
+        df_o = to_df_ops(ops_rows)
 
-        df_show = merged
-        if f_sit != "Todas":
-            df_show = df_show[df_show["Situação"] == f_sit]
-        if f_tipo != "Todos":
-            df_show = df_show[df_show["Tipo"] == f_tipo]
-
-        if df_show.empty:
-            st.info("Nada com esses filtros.")
+        if df_p.empty or df_o.empty:
+            st.info("Sincronize dados de recebíveis e extrato para ver a conciliação.")
         else:
-            det = pd.DataFrame({
-                "Cliente": df_show["customer_name"].fillna("—"),
-                "Tipo": df_show["Tipo"],
-                "Valor": df_show["amount"].apply(lambda v: fmt_brl(int(v))),
-                "No extrato": df_show["valor_extrato"].apply(
-                    lambda v: fmt_brl(int(v)) if pd.notna(v) else "—"
-                ),
-                "Cai em": df_show["payment_date"].dt.strftime("%d/%m/%Y"),
-                "Situação": df_show["Situação"],
-            })
-            tabela(det, num=("Valor", "No extrato"), altura_max=460)
-            st.download_button(
-                "Exportar conciliação CSV",
-                data=det.to_csv(index=False).encode("utf-8"),
-                file_name=f"conciliacao_{date_from_str}_{date_to_str}.csv",
-                mime="text/csv",
+            # Um recebível antecipado gera DOIS lançamentos no extrato: o original e
+            # a reversão. Somar os dois dá zero e faria todo antecipado parecer
+            # divergente, por isso a comparação usa o lançamento original.
+            ops_agg = (
+                df_o.sort_values("created_at")
+                .groupby("movement_object_id")
+                .agg(valor_extrato=("amount", "first"), qtd_ops=("id", "count"))
+                .reset_index()
+                .rename(columns={"movement_object_id": "id"})
             )
+            merged = df_p.merge(ops_agg, on="id", how="left")
+
+            # Nome do cliente, para a linha dizer de quem é.
+            chg = pd.DataFrame(db.query_charges())
+            if not chg.empty:
+                merged = merged.merge(
+                    chg[["id", "customer_name"]].rename(columns={"id": "charge_id"}),
+                    on="charge_id", how="left",
+                )
+            else:
+                merged["customer_name"] = None
+
+            def situacao(row):
+                """Em que pé está, só isso, sem dizer o que o registro é.
+
+                O status cru da API não serve de rótulo: um estorno de venda
+                cancelada volta como `prepaid`, que soa como dinheiro recebido
+                adiantado quando na verdade é uma dívida sendo descontada antes do
+                prazo original. Aqui `prepaid` e `waiting_funds` viram a mesma
+                coisa, pendente, e o sinal do valor diz o resto.
+                """
+                if pd.isna(row.get("valor_extrato")):
+                    return "Sem lançamento"
+                if abs((row.get("amount") or 0) - (row.get("valor_extrato") or 0)) > 5:
+                    return "Divergência"
+                return "Liquidado" if row.get("status") == "paid" else "Pendente"
+
+            merged["Situação"] = merged.apply(situacao, axis=1)
+            merged["Tipo"] = merged["amount"].apply(lambda v: "Venda" if v >= 0 else "Estorno")
+
+            # Resumo: quantidade e valor por situação, que é o que importa conferir.
+            resumo = (
+                merged.groupby(["Situação", "Tipo"])
+                .agg(qtd=("id", "count"), total=("amount", "sum"))
+                .reset_index()
+            )
+            resumo_disp = pd.DataFrame({
+                "Situação": resumo["Situação"],
+                "Tipo": resumo["Tipo"],
+                "Qtd": resumo["qtd"],
+                "Valor": resumo["total"].apply(lambda v: fmt_brl(int(v))),
+            })
+            tabela(resumo_disp, num=("Qtd", "Valor"))
+
+            divergentes = int((merged["Situação"] == "Divergência").sum())
+            sem_lanc = int((merged["Situação"] == "Sem lançamento").sum())
+            if divergentes or sem_lanc:
+                st.warning(
+                    f"{divergentes} com valor divergente e {sem_lanc} sem lançamento "
+                    "no extrato. São os que valem investigar."
+                )
+            else:
+                st.success("Nenhuma divergência: todos os recebíveis do período batem com o extrato.")
+
+            st.caption(
+                "**Liquidado**: já caiu na conta. "
+                "**Pendente**: ainda vai cair (venda) ou ainda vai ser descontado (estorno). "
+                "**Divergência**: valor no extrato diferente do recebível. "
+                "**Sem lançamento**: recebível que não apareceu no extrato."
+            )
+
+            st.divider()
+
+            f1, f2 = st.columns(2)
+            with f1:
+                op_sit = ["Todas"] + sorted(merged["Situação"].unique().tolist())
+                f_sit = st.selectbox("Situação", op_sit, key="conc_sit")
+            with f2:
+                f_tipo = st.selectbox("Tipo", ["Todos", "Venda", "Estorno"], key="conc_tipo")
+
+            df_show = merged
+            if f_sit != "Todas":
+                df_show = df_show[df_show["Situação"] == f_sit]
+            if f_tipo != "Todos":
+                df_show = df_show[df_show["Tipo"] == f_tipo]
+
+            if df_show.empty:
+                st.info("Nada com esses filtros.")
+            else:
+                det = pd.DataFrame({
+                    "Cliente": df_show["customer_name"].fillna("—"),
+                    "Tipo": df_show["Tipo"],
+                    "Valor": df_show["amount"].apply(lambda v: fmt_brl(int(v))),
+                    "No extrato": df_show["valor_extrato"].apply(
+                        lambda v: fmt_brl(int(v)) if pd.notna(v) else "—"
+                    ),
+                    "Cai em": df_show["payment_date"].dt.strftime("%d/%m/%Y"),
+                    "Situação": df_show["Situação"],
+                })
+                tabela(det, num=("Valor", "No extrato"), altura_max=460)
+                st.download_button(
+                    "Exportar conciliação CSV",
+                    data=det.to_csv(index=False).encode("utf-8"),
+                    file_name=f"conciliacao_{date_from_str}_{date_to_str}.csv",
+                    mime="text/csv",
+                )
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA 7: HISTÓRICO: visão gerencial de todos os meses
 # ════════════════════════════════════════════════════════════════════════════
+def _historico_omni(visao: str) -> pd.DataFrame:
+    """Mês a mês no canal escolhido, em centavos.
+
+    Site: db.resumo_mensal (Pagar.me). Loja: receita e taxa da Stone do PnL
+    (financeiro.pnl_competencia, maquininha pelo bruto da API e Pix direto do
+    extrato) e a contagem de vendas de omni.vendas_fisicas.
+    """
+    import financeiro as fin_
+    meses = {}
+    if omni.ver_digital(visao):
+        for h in db.resumo_mensal():
+            meses.setdefault(h["mes"], {}).update({
+                "fat_site": int(h["faturamento"]), "vendas_site": int(h["vendas"]),
+                "tentativas": int(h["tentativas"]), "perdidas": int(h["perdidas"]),
+                "custo_site": int(h["custo"]),
+            })
+    if omni.ver_fisico(visao):
+        t = fin_.pnl_competencia()["tabela"]
+        vf = omni.vendas_fisicas()
+        n_fis = vf.groupby(vf.quando.dt.strftime("%Y-%m")).size() if not vf.empty else pd.Series(dtype=int)
+        for r in t.itertuples(index=False):
+            fat = int(round((r.receita_maquininha + r.receita_pix_direto) * 100))
+            if fat <= 0:
+                continue
+            meses.setdefault(r.mes, {}).update({
+                "fat_loja": fat, "custo_loja": int(round(r.taxas_stone * 100)),
+                "vendas_loja": int(n_fis.get(r.mes, 0)),
+            })
+    if not meses:
+        return pd.DataFrame()
+    df = pd.DataFrame([{"mes": m, **v} for m, v in sorted(meses.items())]).fillna(0)
+    for c in ["fat_site", "vendas_site", "tentativas", "perdidas", "custo_site", "fat_loja", "custo_loja", "vendas_loja"]:
+        df[c] = df.get(c, 0)
+        df[c] = df[c].fillna(0).astype(int)
+    df["faturamento"] = df.fat_site + df.fat_loja
+    df["vendas"] = df.vendas_site + df.vendas_loja
+    df["custo"] = df.custo_site + df.custo_loja
+    df["ticket"] = (df.faturamento / df.vendas.where(df.vendas > 0)).fillna(0).round().astype(int)
+    df["aprovacao"] = (df.vendas_site / df.tentativas.where(df.tentativas > 0) * 100).fillna(0)
+    df["custo_pct"] = (df.custo / df.faturamento.where(df.faturamento > 0) * 100).fillna(0)
+    df["liquido"] = df.faturamento - df.custo
+    return df[df.faturamento > 0].reset_index(drop=True)
+
+
 if "Histórico" in abas:
   with abas["Histórico"]:
-    st.header("Histórico mês a mês")
+    st.header("Histórico mês a mês" + ("" if visao == omni.CONSOLIDADO else f" · {visao.lower()}"))
     st.caption(
         "Todo o período disponível, independente do filtro da barra lateral."
     )
 
-    hist = db.resumo_mensal()
-    if not hist:
+    dfh = _historico_omni(visao)
+    if dfh.empty:
         st.info("Sem histórico. Use **Atualizar dados** na barra lateral.")
     else:
-        dfh = pd.DataFrame(hist)
         MES_PT = ["jan", "fev", "mar", "abr", "mai", "jun",
                   "jul", "ago", "set", "out", "nov", "dez"]
         dfh["Mês"] = dfh["mes"].apply(
             lambda m: f"{MES_PT[int(m[5:7]) - 1]}/{m[2:4]}"
         )
+        site = omni.ver_digital(visao)
 
         # Totais do período inteiro
         fat = int(dfh["faturamento"].sum())
@@ -3079,14 +3367,22 @@ if "Histórico" in abas:
         # Em duas fileiras: cinco cards numa linha só cortam os valores em reais.
         t1, t2, t3 = st.columns(3)
         t1.metric("Faturado", fmt_brl(fat))
-        t1.caption(f"em {len(dfh)} meses")
+        t1.caption(f"em {len(dfh)} meses"
+                   + (f" · site {md(fmt_brl(int(dfh.fat_site.sum())))}, loja {md(fmt_brl(int(dfh.fat_loja.sum())))}"
+                      if visao == omni.CONSOLIDADO else ""))
         t2.metric("Vendas", f"{vendas}")
-        t2.caption(f"de {tent} compras tentadas")
+        if site:
+            t2.caption(f"de {tent + int(dfh.vendas_loja.sum())} compras tentadas" if visao == omni.CONSOLIDADO
+                       else f"de {tent} compras tentadas")
         t3.metric("Ticket médio", fmt_brl(int(fat / vendas)) if vendas else "—")
 
         t4, t5, t6 = st.columns(3)
-        t4.metric("Aprovação", fmt_pct(vendas / tent * 100, 0) if tent else "—")
-        t4.caption(f"{perd} não entraram")
+        if site:
+            t4.metric("Aprovação" + (" no site" if visao == omni.CONSOLIDADO else ""),
+                      fmt_pct(int(dfh.vendas_site.sum()) / tent * 100, 0) if tent else "—")
+            t4.caption(f"{perd} não entraram")
+        else:
+            t4.metric("Vendas por mês", f"{vendas / len(dfh):.1f}".replace(".", ","))
         t5.metric("Custo", fmt_pct(custo / fat * 100) if fat else "—")
         t5.caption(f"{md(fmt_brl(custo))} em taxas e antecipação")
         t6.metric("Líquido", fmt_brl(fat - custo))
@@ -3102,11 +3398,21 @@ if "Histórico" in abas:
         g["Vendas "] = g["vendas"]
         with cartao_fat:
             st.subheader("Faturamento por mês")
-            st.altair_chart(
-                barras(g, "Mês", "Faturamento", rotulo="Rotulo",
-                       tooltip=["Mês", "Valor", "Vendas "], altura=280),
-                use_container_width=True,
-            )
+            if visao == omni.CONSOLIDADO:
+                emp = pd.concat([
+                    pd.DataFrame({"Mês": g["Mês"], "canal": omni.DIGITAL, "Valor": g.fat_site / 100,
+                                  "Vendido": g.fat_site.map(fmt_brl)}),
+                    pd.DataFrame({"Mês": g["Mês"], "canal": omni.FISICO, "Valor": g.fat_loja / 100,
+                                  "Vendido": g.fat_loja.map(fmt_brl)}),
+                ], ignore_index=True)
+                st.altair_chart(barras_canal(emp, "Mês", "Valor", "canal", tooltip=["Mês", "canal", "Vendido"], altura=280),
+                                use_container_width=True)
+            else:
+                st.altair_chart(
+                    barras(g, "Mês", "Faturamento", rotulo="Rotulo",
+                           tooltip=["Mês", "Valor", "Vendas "], altura=280),
+                    use_container_width=True,
+                )
 
         c_esq, c_dir = st.columns(2, gap="large")
         with c_esq.container(border=True):
@@ -3120,45 +3426,58 @@ if "Histórico" in abas:
                 use_container_width=True,
             )
         with c_dir.container(border=True):
-            st.subheader("Aprovação")
-            g["Aprovação"] = g["aprovacao"].round(1)
-            g["Não entraram"] = g["perdidas"]
-            g["RotAprov"] = g["aprovacao"].apply(lambda x: fmt_pct(x, 0))
-            st.altair_chart(
-                barras(g, "Mês", "Aprovação", rotulo="RotAprov",
-                       tooltip=["Mês", "Aprovação", "Vendas ", "Não entraram"], altura=220),
-                use_container_width=True,
-            )
+            if site:
+                st.subheader("Aprovação" + (" no site" if visao == omni.CONSOLIDADO else ""))
+                ga = g[g.tentativas > 0].copy()
+                ga["Aprovação"] = ga["aprovacao"].round(1)
+                ga["Não entraram"] = ga["perdidas"]
+                ga["RotAprov"] = ga["aprovacao"].apply(lambda x: fmt_pct(x, 0))
+                st.altair_chart(
+                    barras(ga, "Mês", "Aprovação", rotulo="RotAprov",
+                           tooltip=["Mês", "Aprovação", "Vendas ", "Não entraram"], altura=220),
+                    use_container_width=True,
+                )
+            else:
+                st.subheader("Vendas por mês")
+                g["RotVendas"] = g["vendas"].astype(str)
+                st.altair_chart(
+                    barras(g, "Mês", "Vendas ", rotulo="RotVendas", tooltip=["Mês", "Vendas "], altura=220),
+                    use_container_width=True,
+                )
 
         st.divider()
         st.subheader("Tabela")
-        linhas_hist = pd.DataFrame({
-            "Mês": dfh["Mês"],
-            "Faturamento": dfh["faturamento"].apply(fmt_brl),
-            "Vendas": dfh["vendas"],
-            "Ticket médio": dfh["ticket"].apply(fmt_brl),
-            "Não entraram": dfh["perdidas"],
-            "Aprovação": dfh["aprovacao"].apply(lambda x: fmt_pct(x, 0)),
+        linhas_hist = {"Mês": dfh["Mês"], "Faturamento": dfh["faturamento"].apply(fmt_brl)}
+        if visao == omni.CONSOLIDADO:
+            linhas_hist["Site"] = dfh["fat_site"].apply(fmt_brl)
+            linhas_hist["Loja"] = dfh["fat_loja"].apply(fmt_brl)
+        linhas_hist.update({"Vendas": dfh["vendas"], "Ticket médio": dfh["ticket"].apply(fmt_brl)})
+        if site:
+            linhas_hist["Não entraram"] = dfh["perdidas"]
+            linhas_hist["Aprovação" + (" site" if visao == omni.CONSOLIDADO else "")] = \
+                dfh.apply(lambda r: fmt_pct(r.aprovacao, 0) if r.tentativas else "", axis=1)
+        linhas_hist.update({
             "Custo": dfh["custo"].apply(fmt_brl),
             "Custo %": dfh["custo_pct"].apply(lambda x: fmt_pct(x)),
             "Líquido": dfh["liquido"].apply(fmt_brl),
         })
-        tabela(linhas_hist,
-               num=("Faturamento", "Vendas", "Ticket médio", "Não entraram",
-                    "Aprovação", "Custo", "Custo %", "Líquido"))
+        linhas_hist = pd.DataFrame(linhas_hist)
+        tabela(linhas_hist, num=[c for c in linhas_hist.columns if c != "Mês"])
         st.download_button(
             "Exportar CSV",
             data=linhas_hist.to_csv(index=False).encode("utf-8"),
-            file_name="historico_mensal.csv",
+            file_name=f"historico_mensal_{visao.lower()}.csv",
             mime="text/csv",
         )
         st.caption(
-            "Faturamento e ticket consideram apenas cobranças pagas. Aprovação é "
-            "venda sobre compra tentada, com o mesmo agrupamento da aba Vendas: "
-            "quem tentou duas vezes conta uma, e quem falhou e pagou em seguida "
-            "não conta como perda. Custo é a soma de taxa e antecipação dos "
-            "recebíveis dessas vendas. Meses anteriores à primeira sincronização "
-            "de recebíveis aparecem com custo zerado."
+            ("Site: faturamento e ticket consideram apenas cobranças pagas da Pagar.me. Aprovação é "
+             "venda sobre compra tentada, com o mesmo agrupamento da aba Vendas: "
+             "quem tentou duas vezes conta uma, e quem falhou e pagou em seguida "
+             "não conta como perda. Custo é a soma de taxa e antecipação dos "
+             "recebíveis dessas vendas. " if site else "")
+            + ("Loja: maquininha e link no cartão pelo bruto da Stone, com a taxa dela no custo; Pix direto pelo "
+               "extrato, sem taxa. Mês sem venda registrada na API da Stone usa o repasse líquido do extrato. "
+               if omni.ver_fisico(visao) else "")
         )
 
 

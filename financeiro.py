@@ -1723,3 +1723,74 @@ def projetar(fluxo: pd.DataFrame, meses: int, receita_liquida_mensal: float,
         "vpl": vpl(fluxos, taxa_desconto),
         "vpl_realizado": vpl(list(realizado.saldo_operacional), taxa_desconto),
     }
+
+
+# ─── Visão por canal (portal omni, 12/10/2026) ──────────────────────────────
+#
+# O PnL consolidado não muda. Por canal, cada um leva só o que é dele:
+# receita, desconto, estorno, taxa do meio de pagamento, imposto na mesma
+# alíquota e CMV. Meta, agência e o resto das despesas são da empresa toda e
+# não se dividem por canal sem uma regra de rateio, então a última linha do
+# canal é a margem de contribuição, não o resultado.
+
+def pnl_por_canal(t: pd.DataFrame, canal: str, imposto: float = IMPOSTO_PADRAO) -> pd.DataFrame:
+    """A tabela do PnL com as mesmas colunas, recortada no canal."""
+    if canal not in ("Digital", "Físico"):
+        return t
+    c = t.copy()
+    zero = 0.0
+    if canal == "Digital":
+        c["receita_maquininha"] = zero
+        c["receita_pix_direto"] = zero
+        c["receita_fisica"] = zero
+        c["receita_bruta"] = t.receita_site
+        c["receita_liquida"] = t.receita_site_liquida
+        c["taxas_stone"] = zero
+        c["taxas"] = t.taxas_pagarme
+        c["cmv_fisico_estimado"] = zero
+        c["cmv"] = t.cmv_site
+    else:
+        c["receita_site"] = zero
+        c["receita_site_liquida"] = zero
+        c["desconto_pix"] = zero
+        c["estornos"] = zero
+        c["pedidos"] = 0
+        c["receita_bruta"] = t.receita_fisica
+        c["receita_liquida"] = t.receita_fisica
+        c["taxas_pagarme"] = zero
+        c["taxas"] = t.taxas_stone
+        c["cmv_site"] = zero
+        c["cmv"] = t.cmv_fisico_estimado
+    c["imposto"] = c.receita_liquida * imposto
+    c["margem_bruta"] = c.receita_liquida - c.taxas - c.imposto - c.cmv
+    c["marketing"] = zero
+    c["despesas_outras"] = zero
+    c["despesas"] = zero
+    c["resultado"] = c.margem_bruta
+    c["resultado_acumulado"] = c.resultado.cumsum()
+    return c
+
+
+def orcado_por_canal(orc: dict, canal: str, imposto: float = IMPOSTO_PADRAO) -> dict:
+    """As linhas do orçamento congelado recortadas no canal, com os mesmos rótulos."""
+    if canal not in ("Digital", "Físico") or not orc:
+        return orc
+    g = lambda k: float(orc.get(k, 0.0) or 0.0)
+    if canal == "Digital":
+        bruta = g("Receita do site (Shopify)")
+        liquida = bruta - g("(-) Desconto Pix") - g("(-) Estornos")
+        taxas, cmv = g("(-) Taxas Pagar.me"), g("(-) CMV do site")
+        linhas = {"Pedidos no site": g("Pedidos no site"), "Receita do site (Shopify)": bruta,
+                  "(-) Desconto Pix": g("(-) Desconto Pix"), "(-) Estornos": g("(-) Estornos"),
+                  "(-) Taxas Pagar.me": taxas, "(-) CMV do site": cmv}
+    else:
+        maq, pix = g("Maquininha (líquido de MDR)"), g("Pix direto e link")
+        bruta = liquida = maq + pix
+        taxas, cmv = 0.0, g("(-) CMV fora do site (estimado)")
+        linhas = {"Maquininha (líquido de MDR)": maq, "Pix direto e link": pix,
+                  "(-) Taxas Stone": 0.0, "(-) CMV fora do site (estimado)": cmv}
+    imp = liquida * imposto
+    linhas.update({"Receita bruta": bruta, "Receita líquida": liquida, "(-) Imposto": imp,
+                   "(-) CMV": cmv, "Margem bruta": liquida - taxas - imp - cmv,
+                   "Resultado": liquida - taxas - imp - cmv})
+    return linhas
