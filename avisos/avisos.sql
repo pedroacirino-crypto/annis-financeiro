@@ -466,12 +466,15 @@ end $$;
 -- ("produzida em até 10 dias úteis", "Prazo de produção 10 dias úteis").
 -- Postado é pedido marcado como enviado na Shopify, o que a baixa faz quando
 -- os Correios registram a coleta, ou com baixa anotada em avisos.enviados.
-create or replace function avisos.status_pedidos() returns text
+drop function if exists avisos.status_pedidos();
+-- `alvo` é o dia de postagem que a mensagem olha: hoje na mensagem das 12h,
+-- o próximo dia útil no fechamento das 23h. Prazo antes do alvo é atraso.
+create or replace function avisos.status_pedidos(alvo date default null) returns text
 language plpgsql security definer set search_path = extensions, public as $$
 declare
   fuso constant text := 'America/Sao_Paulo';
   hoje date := (now() at time zone fuso)::date;
-  amanha date := avisos.somar_dias_uteis(hoje, 1);
+  amanha date := coalesce(alvo, avisos.somar_dias_uteis(hoje, 1));
   dias text[] := array['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
   d jsonb; postar text := ''; atraso text := ''; producao text := '';
   n_postar int := 0; n_atraso int := 0; n_producao int := 0;
@@ -509,7 +512,7 @@ begin
     )
     select *, avisos.somar_dias_uteis(base, dias_producao) as prazo from b order by 7, 1
   loop
-    if r.prazo <= hoje then
+    if r.prazo < amanha then
       n_atraso := n_atraso + 1;
       atraso := atraso || E'\n- ' || r.nome || ' ' || r.cliente || ' · era até ' || to_char(r.prazo, 'DD/MM');
     elsif r.prazo = amanha then
@@ -521,7 +524,8 @@ begin
     end if;
   end loop;
   return E'Status dos pedidos'
-    || E'\nPara postar ' || dias[extract(isodow from amanha)::int] || ' ' || to_char(amanha, 'DD/MM') || ': '
+    || E'\nPara postar ' || case when amanha = hoje then 'hoje, ' else '' end
+      || dias[extract(isodow from amanha)::int] || ' ' || to_char(amanha, 'DD/MM') || ': '
       || n_postar || postar
     || E'\nAtrasados: ' || n_atraso || atraso
     || case when n_producao > 0 then E'\nSob encomenda, em produção: ' || n_producao || producao else '' end;

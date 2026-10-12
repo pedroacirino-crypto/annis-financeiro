@@ -2,7 +2,8 @@
 
 Combinado com a loja: em dia útil, por volta de 12h05, chega no grupo do
 Telegram um único PDF com os pedidos pagos até as 12h que ainda não foram
-impressos. Primeiro as etiquetas, 4 por folha (layout padrão dos Correios),
+impressos, seguido do status dos pedidos de hoje (o que tem de ser postado
+hoje, o que está atrasado e o que está em produção). Primeiro as etiquetas, 4 por folha (layout padrão dos Correios),
 depois as DANFEs na mesma ordem, para casar etiqueta e nota na hora de
 embalar. Pedido pago depois das 12h fica para o dia útil seguinte; fim de
 semana e feriado nacional não têm PDF.
@@ -91,6 +92,18 @@ def etiquetas_juntas(ids: list, destino: str) -> None:
     raise RuntimeError(f"Correios: rótulo do recibo {recibo} não ficou pronto em 3 minutos")
 
 
+def status_de_hoje(dia: dt.date) -> str:
+    """Status dos pedidos com o dia de hoje como alvo de postagem: o que tem de
+    sair hoje, o que já está atrasado e o que está em produção. A regra é a do
+    fechamento das 23h (avisos.status_pedidos, no Supabase); aqui só muda o
+    dia que a mensagem olha (pedido do Pedro, 12/10/2026)."""
+    try:
+        with nuvem._conectar().connect() as con:
+            return con.execute(text("select avisos.status_pedidos(:d)"), {"d": dia}).scalar() or ""
+    except Exception as erro:
+        return f"Status dos pedidos: não consegui montar ({str(erro)[:120]})"
+
+
 def anotar(numero: str) -> None:
     with nuvem._conectar().begin() as con:
         con.execute(text("insert into avisos.enviados (id, tipo) values (:id, 'pdf do dia') on conflict do nothing"),
@@ -113,7 +126,8 @@ def main(forcar: bool = False) -> None:
         if pago_ate(pedido, limite):
             lista.append({**p, "pedido": pedido})
     if not lista:
-        danfe.mensagem(f"Envios de {agora:%d/%m}: nenhum pedido novo para imprimir.")
+        danfe.mensagem(f"Envios de {agora:%d/%m}: nenhum pedido novo para imprimir.\n\n"
+                       + status_de_hoje(agora.date()))
         return
 
     from pypdf import PdfWriter
@@ -156,6 +170,7 @@ def main(forcar: bool = False) -> None:
 
     for p in lista:
         anotar(p["numero"])
+    danfe.mensagem(status_de_hoje(agora.date()))
     print(f"PDF com {len(lista)} pedidos")
 
 
