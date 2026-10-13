@@ -175,7 +175,9 @@ def _servico(titulo: str) -> str:
     t = (titulo or "").upper()
     if "SEDEX" in t:
         return os.environ.get("CORREIOS_SERVICO_SEDEX", "03220")
-    if "PAC" in t:
+    # Jadlog vem da Frenet enquanto ela não some da cotação; o Pedro decidiu
+    # (12/10/2026) postar esses pedidos por PAC, que tem prazo parecido.
+    if "PAC" in t or "JADLOG" in t:
         return os.environ.get("CORREIOS_SERVICO_PAC", "03298")
     raise RuntimeError(f"frete '{titulo}' não é PAC nem SEDEX")
 
