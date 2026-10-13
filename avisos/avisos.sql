@@ -506,7 +506,11 @@ begin
         and not exists (select 1 from avisos.enviados e
                         where e.id = 'baixa:' || ltrim(n ->> 'name', '#') and e.tipo like 'enviado%')
     ), b as (
-      select *, case when avisos.dia_util(quando::date) and extract(hour from quando) < 12
+      -- Sob encomenda conta a produção a partir do dia da compra, sem o corte
+      -- das 12h: é a mesma conta do checkout (Frenet, 13/10/2026), postar em
+      -- compra + dias de produção. O corte vale só para peça pronta.
+      select *, case when dias_producao > 0 then quando::date
+                     when avisos.dia_util(quando::date) and extract(hour from quando) < 12
                      then quando::date else avisos.somar_dias_uteis(quando::date, 1) end as base
       from p
     )
