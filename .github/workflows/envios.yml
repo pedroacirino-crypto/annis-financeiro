@@ -52,3 +52,18 @@ jobs:
           CORREIOS_CARTAO: ${{ secrets.CORREIOS_CARTAO }}
           CORREIOS_AMBIENTE: ${{ vars.CORREIOS_AMBIENTE }}
         run: python avisos/envios.py ${{ inputs.modo == 'baixa' && '--baixa' || '' }} ${{ inputs.agora == 'sim' && '--agora' || '' }}
+
+      # Qualquer passo que quebre (instalação, Correios, Shopify, código) avisa no
+      # grupo; antes o PDF de 13/10 falhou calado e só se soube pela ausência.
+      - name: Avisar no grupo se falhar
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          O_QUE: ${{ inputs.modo == 'baixa' && 'A baixa dos pedidos postados' || 'O PDF dos envios de hoje' }}
+          LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -o /dev/null --retry 3 --connect-timeout 10 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${O_QUE} deu erro e não foi enviado. Detalhe: ${LINK}"
