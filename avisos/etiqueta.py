@@ -264,7 +264,7 @@ def etiqueta_pdf(id_prepostagem: str, destino: str) -> None:
 # ── Shopify ─────────────────────────────────────────────────────────────────
 
 _PEDIDO = """query($q: String!) { orders(first: 1, query: $q) { nodes {
-  id name email phone displayFulfillmentStatus
+  id name createdAt email phone displayFulfillmentStatus
   customer { displayName }
   shippingAddress { name address1 address2 city provinceCode zip phone }
   shippingLines(first: 1) { nodes { title } }
