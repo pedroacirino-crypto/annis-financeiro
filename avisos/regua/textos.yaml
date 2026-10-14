@@ -1,0 +1,220 @@
+# Textos da régua pós-compra (13/10/2026). Mudou aqui, muda o e-mail: o layout
+# fica em blocos.py e não precisa ser tocado para ajustar copy.
+#
+# Variáveis entre chaves são preenchidas com o pedido:
+#   {nome} primeiro nome da cliente      {pedido} número com #, ex. #1160
+#   {peca} nome curto da peça principal  {peca_nome} nome da peça com a cor
+#   {data_postagem} ex. "qui, 15/10"     {data_entrega} ex. "até 16/10"
+#   {hora_limite} hora em que o Pix expira, ex. "14h32"
+#   {servico} PAC ou SEDEX               {dias_producao} ex. 10
+#   {previsao_correios} data prevista dos Correios, ex. "qui, 15/10"
+#   Gênero da peça principal: {Seu}/{seu} (Seu/Sua), {o_seu} (o seu/a sua),
+#   {ele} (ele/ela), {feito} (feito/feita), {postado} (postado/postada)
+#
+# Regras (blueprint): você, frases curtas, sem emoji, sem travessão, sem
+# exclamação em sequência, datas no calendário, sem oferta.
+# "previa" é o texto cinza que a caixa de entrada mostra ao lado do assunto.
+#
+# Pedido com mais de uma peça: onde existir a mesma chave terminada em _plural,
+# ela é usada no lugar ("suas peças", Pedro 13/10). Pedido misto (pronta + sob
+# encomenda) usa as chaves terminadas em _misto, quando existirem.
+
+geral:
+  whatsapp: "554384557263"
+  whatsapp_mensagem: "Oi, é sobre o pedido {pedido}"
+  frase_whats: "Dúvidas? Responda este e-mail ou fale com a gente."
+  rodape: "Responda este e-mail se precisar de algo. A gente lê todos."
+  # Rodapé: cada item vira link. {whatsapp} é o link da conversa já com o pedido.
+  rodape_links:
+    - ["WhatsApp +55 43 8455-7263", "{whatsapp}"]
+    - ["Instagram", "https://www.instagram.com/annis____/"]
+    - ["annis.store", "https://annis.store"]
+  empresa: "CIRINO E PAGNAN LTDA · CNPJ 58.859.303/0001-44"
+
+e0:
+  assunto: "Recebemos seu pedido {pedido}"
+  previa: "Assim que o pagamento for confirmado, você recebe as datas."
+  faixa: "Pedido {pedido} · recebido"
+  eyebrow: "Pedido {pedido}"
+  titulo: "Recebemos seu pedido"
+  texto:
+    - "Oi, {nome}. Seu pedido chegou até a gente. Assim que o pagamento for confirmado, você recebe outro e-mail com a data de postagem e a previsão de entrega."
+  # Pagamento já aprovado na criação do pedido (cartão): o 2 chega logo em seguida.
+  previa_pago: "Pagamento aprovado. As datas chegam no próximo e-mail."
+  texto_pago:
+    - "Oi, {nome}. Recebemos seu pedido e seu pagamento já foi aprovado. Em seguida chega outro e-mail com a data de postagem e a previsão de entrega."
+  resumo: "Seu pedido"
+
+e1:
+  assunto: "Seu pedido {pedido} está reservado, falta o Pix"
+  previa: "O Pix vale até {hora_limite} de hoje."
+  faixa: "Pedido {pedido} · aguardando o Pix"
+  eyebrow: "Pedido {pedido}"
+  titulo: "Falta só o Pix para confirmar"
+  texto:
+    - "Oi, {nome}. Recebemos seu pedido e separamos suas peças. Depois das {hora_limite} o Pix expira e as peças voltam para a loja."
+  pix_titulo: "Pague até {hora_limite} de hoje"
+  pix_instrucao: "Abra o app do banco e leia o QR Code, ou copie o código."
+  pix_botao: "Copiar código Pix"
+  resumo: "Seu pedido"
+  frase_whats: "Precisa de um Pix novo? Responda este e-mail ou fale com a gente."
+
+e2_pronta:
+  assunto: "Pedido {pedido} confirmado"
+  previa: "Postagem prevista para {data_postagem}."
+  faixa: "Pedido {pedido} · confirmado"
+  hero_titulo: "Seu pedido foi confirmado"
+  hero_sub: "Pedido {pedido} · postagem prevista para {data_postagem}"
+  texto:
+    - "Oi, {nome}. Seu pagamento foi aprovado e seu pedido já está sendo separado. Assim que ele sair daqui, você recebe o código de rastreio neste e-mail."
+  resumo: "Resumo do pedido"
+
+e2_encomenda:
+  assunto: "Pedido {pedido} confirmado"
+  previa: "A produção começa agora. Postagem prevista para {data_postagem}."
+  faixa: "Pedido {pedido} · confirmado"
+  hero_titulo: "{Seu} {peca} vai ser {feito} para você"
+  hero_sub: "Pedido {pedido} · produção de {dias_producao} dias úteis"
+  etiqueta: "Sob encomenda · {dias_producao} dias úteis"
+  texto:
+    - "Oi, {nome}. Seu pagamento foi aprovado. {Seu} {peca} é {feito} sob encomenda no nosso ateliê, e a produção começa agora. No meio do caminho, a gente te conta como {ele} está."
+  hero_titulo_plural: "Suas peças vão ser feitas para você"
+  # Pedido misto (peça pronta junto com sob encomenda): sai tudo numa remessa só.
+  hero_titulo_misto: "Seu pedido foi confirmado"
+  texto_misto:
+    - "Oi, {nome}. Seu pagamento foi aprovado. Parte do seu pedido é feita sob encomenda no nosso ateliê, e a produção começa agora. Para chegar tudo junto, enviamos as peças numa remessa só, depois da produção."
+  texto_plural:
+    - "Oi, {nome}. Seu pagamento foi aprovado. Suas peças são feitas sob encomenda no nosso ateliê, e a produção começa agora. No meio do caminho, a gente te conta como elas estão."
+  resumo: "Resumo do pedido"
+
+e3:
+  assunto: "{Seu} {peca} está em produção"
+  previa: "Tudo dentro do prazo. Postagem prevista para {data_postagem}."
+  faixa: "Pedido {pedido} · em produção"
+  eyebrow: "Pedido {pedido}"
+  titulo: "{Seu} {peca} está sendo {feito} no ateliê"
+  texto:
+    - "Oi, {nome}. Passando para contar que {o_seu} {peca} segue dentro do prazo. Assim que {ele} sair daqui, você recebe o código de rastreio."
+  assunto_plural: "Suas peças estão em produção"
+  titulo_plural: "Suas peças estão sendo feitas no ateliê"
+  texto_plural:
+    - "Oi, {nome}. Passando para contar que suas peças seguem dentro do prazo. Assim que elas saírem daqui, você recebe o código de rastreio."
+
+e5:
+  assunto: "Uma atualização sobre o seu pedido {pedido}"
+  previa: "Sua peça precisou de mais alguns dias no ateliê."
+  faixa: "Pedido {pedido} · atualização"
+  eyebrow: "Pedido {pedido}"
+  titulo: "{Seu} {peca} precisou de mais alguns dias"
+  texto:
+    - "Oi, {nome}. {Seu} {peca} precisou de mais alguns dias no ateliê. Já estamos finalizando e avisamos assim que {ele} for {postado}."
+  previa_plural: "Suas peças precisaram de mais alguns dias no ateliê."
+  titulo_plural: "Suas peças precisaram de mais alguns dias"
+  texto_plural:
+    - "Oi, {nome}. Suas peças precisaram de mais alguns dias no ateliê. Já estamos finalizando e avisamos assim que forem postadas."
+  frase_whats: "Se quiser falar com a gente, é só responder este e-mail ou chamar no WhatsApp."
+
+# Pronta entrega que não foi postada até D+2 útil (a postagem normal é D+1).
+e5_pronta:
+  assunto: "Uma atualização sobre o seu pedido {pedido}"
+  previa: "A postagem do seu pedido atrasou. Pedimos desculpas."
+  faixa: "Pedido {pedido} · atualização"
+  eyebrow: "Pedido {pedido}"
+  titulo: "A postagem do seu pedido atrasou"
+  texto:
+    - "Oi, {nome}. Seu pedido ainda não foi postado, e o prazo que informamos já passou. Pedimos desculpas pela demora."
+    - "Assim que ele for postado, você recebe o código de rastreio por aqui."
+  frase_whats: "Se quiser falar com a gente, é só responder este e-mail ou chamar no WhatsApp."
+
+e6:
+  assunto: "Seu pedido {pedido} foi postado"
+  previa: "Código de rastreio dentro. Entrega prevista até {previsao_correios}."
+  faixa: "Pedido {pedido} · postado"
+  hero_titulo: "Seu pedido está a caminho"
+  hero_sub: "Saiu hoje pelos Correios · {servico}"
+  rastreio_previsao: "Entrega prevista até {previsao_correios}"
+  botao: "Rastrear nos Correios"
+  resumo: "Peças nesta remessa"
+  nota: "Nota fiscal anexada: NF-e {nota} (PDF e XML)"
+
+e7_atrasada:
+  assunto: "Seu pedido {pedido} segue a caminho"
+  previa: "A entrega passou da data prevista. Estamos acompanhando."
+  faixa: "Pedido {pedido} · acompanhando a entrega"
+  eyebrow: "Pedido {pedido}"
+  titulo: "Seu pedido segue a caminho"
+  texto:
+    - "Oi, {nome}. A entrega passou da data prevista pelos Correios. Estamos acompanhando e avisamos se precisar de algo de você."
+  rastreio_previsao: "Previsão dos Correios era {previsao_correios}"
+  botao: "Rastrear nos Correios"
+  frase_whats: "Algum problema com o endereço? Responda este e-mail ou fale com a gente."
+
+e7_tentativa:
+  assunto: "Os Correios tentaram entregar seu pedido {pedido}"
+  previa: "Haverá nova tentativa ou retirada na agência."
+  faixa: "Pedido {pedido} · acompanhando a entrega"
+  eyebrow: "Pedido {pedido}"
+  titulo: "Os Correios tentaram entregar seu pedido"
+  texto:
+    - "Oi, {nome}. Os Correios passaram para entregar seu pedido, mas a entrega não foi feita. Eles fazem uma nova tentativa ou deixam o pacote para retirada na agência."
+  rastreio_previsao: "Tentativa registrada em {data_evento}"
+  botao: "Rastrear nos Correios"
+  frase_whats: "Endereço errado ou incompleto? Responda este e-mail ou fale com a gente."
+
+e7_retirada:
+  assunto: "Seu pedido {pedido} está esperando por você"
+  previa: "Retire na agência dos Correios até {prazo_retirada}."
+  faixa: "Pedido {pedido} · aguardando retirada"
+  eyebrow: "Pedido {pedido}"
+  titulo: "Seu pedido está esperando por você"
+  texto:
+    - "Oi, {nome}. Os Correios deixaram seu pedido para retirada na agência abaixo. Leve um documento com foto e o código de rastreio."
+  agencia_rotulo: "Onde retirar"
+  rastreio_previsao: ""
+  botao: "Rastrear nos Correios"
+  frase_whats: "Não consegue retirar no prazo? Responda este e-mail ou fale com a gente."
+
+e8:
+  assunto: "Seu pedido {pedido} chegou"
+  previa: "Alguns cuidados para a sua peça durar."
+  faixa: "Pedido {pedido} · entregue"
+  hero_titulo: "Seu pedido chegou"
+  hero_sub: "Entregue hoje pelos Correios"
+  texto:
+    - "Oi, {nome}. A gente quer que {o_seu} {peca} te acompanhe por muito tempo, então separamos alguns cuidados."
+  previa_plural: "Alguns cuidados para as suas peças durarem."
+  texto_plural:
+    - "Oi, {nome}. A gente quer que suas peças te acompanhem por muito tempo, então separamos alguns cuidados."
+  # Quando nenhuma peça tem cuidados cadastrados lá embaixo:
+  texto_sem_cuidados:
+    - "Oi, {nome}. Seu pedido foi entregue. Esperamos que você goste."
+  cuidados_titulo: "Como cuidar"
+  previa_sem_cuidados: "Seu pedido foi entregue."
+  depois:
+    - "Ainda não recebeu? Responda este e-mail ou chame a gente no WhatsApp, que a gente vai atrás com os Correios. Se algo não ficou como você esperava, é só responder também."
+
+e9:
+  assunto: "Como ficou {o_seu} {peca}?"
+  previa: "Duas perguntas rápidas."
+  faixa: "Pedido {pedido} · duas perguntas rápidas"
+  eyebrow: "Pedido {pedido}"
+  titulo: "Como ficou {o_seu} {peca}?"
+  texto:
+    - "Oi, {nome}. Já deu para usar? A gente quer saber como {ele} ficou em você."
+  assunto_plural: "Como ficaram suas peças?"
+  titulo_plural: "Como ficaram suas peças?"
+  texto_plural:
+    - "Oi, {nome}. Já deu para usar? A gente quer saber como elas ficaram em você."
+  # Só bolsa ou acessório (não se veste): "o que achou".
+  assunto_acessorio: "O que achou {do_seu} {peca}?"
+  titulo_acessorio: "O que achou {do_seu} {peca}?"
+  texto_acessorio:
+    - "Oi, {nome}. Já deu para usar? A gente quer saber o que você achou."
+  pergunta_tamanho: "Como ficou o tamanho?"
+  opcoes_tamanho: ["Pequeno", "Certo", "Grande"]
+  pergunta_nota: "De 0 a 10, quanto você indicaria a Annis para uma amiga?"
+  nota_pontas: ["Nada provável", "Muito provável"]
+  comentario: "Escrever um comentário"
+
+# Cuidados do e-mail 8: vêm do campo Manutenção da descrição de cada produto
+# na Shopify (o texto da etiqueta). Para mudar, mudar a descrição do produto.

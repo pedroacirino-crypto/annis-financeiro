@@ -1,0 +1,1047 @@
+{%- comment -%}
+  Régua pós-compra (blueprint e e-mails no padrão), para o design validar.
+  Modelo de página "regua" em formato .liquid, sem o layout do tema: a página
+  sai igual ao regua-pos-compra.html, só com as imagens apontando para o CDN
+  da loja. Fica em annis.store/pages/regua-pos-compra, fora do menu e sem
+  indexação. Gerado por Code/ANNIS/regua-para-shopify.py; não editar aqui.
+{%- endcomment -%}
+{%- layout none -%}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+{%- raw -%}
+<title>Régua pós-compra Annis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=Poppins:wght@400;500;600&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap">
+<style>
+/* Layout: coluna de leitura de ~880px; no topo a jornada do pedido em trilho, depois um cartão por e-mail com a prévia do e-mail ao lado das regras. Só tema claro (pedido do Pedro). */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --paper: #fbf8f5;        /* fundo das prévias de e-mail, puxado do creme da Annis */
+  --ink: #2a2118;          /* texto principal, marrom quase preto */
+  --muted: #7a6b5e;        /* textos de apoio */
+  --line: #e9e1d8;         /* divisórias */
+  --brand: #68380a;        /* marrom do botão da loja */
+  --brand-soft: #f4ebe2;   /* fundo de chips e destaques */
+  --internal: #3d5a73;     /* contato interno (Telegram), azul ardósia */
+  --internal-soft: #e8eef3;
+  --done: #4f6b3a;         /* decisão tomada */
+  --font-display: "Poppins", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.125rem;
+  --step-2: 1.5rem;
+  --step-3: 2.125rem;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: var(--step-0); line-height: 1.55; }
+.wrap { max-width: 880px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 500; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: var(--step-3); line-height: 1.15; }
+h2 { font-size: var(--step-2); line-height: 1.2; }
+h3 { font-size: var(--step-1); line-height: 1.3; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-display); font-size: var(--step--1); letter-spacing: 0.14em; text-transform: uppercase; color: var(--brand); font-weight: 500; }
+.muted { color: var(--muted); }
+.mono { font-variant-numeric: tabular-nums; }
+
+/* Cabeçalho */
+header { display: grid; gap: 14px; }
+header .lead { font-size: var(--step-1); max-width: 62ch; }
+.byline { font-size: var(--step--1); color: var(--muted); }
+
+/* Jornada */
+.journey { display: grid; gap: 16px; }
+.track { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; border-top: 2px solid var(--brand); }
+.stage { padding: 14px 10px 0 0; display: grid; gap: 10px; align-content: start; position: relative; min-width: 0; }
+.stage::before { content: ""; position: absolute; top: -7px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--bg); border: 2px solid var(--brand); }
+.stage-name { font-family: var(--font-display); font-weight: 500; font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.08em; }
+.stage-note { font-size: var(--step--1); color: var(--muted); }
+.touch { display: block; text-decoration: none; color: var(--ink); background: var(--brand-soft); border-radius: 6px; padding: 7px 9px; font-size: var(--step--1); line-height: 1.35; }
+.touch b { font-family: var(--font-display); font-weight: 600; color: var(--brand); margin-right: 4px; }
+.touch.internal { background: var(--internal-soft); }
+.touch.internal b { color: var(--internal); }
+.touch:hover, .touch:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: var(--step--1); color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--brand-soft); border: 1px solid var(--brand); }
+.legend span.i::before { background: var(--internal-soft); border-color: var(--internal); }
+
+/* Regras gerais */
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 32px; margin: 0; padding: 0; list-style: none; }
+.rules li { display: grid; gap: 2px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rules strong { font-family: var(--font-display); font-weight: 500; }
+
+/* Cartão de e-mail */
+.mails { display: grid; gap: 40px; }
+.mail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 28px; padding-top: 28px; border-top: 1px solid var(--line); scroll-margin-top: 16px; }
+.mail-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.num { font-family: var(--font-display); font-weight: 600; color: var(--brand); font-size: var(--step-2); line-height: 1; font-variant-numeric: tabular-nums; }
+.mail.internal .num { color: var(--internal); }
+.tag { font-size: var(--step--1); background: var(--brand-soft); color: var(--brand); border-radius: 999px; padding: 2px 10px; font-weight: 500; }
+.mail.internal .tag { background: var(--internal-soft); color: var(--internal); }
+.meta { display: grid; gap: 14px; align-content: start; margin: 0; }
+.meta div { display: grid; gap: 2px; }
+.meta dt { font-family: var(--font-display); font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.meta dd { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: var(--step--1); border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; color: var(--muted); }
+
+/* Prévia de e-mail */
+.preview { display: grid; gap: 12px; min-width: 0; }
+.variants { display: flex; gap: 6px; flex-wrap: wrap; }
+.variants button { font: inherit; font-size: var(--step--1); border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.variants button[aria-pressed="true"] { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.variants button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.envelope { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.env-top { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; font-size: var(--step--1); }
+.env-top .subj { font-family: var(--font-display); font-weight: 500; font-size: var(--step-0); color: var(--ink); }
+.env-body { padding: 20px 18px 22px; display: grid; gap: 12px; background: var(--bg); margin: 12px; border-radius: 6px; }
+.env-body .logo { font-family: var(--font-display); letter-spacing: 0.32em; font-weight: 500; color: var(--brand); font-size: var(--step--1); }
+.env-body .btn { justify-self: start; background: var(--brand); color: #fff6f0; font-family: var(--font-display); font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.06em; padding: 9px 16px; border-radius: 2px; }
+.env-body .btn.wa { background: var(--bg); color: var(--brand); border: 1px solid var(--brand); }
+.env-body .box { border: 1px dashed var(--brand); color: var(--brand); border-radius: 4px; padding: 8px 10px; font-size: var(--step--1); }
+.env-body .sign { color: var(--muted); }
+.var { color: var(--brand); font-weight: 500; }
+.scale { display: flex; flex-wrap: wrap; gap: 4px; }
+.scale span { min-width: 26px; text-align: center; border: 1px solid var(--brand); color: var(--brand); border-radius: 3px; font-size: var(--step--1); padding: 2px 0; font-variant-numeric: tabular-nums; }
+.tg { background: var(--internal-soft); border-radius: 10px; padding: 14px 16px; font-size: var(--step-0); border: 1px solid var(--line); }
+.tg .who { font-family: var(--font-display); font-size: var(--step--1); color: var(--internal); margin-bottom: 4px; }
+
+/* Tabelas */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: var(--step--1); }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-display); font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; }
+td:first-child { font-weight: 500; white-space: nowrap; }
+
+/* Detalhe do pedido na prévia */
+.order { display: grid; gap: 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-block: 12px; font-size: var(--step--1); }
+.order-title { font-family: var(--font-display); font-weight: 500; font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.item { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.thumb { width: 44px; height: 58px; border-radius: 3px; background: linear-gradient(160deg, #e8dccf, #cdb9a4); }
+.item .name { font-weight: 500; }
+.item .opt { color: var(--muted); }
+.sums { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; font-variant-numeric: tabular-nums; }
+.sums .total { font-weight: 600; border-top: 1px solid var(--line); padding-top: 4px; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+.facts span { display: block; color: var(--muted); }
+.mini { display: flex; gap: 8px; align-items: center; font-size: var(--step--1); }
+.mini .thumb { width: 32px; height: 42px; }
+
+/* Galeria de blocos */
+.gallery { display: grid; gap: 36px; }
+.blk { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+.blk-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.blk-head h3 { font-size: var(--step-1); }
+.blk-head .used { font-size: var(--step--1); color: var(--muted); }
+.blk-head button { margin-left: auto; font: inherit; font-size: var(--step--1); border: 1px solid var(--brand); color: var(--brand); background: var(--bg); border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+.blk-head button:hover, .blk-head button:focus-visible { background: var(--brand-soft); outline: none; }
+.blk-desc { font-size: var(--step--1); color: var(--muted); max-width: 70ch; }
+.frames { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.frame { display: grid; gap: 6px; }
+.frame-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-family: var(--font-display); }
+.frame-box { overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: #fff6f0; }
+.frame-box > .em { transform-origin: top left; }
+dialog.zoom { border: 0; border-radius: 12px; padding: 0; width: min(1080px, 96vw); max-height: 92vh; background: var(--bg); color: var(--ink); }
+dialog.zoom::backdrop { background: rgba(42, 33, 24, 0.55); }
+.zoom-head { position: sticky; top: 0; background: var(--bg); display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); z-index: 1; }
+.zoom-head h3 { font-size: var(--step-1); }
+.zoom-head button { margin-left: auto; font: inherit; border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+.zoom-body { display: flex; gap: 24px; padding: 20px; overflow-x: auto; align-items: flex-start; }
+
+/* E-mail: estilos das peças (só valem dentro de .em). Linguagem do site: foto grande, marrom em área cheia, creme de fundo, texto preto. */
+.em { container-type: inline-size; background: #fff6f0; padding: 0; font-family: "Poppins", Arial, sans-serif; color: #1c1c1c; font-size: 14px; line-height: 1.6; text-align: left; }
+.em * { box-sizing: border-box; }
+.em p { margin: 0; }
+.em-sec { padding: 28px 44px; display: grid; gap: 14px; }
+.em-sec + .em-sec { padding-top: 4px; }
+.em-strip { background: #68380a; color: #fff6f0; text-align: center; font-size: 12px; letter-spacing: 0.08em; padding: 10px 16px; }
+.em-top { text-align: center; padding: 22px 0 18px; }
+.em-logo { width: 140px; height: auto; display: inline-block; }
+.em-hero { position: relative; display: block; }
+.em-hero img { width: 100%; height: 330px; object-fit: cover; display: block; }
+.em-hero .over { position: absolute; left: 0; right: 0; bottom: 0; padding: 70px 44px 28px; background: linear-gradient(to top, rgba(28, 18, 8, 0.62), rgba(28, 18, 8, 0)); color: #ffffff; display: grid; gap: 4px; }
+.em-hero .t { font-family: "Newsreader", Georgia, serif; font-weight: 300; font-size: 40px; line-height: 1.05; letter-spacing: -0.01em; }
+.em-hero .s { font-size: 13px; letter-spacing: 0.04em; opacity: 0.92; }
+.em-eyebrow { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #68380a; font-weight: 500; }
+.em-h { font-family: "Newsreader", Georgia, serif; font-weight: 300; font-size: 34px; line-height: 1.1; color: #1c1c1c; margin: 0; }
+.em-sub { font-family: "Newsreader", Georgia, serif; font-weight: 400; font-size: 22px; line-height: 1.2; color: #1c1c1c; margin: 0; }
+.em-muted { color: #6e6258; font-size: 12px; }
+.em-btn { display: inline-block; background: #68380a; color: #fff6f0; text-decoration: none; text-transform: uppercase; letter-spacing: 0.12em; font-size: 12px; font-weight: 500; padding: 16px 32px; text-align: center; }
+.em-btn.ghost { background: transparent; color: #68380a; border: 1px solid #68380a; }
+.em-center { text-align: center; }
+.em-items { display: grid; gap: 18px; }
+.em-item { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+.em-item img { width: 96px; height: 144px; object-fit: cover; background: #efe3d6; display: block; }
+.em-item .n { font-family: "Newsreader", Georgia, serif; font-size: 19px; line-height: 1.2; }
+.em-item .v { color: #6e6258; font-size: 12px; margin-top: 4px; }
+.em-item .p { font-variant-numeric: tabular-nums; font-size: 14px; white-space: nowrap; }
+.em-rule { border: 0; border-top: 1px solid #e6d5c4; margin: 0; }
+.em-sums { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.em-sums .t { font-family: "Newsreader", Georgia, serif; font-size: 22px; padding-top: 8px; border-top: 1px solid #e6d5c4; }
+.em-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; font-size: 13px; }
+.em-label { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: #68380a; display: block; margin-bottom: 4px; font-weight: 500; }
+.em-mini { display: flex; align-items: center; gap: 14px; }
+.em-mini .thumbs { display: flex; gap: 6px; flex: none; }
+.em-mini img { width: 56px; height: 84px; object-fit: cover; background: #efe3d6; display: block; }
+.em-mini .n { font-family: "Newsreader", Georgia, serif; font-size: 18px; line-height: 1.25; }
+.em-pix { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 24px; align-items: center; background: #ffffff; padding: 22px; }
+.em-qr { width: 168px; height: 168px; }
+.em-qr svg { width: 100%; height: 100%; display: block; }
+.em-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; background: #fff6f0; border: 1px solid #e6d5c4; padding: 9px 10px; color: #3d3a36; word-break: break-all; line-height: 1.4; }
+.em-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border-top: 1px solid #68380a; border-bottom: 1px solid #68380a; }
+.em-date { padding: 16px 0; }
+.em-date + .em-date { border-left: 1px solid #e6d5c4; padding-left: 22px; }
+.em-date .d { font-family: "Newsreader", Georgia, serif; font-weight: 300; font-size: 32px; line-height: 1.1; color: #68380a; }
+.em-tag { justify-self: start; display: inline-block; background: #68380a; color: #fff6f0; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; padding: 6px 12px; font-weight: 500; }
+.em-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: relative; }
+.em-steps::before { content: ""; position: absolute; top: 8px; left: 12.5%; right: 12.5%; border-top: 1px solid #c9ad93; }
+.em-step { display: grid; justify-items: center; gap: 8px; text-align: center; position: relative; }
+.em-dot { width: 17px; height: 17px; border-radius: 50%; background: #fff6f0; border: 1px solid #c9ad93; }
+.em-step.done .em-dot { background: #68380a; border-color: #68380a; }
+.em-step.now .em-dot { background: #fff6f0; border: 5px solid #68380a; }
+.em-step .s { font-size: 12px; color: #8a7a6c; line-height: 1.3; }
+.em-step.done .s, .em-step.now .s { color: #1c1c1c; }
+.em-step.now .s { font-weight: 600; color: #68380a; }
+.em-track { font-family: "Newsreader", Georgia, serif; font-size: 34px; font-weight: 300; letter-spacing: 0.06em; color: #68380a; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.em-link { color: #68380a; font-size: 12px; text-decoration: underline; }
+.em-attach { display: flex; align-items: center; gap: 12px; border-top: 1px solid #e6d5c4; padding-top: 14px; font-size: 13px; }
+.em-attach .doc { width: 26px; height: 32px; border: 1.5px solid #68380a; position: relative; flex: none; background: #ffffff; }
+.em-attach .doc::after { content: ""; position: absolute; left: 5px; right: 5px; top: 9px; height: 10px; border-top: 1.5px solid #68380a; border-bottom: 1.5px solid #68380a; }
+.em-care { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 22px; align-items: start; }
+.em-care img { width: 150px; height: 225px; object-fit: cover; display: block; }
+.em-care ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.em-care li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; font-size: 13px; padding-top: 10px; border-top: 1px solid #e6d5c4; }
+.em-care b { font-weight: 500; color: #68380a; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.14em; padding-top: 3px; }
+.em-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.em-choice span { border: 1px solid #68380a; color: #68380a; text-align: center; padding: 12px 4px; font-size: 13px; background: #ffffff; }
+.em-scale { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; }
+.em-scale span { background: #68380a; color: #fff6f0; text-align: center; padding: 10px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.em-ends { display: flex; justify-content: space-between; font-size: 11px; color: #6e6258; }
+.em-foot { text-align: center; padding: 30px 30px 26px; display: grid; gap: 10px; font-size: 11.5px; color: #68380a; line-height: 1.6; border-top: 1px solid #e6d5c4; }
+.em-foot img { width: 100%; max-width: 420px; height: auto; justify-self: center; }
+.em-foot a { color: #68380a; }
+@container (max-width: 480px) {
+  .em-sec { padding: 24px 20px; }
+  .em-logo { width: 110px; }
+  .em-hero img { height: 380px; }
+  .em-hero .over { padding: 50px 20px 20px; }
+  .em-hero .t { font-size: 28px; }
+  .em-h { font-size: 28px; }
+  .em-item { grid-template-columns: 76px minmax(0, 1fr); gap: 14px; }
+  .em-item img { width: 76px; height: 114px; }
+  .em-item .p { grid-column: 2; }
+  .em-cols { grid-template-columns: minmax(0, 1fr); }
+  .em-pix { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; padding: 18px; }
+  .em-btn { display: block; }
+  .em-date .d { font-size: 26px; }
+  .em-date + .em-date { padding-left: 14px; }
+  .em-track { font-size: 27px; }
+  .em-step .s { font-size: 11px; }
+  .em-care { grid-template-columns: minmax(0, 1fr); }
+  .em-care img { width: 100%; height: 220px; }
+  .em-scale span { padding: 9px 0; font-size: 12px; }
+}
+
+.tgm { background: #dfe6ec; padding: 22px 18px 26px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; display: grid; gap: 12px; }
+.tgm-top { font-size: 12px; color: #5b6b78; text-align: center; }
+.tgm-msg { justify-self: start; max-width: 88%; background: #ffffff; border-radius: 4px 14px 14px 14px; padding: 10px 14px 18px; font-size: 14px; line-height: 1.45; color: #1c1c1c; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+.tgm-who { display: block; font-size: 13px; font-weight: 600; color: #3d6f99; margin-bottom: 2px; }
+.tgm-time { position: absolute; right: 10px; bottom: 4px; font-size: 11px; color: #8a99a6; }
+
+/* Benchmarks */
+.bench { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.case { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+.case-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.case-head h3 { font-size: var(--step-0); font-weight: 600; }
+.case .where { font-size: var(--step--1); color: var(--muted); }
+.case .take { font-size: var(--step--1); border-top: 1px solid var(--line); padding-top: 8px; }
+.case .take b { font-family: var(--font-display); font-weight: 500; color: var(--brand); }
+.case.avoid .take b { color: #9a3b2b; }
+.case a { color: var(--brand); font-size: var(--step--1); font-weight: 500; }
+.ideas { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 70ch; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--step--1); }
+nav.toc a { color: var(--brand); text-decoration: none; border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+
+/* Decisões */
+.decisions { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.decisions li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; }
+.box-done, .box-open { width: 18px; height: 18px; border-radius: 4px; margin-top: 3px; border: 1.5px solid var(--done); display: grid; place-items: center; color: var(--bg); font-size: 12px; line-height: 1; }
+.box-done { background: var(--done); }
+.box-open { border-color: var(--muted); }
+.decisions strong { font-family: var(--font-display); font-weight: 500; }
+
+section { display: grid; gap: 18px; }
+section > .intro { max-width: 64ch; }
+
+@media (max-width: 760px) {
+  .track { grid-template-columns: minmax(0, 1fr); border-top: 0; border-left: 2px solid var(--brand); }
+  .stage { padding: 0 0 18px 18px; }
+  .stage::before { top: 2px; left: -8px; }
+  .rules { grid-template-columns: minmax(0, 1fr); }
+  .mail { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Annis · pós-compra · v1</p>
+  <h1>Régua pós-compra Annis</h1>
+  <p class="byline mono">Blueprint de 13/10/2026 · e-mails de pedidos@annis.store, enviados pelo Gmail a partir do nosso fluxo</p>
+  <p class="lead">Nove e-mails para a cliente e um alerta interno. O 0 é a confirmação da própria Shopify, que não desliga, refeita no nosso visual; os outros saem do nosso fluxo. Todos saem sozinhos, a partir de um dado que já temos: o pagamento, o prazo de produção e o rastreio dos Correios. Nenhum depende de alguém marcar etapa.</p>
+  <nav class="toc" aria-label="Seções"><a href="#h-jornada">Jornada</a><a href="#h-regras">Regras</a><a href="#h-emails">Contatos</a><a href="#h-prontos">E-mails no padrão</a><a href="#h-bench">Benchmarks</a><a href="#h-blocos">Blocos para o design</a><a href="#h-decisoes">Decisões</a></nav>
+</header>
+
+<section class="journey" aria-labelledby="h-jornada">
+  <h2 id="h-jornada">A jornada do pedido</h2>
+  <div class="track">
+    <div class="stage">
+      <span class="stage-name">Pedido feito</span>
+      <a class="touch" href="#e0"><b>0</b>Recebemos seu pedido</a>
+      <a class="touch" href="#e1"><b>1</b>Aguardando pagamento</a>
+      <span class="stage-note">0 sai pela Shopify, sempre; 1 só se o Pix não for pago em 15 min</span>
+    </div>
+    <div class="stage">
+      <span class="stage-name">Pago</span>
+      <a class="touch" href="#e2"><b>2</b>Pedido confirmado</a>
+    </div>
+    <div class="stage">
+      <span class="stage-name">Produção</span>
+      <a class="touch" href="#e3"><b>3</b>Metade da produção</a>
+      <a class="touch internal" href="#e4"><b>4</b>Alerta interno</a>
+      <a class="touch" href="#e5"><b>5</b>Produção atrasada</a>
+      <span class="stage-note">3 só sob encomenda; 4 e 5 só se não postar</span>
+    </div>
+    <div class="stage">
+      <span class="stage-name">Postado</span>
+      <a class="touch" href="#e6"><b>6</b>Postado</a>
+    </div>
+    <div class="stage">
+      <span class="stage-name">Em trânsito</span>
+      <a class="touch" href="#e7"><b>7</b>Exceção no rastreio</a>
+      <span class="stage-note">só se acontecer</span>
+    </div>
+    <div class="stage">
+      <span class="stage-name">Entregue</span>
+      <a class="touch" href="#e8"><b>8</b>Chegou + cuidados · no dia</a>
+      <a class="touch" href="#e9"><b>9</b>Avaliação · +6 dias</a>
+    </div>
+  </div>
+  <p class="legend"><span>e-mail para a cliente</span><span class="i">aviso no Telegram da loja</span></p>
+  <p class="muted intro"><strong>Prazo de postagem</strong>, o mesmo do checkout: peça pronta posta no dia da compra, ou no dia útil seguinte se a compra for depois das 12h. Sob encomenda posta na data da compra mais os dias de produção (10 nas bolsas, 15 na Loulou).</p>
+</section>
+
+<section aria-labelledby="h-regras">
+  <h2 id="h-regras">Regras para todos os e-mails</h2>
+  <ul class="rules">
+    <li><strong>Remetente e assinatura</strong><span>Annis, pedidos@annis.store. Aceita resposta: o que a cliente responder cai na caixa da loja, no fio do pedido.</span></li>
+    <li><strong>Datas no calendário</strong><span>Sempre "até quinta, 29/10", nunca "em 10 dias úteis".</span></li>
+    <li><strong>Sem oferta</strong><span>Nada de cupom, lançamento ou "veja também" nos e-mails de pedido.</span></li>
+    <li><strong>Saída sempre à vista</strong><span>Todo e-mail termina com "responda este e-mail ou chame a gente no WhatsApp", com o botão que abre a conversa já com o número do pedido.</span></li>
+    <li><strong>Tom</strong><span>Você, frases curtas, sem emoji, sem travessão, sem exclamação em sequência.</span></li>
+    <li><strong>Um e-mail por gatilho</strong><span>Cada contato sai uma vez por pedido. Pedido com várias peças recebe um e-mail só, falando de todas.</span></li>
+  </ul>
+</section>
+
+<section aria-labelledby="h-emails">
+  <h2 id="h-emails">Os contatos, um a um</h2>
+  <p class="muted intro">Variáveis em destaque, como <span class="var">{nome}</span>, são preenchidas com os dados do pedido. Onde há duas versões, os botões acima da prévia trocam entre elas.</p>
+
+  <div class="mails">
+
+  <!-- 0 -->
+  <article class="mail" id="e0">
+    <div class="mail-head"><span class="num">0</span><h3>Recebemos seu pedido</h3><span class="tag">todas · pela Shopify</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>Na hora em que o pedido é criado, Pix ou cartão. É a confirmação de pedido da Shopify: no plano Basic ela não desliga, então vira o nosso recibo.</dd></div>
+      <div><dt>Dados</dt><dd>Só o que o modelo de notificação da Shopify enxerga: peças, valores, forma de pagamento e endereço. Não tem o QR do Pix nem as datas de postagem e entrega, que ficam para o 1 e o 2.</dd></div>
+      <div><dt>Onde mora</dt><dd>Configurações &gt; Notificações &gt; Confirmação do pedido, com o nosso HTML. Trocado no dia da virada.</dd></div>
+      <div><dt>Blocos</dt><dd class="chips"><span class="chip">resumo do pedido</span><span class="chip">WhatsApp</span></dd></div>
+    </dl>
+    <div class="preview">
+      <div class="envelope">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Recebemos seu pedido <span class="var">{pedido}</span></span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <p>Seu pedido chegou até a gente. Assim que o pagamento for confirmado, você recebe outro e-mail com a data de postagem e a previsão de entrega.</p>
+          <div class="order">
+            <span class="order-title">Seu pedido {pedido} · exemplo</span>
+            <div class="item"><span class="thumb"></span><span><span class="name">Blazer de Linho Bege - Delaunay</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 528,00</span></div>
+            <div class="item"><span class="thumb"></span><span><span class="name">Calça de Linho Bege - Joan</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 348,00</span></div>
+            <div class="sums"><span>Subtotal</span><span>R$ 876,00</span><span>Frete (SEDEX)</span><span>R$ 25,29</span><span>Desconto Pix (5%)</span><span>-R$ 43,80</span><span class="total">Total</span><span class="total">R$ 857,49</span></div>
+            <div class="facts"><p><span>Pagamento</span>Pix</p><p><span>Entrega</span>{endereço}, {cidade}/{UF}, CEP {cep}</p></div>
+          </div>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- 1 -->
+  <article class="mail" id="e1">
+    <div class="mail-head"><span class="num">1</span><h3>Aguardando pagamento</h3><span class="tag">só Pix pendente</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>15 minutos depois do pedido, se o Pix ainda não foi pago. É lembrete para quem esqueceu: quem paga na tela de obrigado não recebe. Cartão também não recebe: a aprovação sai em minutos e ele vai direto para o 2.</dd></div>
+      <div><dt>Dados</dt><dd>Pedido da Shopify e o Pix da cobrança na Pagar.me (QR Code, copia e cola e hora em que expira), achado pelo código do pagamento que a Shopify guarda no pedido.</dd></div>
+      <div><dt>Blocos</dt><dd class="chips"><span class="chip">resumo do pedido</span><span class="chip">Pix</span><span class="chip">WhatsApp</span></dd></div>
+    </dl>
+    <div class="preview">
+      <div class="envelope">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Seu pedido <span class="var">{pedido}</span> está reservado, falta o Pix</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <p>Recebemos seu pedido e separamos suas peças. Para confirmar, falta só o pagamento do Pix, que vale até <span class="var">{hora_limite}</span> de hoje.</p>
+          <div class="box">QR Code do Pix e código copia e cola, com o botão Copiar</div>
+          <p>Depois desse horário o Pix expira e as peças voltam para a loja. Se precisar de um Pix novo, é só responder este e-mail ou chamar a gente no WhatsApp.</p>
+          <div class="order">
+            <span class="order-title">Seu pedido {pedido} · exemplo</span>
+            <div class="item"><span class="thumb"></span><span><span class="name">Blazer de Linho Bege - Delaunay</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 528,00</span></div>
+            <div class="item"><span class="thumb"></span><span><span class="name">Calça de Linho Bege - Joan</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 348,00</span></div>
+            <div class="sums"><span>Subtotal</span><span>R$ 876,00</span><span>Frete (SEDEX)</span><span>R$ 25,29</span><span>Desconto Pix (5%)</span><span>-R$ 43,80</span><span class="total">Total a pagar</span><span class="total">R$ 857,49</span></div>
+            <div class="facts"><p><span>Pagamento</span>Pix, aguardando</p><p><span>Entrega</span>{endereço}, {cidade}/{UF}, CEP {cep}</p></div>
+          </div>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- 2 -->
+  <article class="mail" id="e2">
+    <div class="mail-head"><span class="num">2</span><h3>Pedido confirmado</h3><span class="tag">todas</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>Pagamento aprovado: Pix pago ou cartão aprovado.</dd></div>
+      <div><dt>Dados</dt><dd>Pedido da Shopify; prazo de postagem pela regra da jornada; prazo de entrega igual à postagem mais o trânsito dos Correios no nosso contrato.</dd></div>
+      <div><dt>Blocos</dt><dd class="chips"><span class="chip">resumo do pedido</span><span class="chip">datas do pedido</span><span class="chip">linha do tempo</span><span class="chip">WhatsApp</span></dd></div>
+    </dl>
+    <div class="preview" data-variants>
+      <div class="variants" role="group" aria-label="Versão do e-mail 2">
+        <button type="button" id="v2a" aria-pressed="true" data-show="e2-pronta">Pronta entrega</button>
+        <button type="button" id="v2b" aria-pressed="false" data-show="e2-enc">Sob encomenda</button>
+      </div>
+      <div class="envelope" id="e2-pronta">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Pedido <span class="var">{pedido}</span> confirmado</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <p>Seu pagamento foi aprovado e seu pedido já está sendo separado.</p>
+          <div class="box">Postagem prevista: <span class="var">{data_postagem}</span>. Entrega prevista: até <span class="var">{data_entrega}</span>.</div>
+          <p>Assim que ele sair daqui, você recebe o código de rastreio neste e-mail. Qualquer dúvida, é só responder ou chamar a gente no WhatsApp.</p>
+          <div class="order">
+            <span class="order-title">Pedido {pedido} · exemplo</span>
+            <div class="item"><span class="thumb"></span><span><span class="name">Blazer de Linho Bege - Delaunay</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 528,00</span></div>
+            <div class="item"><span class="thumb"></span><span><span class="name">Calça de Linho Bege - Joan</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 348,00</span></div>
+            <div class="sums"><span>Subtotal</span><span>R$ 876,00</span><span>Frete (SEDEX)</span><span>R$ 25,29</span><span>Desconto Pix (5%)</span><span>-R$ 43,80</span><span class="total">Total pago</span><span class="total">R$ 857,49</span></div>
+            <div class="facts"><p><span>Pagamento</span>Pix, aprovado</p><p><span>Entrega</span>{endereço}, {cidade}/{UF}, CEP {cep}</p></div>
+          </div>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+      <div class="envelope" id="e2-enc" hidden>
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Pedido <span class="var">{pedido}</span> confirmado</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <p>Seu pagamento foi aprovado. A sua <span class="var">{peça}</span> é feita sob encomenda no nosso ateliê, e a produção começa agora.</p>
+          <div class="box">Postagem prevista: <span class="var">{data_postagem}</span>. Entrega prevista: até <span class="var">{data_entrega}</span>.</div>
+          <p>No meio da produção a gente te conta como ela está, e quando for postada você recebe o código de rastreio. Qualquer dúvida, é só responder ou chamar a gente no WhatsApp.</p>
+          <div class="order">
+            <span class="order-title">Pedido {pedido} · exemplo</span>
+            <div class="item"><span class="thumb"></span><span><span class="name">Bolsa de Jacquard Relíquia - Vinho</span><br><span class="opt">Sob encomenda · 1 un.</span></span><span class="mono">R$ 448,00</span></div>
+            <div class="sums"><span>Subtotal</span><span>R$ 448,00</span><span>Frete (SEDEX)</span><span>R$ 25,29</span><span class="total">Total pago</span><span class="total">R$ 473,29</span></div>
+            <div class="facts"><p><span>Pagamento</span>Cartão, 3x sem juros</p><p><span>Entrega</span>{endereço}, {cidade}/{UF}, CEP {cep}</p></div>
+          </div>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- 3 -->
+  <article class="mail" id="e3">
+    <div class="mail-head"><span class="num">3</span><h3>Metade da produção</h3><span class="tag">só sob encomenda</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>No dia útil que marca a metade da produção, contando da compra: 5º dia útil nas bolsas, 8º na Loulou. Só sai se o pedido ainda não foi postado.</dd></div>
+      <div><dt>Blocos</dt><dd class="chips"><span class="chip">linha do tempo</span><span class="chip">datas do pedido</span><span class="chip">WhatsApp</span></dd></div>
+    </dl>
+    <div class="preview">
+      <div class="envelope">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Sua <span class="var">{peça}</span> está em produção</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <p>Passando para contar que a sua <span class="var">{peça}</span> está sendo feita no ateliê e segue dentro do prazo.</p>
+          <div class="mini"><span class="thumb"></span><span>Bolsa de Jacquard Relíquia - Vinho · pedido {pedido}</span></div>
+          <p>A postagem continua prevista para <span class="var">{data_postagem}</span>, com entrega até <span class="var">{data_entrega}</span>. Assim que ela sair daqui, você recebe o código de rastreio.</p>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- 4 -->
+  <article class="mail internal" id="e4">
+    <div class="mail-head"><span class="num">4</span><h3>Alerta interno</h3><span class="tag">Telegram da loja</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>1 dia útil antes do prazo de postagem, se o pedido ainda não foi postado. Vale para pronta entrega e sob encomenda.</dd></div>
+      <div><dt>Onde</dt><dd>Grupo da loja no Telegram, junto do status das 12h, que já lista os atrasados.</dd></div>
+      <div><dt>Efeito</dt><dd>Se o pedido for postado até o fim do prazo, a cliente nunca recebe o e-mail 5.</dd></div>
+    </dl>
+    <div class="preview">
+      <div class="tg">
+        <p class="who">Avisos Annis</p>
+        <p>Vence amanhã (<span class="var">{data_postagem}</span>) e ainda não foi postado: <span class="var">{pedido}</span> <span class="var">{nome}</span>, <span class="var">{peça}</span>, <span class="var">{serviço}</span>.</p>
+      </div>
+    </div>
+  </article>
+
+  <!-- 5 -->
+  <article class="mail" id="e5">
+    <div class="mail-head"><span class="num">5</span><h3>Produção atrasada</h3><span class="tag">só se atrasar</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>No primeiro dia útil depois do prazo de postagem, se o pedido não foi postado. Sai uma vez por pedido; se o atraso continuar, o alerta interno segue todo dia.</dd></div>
+      <div><dt>Botão de WhatsApp</dt><dd>Abre a conversa com o número da loja e a mensagem pronta "Oi! Quero saber do meu pedido <span class="var">{pedido}</span>."</dd></div>
+    </dl>
+    <div class="preview" data-variants>
+      <div class="variants" role="group" aria-label="Versão do e-mail 5">
+        <button type="button" id="v5a" aria-pressed="true" data-show="e5-enc">Sob encomenda</button>
+        <button type="button" id="v5b" aria-pressed="false" data-show="e5-pronta">Pronta entrega</button>
+      </div>
+      <div class="envelope" id="e5-enc">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Uma atualização sobre o seu pedido <span class="var">{pedido}</span></span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <div class="mini"><span class="thumb"></span><span>Bolsa de Jacquard Relíquia - Vinho · pedido {pedido}</span></div>
+          <p>A sua <span class="var">{peça}</span> precisou de mais alguns dias no ateliê. Já estamos finalizando e avisamos assim que for postada.</p>
+          <p>Se quiser falar com a gente, é só responder este e-mail ou chamar no WhatsApp.</p>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+      <div class="envelope" id="e5-pronta" hidden>
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Uma atualização sobre o seu pedido <span class="var">{pedido}</span></span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <div class="mini"><span class="thumb"></span><span>Blazer de Linho Bege - Delaunay e mais 1 peça · pedido {pedido}</span></div>
+          <p>Seu pedido está levando um pouco mais do que o previsto para sair daqui. Já estamos cuidando dele e avisamos assim que for postado.</p>
+          <p>Se quiser falar com a gente, é só responder este e-mail ou chamar no WhatsApp.</p>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- 6 -->
+  <article class="mail" id="e6">
+    <div class="mail-head"><span class="num">6</span><h3>Postado</h3><span class="tag">todas</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>Primeiro registro de postagem do pacote no rastreio dos Correios. É o mesmo evento que já dispara a baixa na Shopify.</dd></div>
+      <div><dt>Dados</dt><dd>Código de rastreio, serviço, data prevista de entrega dos Correios (vem no próprio rastreio) e a nota fiscal (DANFE em PDF e XML) da pasta do pedido no Drive.</dd></div>
+      <div><dt>Link do rastreio</dt><dd>Direto no pacote, em rastreamento.correios.com.br com o código. Sem passar pela página geral dos Correios nem pelo app Shop.</dd></div>
+      <div><dt>Substitui</dt><dd>O e-mail de envio da Shopify. A baixa no app do celular passa a ser feita sem e-mail.</dd></div>
+      <div><dt>Blocos</dt><dd class="chips"><span class="chip">linha do tempo</span><span class="chip">código de rastreio</span><span class="chip">botão principal</span><span class="chip">nota anexada</span><span class="chip">WhatsApp</span></dd></div>
+    </dl>
+    <div class="preview">
+      <div class="envelope">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt; · anexos: nota fiscal (PDF e XML)</span><span class="subj">Seu pedido <span class="var">{pedido}</span> foi postado</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <p>Seu pedido saiu daqui hoje pelos Correios (<span class="var">{serviço}</span>). A entrega está prevista para até <span class="var">{data_entrega}</span>.</p>
+          <div class="box">Código de rastreio: <span class="var">{codigo_rastreio}</span></div>
+          <span class="btn">Rastrear nos Correios</span>
+          <div class="order">
+            <span class="order-title">Peças nesta remessa · exemplo</span>
+            <div class="item"><span class="thumb"></span><span><span class="name">Blazer de Linho Bege - Delaunay</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 528,00</span></div>
+            <div class="item"><span class="thumb"></span><span><span class="name">Calça de Linho Bege - Joan</span><br><span class="opt">PP · 1 un.</span></span><span class="mono">R$ 348,00</span></div>
+            <div class="sums"><span>Frete (SEDEX)</span><span>R$ 25,29</span><span class="total">Total pago</span><span class="total">R$ 857,49</span></div>
+            <div class="facts"><p><span>Pagamento</span>Pix</p><p><span>Entrega</span>{endereço}, {cidade}/{UF}, CEP {cep}</p></div>
+          </div>
+          <p>A nota fiscal do seu pedido vai anexada a este e-mail.</p>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- 7 -->
+  <article class="mail" id="e7">
+    <div class="mail-head"><span class="num">7</span><h3>Exceções no rastreio</h3><span class="tag">só se acontecer</span></div>
+    <div style="grid-column: 1 / -1; display: grid; gap: 14px; min-width: 0;">
+      <p class="intro">Cada exceção gera um e-mail para a cliente e um aviso no Telegram. A baixa de hoje só olha a pré-postagem; o rastreio dos pacotes em trânsito passa a ser consultado algumas vezes por dia, e é dele que saem o 7 e o 8. Desde agosto, houve 1 tentativa de entrega sem sucesso em 31 entregas acompanhadas.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Exceção</th><th>Quando</th><th>Assunto</th><th>O que diz</th></tr></thead>
+          <tbody>
+            <tr><td>Entrega atrasada</td><td>Passou a data prevista dos Correios e o pacote não foi entregue</td><td>Seu pedido {pedido} segue a caminho</td><td>A entrega passou da data prevista dos Correios; estamos acompanhando e avisamos se precisar de algo dela</td></tr>
+            <tr><td>Aguardando retirada</td><td>Correios registram objeto aguardando retirada</td><td>Seu pedido {pedido} está esperando por você</td><td>Onde retirar, até quando (prazo dos Correios) e o que levar</td></tr>
+            <tr><td>Tentativa sem sucesso</td><td>Correios registram tentativa de entrega não efetuada</td><td>Os Correios tentaram entregar seu pedido</td><td>Haverá nova tentativa ou retirada; se o endereço estiver errado, responder o e-mail</td></tr>
+            <tr><td>Devolvido ao remetente</td><td>Objeto em devolução</td><td>Sem e-mail automático</td><td>Só aviso interno: a loja chama a cliente para combinar o reenvio</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </article>
+
+  <!-- 8 -->
+  <article class="mail" id="e8">
+    <div class="mail-head"><span class="num">8</span><h3>Chegou, e os cuidados com a sua peça</h3><span class="tag">dia da entrega</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>No dia em que os Correios registram a entrega. Um e-mail só: aviso de chegada e cuidados juntos.</dd></div>
+      <div><dt>Não recebeu?</dt><dd>Linha fixa no e-mail para quando o rastreio diz entregue e o pacote não chegou (portaria, vizinho, registro errado).</dd></div>
+      <div><dt>Dados</dt><dd>As peças do pedido e o material de cada uma, que define o bloco de cuidados.</dd></div>
+      <div><dt>Sem "como trocar"</dt><dd>Quem tiver dúvida responde o e-mail, e a loja pode oferecer ajuste antes da troca.</dd></div>
+    </dl>
+    <div class="preview">
+      <div class="envelope">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Seu pedido <span class="var">{pedido}</span> chegou</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <div class="mini"><span class="thumb"></span><span>Blazer de Linho Bege - Delaunay · pedido {pedido}</span></div>
+          <p>Os Correios avisaram que seu pedido foi entregue hoje. A gente quer que a sua <span class="var">{peça}</span> te acompanhe por muito tempo, então separamos alguns cuidados:</p>
+          <div class="box">Bloco de cuidados do material da peça (tabela abaixo)</div>
+          <p>Ainda não recebeu? Responda este e-mail ou chame a gente no WhatsApp, que a gente vai atrás com os Correios.</p>
+          <p>Se algo não ficou como você esperava, é só responder também, que a gente resolve junto.</p>
+          <span class="btn wa">Falar no WhatsApp</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+    </div>
+    <div style="grid-column: 1 / -1; display: grid; gap: 10px; min-width: 0;">
+      <p class="muted">Rascunho dos cuidados, para conferir com as etiquetas das peças. Não bloqueia o resto.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Material</th><th>Peças</th><th>Cuidados</th></tr></thead>
+          <tbody>
+            <tr><td>Linho</td><td>Coleções de roupa</td><td>Lavar à mão ou no ciclo delicado, em água fria. Secar à sombra, estendida. Passar ainda úmida, do avesso. O linho amassa e fica mais macio com o uso.</td></tr>
+            <tr><td>Jacquard</td><td>Bolsa Relíquia, vestido Loulou</td><td>Limpar a seco. Manchas: pano úmido, sem esfregar. Guardar longe do sol.</td></tr>
+            <tr><td>Veludo</td><td>Bolsa Bijou</td><td>Não molhar. Escovar a seco no sentido do pelo. Guardar sem peso por cima.</td></tr>
+            <tr><td>Cetim</td><td>Bolsa Froufrou</td><td>Limpar a seco. Evitar perfume e cremes em contato direto. Guardar no saquinho.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </article>
+
+  <!-- 9 -->
+  <article class="mail" id="e9">
+    <div class="mail-head"><span class="num">9</span><h3>Avaliação, caimento e NPS</h3><span class="tag">entrega + 6 dias</span></div>
+    <dl class="meta">
+      <div><dt>Quando</dt><dd>6 dias depois da entrega. Antes disso a cliente ainda não usou a peça; a pesquisa indica de 5 a 7 dias para roupa.</dd></div>
+      <div><dt>Caimento</dt><dd>Só para roupa. Bolsa recebe só a nota de 0 a 10.</dd></div>
+      <div><dt>Um toque registra</dt><dd>Tocar na nota ou no caimento grava a resposta e abre uma página curta. Qualquer toque em e-mail abre o navegador; o que controlamos é o que aparece.</dd></div>
+      <div><dt>A página completa o que falta</dt><dd>Se ela começou pelo tamanho, a página pergunta a nota; se começou pela nota, pergunta o tamanho (só roupa). Responde ali mesmo, sem voltar ao e-mail. No máximo dois toques para as duas respostas. Com tudo respondido, aparece o link opcional para comentar.</dd></div>
+      <div><dt>Nota baixa</dt><dd>De 0 a 6, o link de comentário vira "Conta o que não foi bom?". Continua opcional, sem caixa de texto aberta.</dd></div>
+      <div><dt>Comentário é opcional</dt><dd>Um botão próprio no e-mail, "Escrever um comentário", abre a página com a caixa de texto. O comentário chega no portal, junto da nota e do pedido. Caixa de texto dentro do próprio e-mail não funciona no Gmail nem no Outlook.</dd></div>
+      <div><dt>Uso do caimento</dt><dd>Vira dica de tamanho na página do produto ("veste justo", "veste no tamanho").</dd></div>
+      <div><dt>Leitura</dt><dd>Com uns 40 pedidos por mês, são poucas respostas. Vale ler cada uma, não acompanhar a média. A loja não tem app de avaliações, então tudo fica com a gente.</dd></div>
+    </dl>
+    <div class="preview" data-variants>
+      <div class="envelope">
+        <div class="env-top"><span class="muted">De: Annis &lt;pedidos@annis.store&gt;</span><span class="subj">Como ficou a sua <span class="var">{peça}</span>?</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Oi, <span class="var">{nome}</span>.</p>
+          <div class="mini"><span class="thumb"></span><span>Blazer de Linho Bege - Delaunay · pedido {pedido}</span></div>
+          <p>Já deu para usar a sua <span class="var">{peça}</span>? A gente quer saber como ela ficou em você.</p>
+          <p>Como ficou o tamanho?</p>
+          <div class="scale" aria-hidden="true"><span style="min-width:72px">Pequeno</span><span style="min-width:72px">Certo</span><span style="min-width:72px">Grande</span></div>
+          <p>De 0 a 10, quanto você indicaria a Annis para uma amiga?</p>
+          <div class="scale" aria-hidden="true"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+          <p class="muted">Toque numa resposta: ela já fica registrada.</p>
+          <p>Quer contar mais sobre a peça?</p>
+          <span class="btn wa">Escrever um comentário</span>
+          <p class="sign">Annis</p>
+        </div>
+      </div>
+      <p class="eyebrow">Depois de tocar no tamanho, no e-mail</p>
+      <div class="envelope">
+        <div class="env-top"><span class="muted">annis.store/pages/sua-opiniao</span><span class="subj">Obrigada, <span class="var">{nome}</span></span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Recebemos: tamanho <span class="var">certo</span>.</p>
+          <p>E de 0 a 10, quanto você indicaria a Annis para uma amiga?</p>
+          <div class="scale" aria-hidden="true"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+          <p class="muted">Tocou na nota: a pergunta some, aparece "Obrigada por contar para a gente" e o link <u>Quer escrever um comentário?</u>, que abre a caixa de texto ali mesmo.</p>
+        </div>
+      </div>
+      <p class="eyebrow">Depois de tocar na nota, no e-mail</p>
+      <div class="variants" role="group" aria-label="Página depois da nota">
+        <button type="button" id="v9a" aria-pressed="true" data-show="e9-roupa">Roupa</button>
+        <button type="button" id="v9b" aria-pressed="false" data-show="e9-bolsa">Bolsa</button>
+      </div>
+      <div class="envelope" id="e9-roupa">
+        <div class="env-top"><span class="muted">annis.store/pages/sua-opiniao</span><span class="subj">Obrigada, <span class="var">{nome}</span></span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Recebemos sua nota <span class="var">9</span>.</p>
+          <p>E como ficou o tamanho?</p>
+          <div class="scale" aria-hidden="true"><span style="min-width:72px">Pequeno</span><span style="min-width:72px">Certo</span><span style="min-width:72px">Grande</span></div>
+          <p class="muted">Tocou no tamanho: a pergunta some, aparece "Obrigada por contar para a gente" e o link <u>Quer escrever um comentário?</u>.</p>
+        </div>
+      </div>
+      <div class="envelope" id="e9-bolsa" hidden>
+        <div class="env-top"><span class="muted">annis.store/pages/sua-opiniao</span><span class="subj">Obrigada, <span class="var">{nome}</span></span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>Recebemos sua nota <span class="var">9</span>. Obrigada por contar para a gente.</p>
+          <p class="muted"><u>Quer escrever um comentário?</u></p>
+        </div>
+      </div>
+      <p class="eyebrow">Depois de tocar em "Escrever um comentário"</p>
+      <div class="envelope">
+        <div class="env-top"><span class="muted">annis.store/pages/sua-opiniao</span><span class="subj">Conta pra gente</span></div>
+        <div class="env-body">
+          <span class="logo">ANNIS</span>
+          <p>O que você gostou, o que mudaria, como foi vestir a sua <span class="var">{peça}</span>.</p>
+          <div class="box" style="min-height:64px">Caixa de texto</div>
+          <span class="btn">Enviar</span>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  </div>
+</section>
+
+<section aria-labelledby="h-prontos">
+  <h2 id="h-prontos">Os e-mails no padrão</h2>
+  <p class="intro muted">O e-mail 0 da Shopify e os 9 contatos, montados com os blocos, na versão de computador e de celular. Use Ampliar para ver em tamanho real. Peças, valores e códigos são exemplos.</p>
+  <div class="gallery" id="mails-gallery"></div>
+</section>
+
+<section aria-labelledby="h-bench">
+  <h2 id="h-bench">Benchmarks</h2>
+  <p class="intro muted">E-mail de pós-compra só chega para quem compra. Aqui estão o que as marcas publicam sobre o pós-compra delas e e-mails reais guardados na galeria Really Good Emails. Cada link abre o original numa aba nova.</p>
+
+  <div class="bench">
+    <article class="case">
+      <div class="case-head"><h3>Haight</h3><span class="where">moda, Brasil · o básico do mercado</span></div>
+      <p>O FAQ só lista os e-mails, sem mostrar nenhum: confirmação, pagamento aprovado ou negado, enviado com rastreio e entregue. É a lista padrão de qualquer loja. Os dois fatos úteis: existe um e-mail de entregue, e a nota fiscal vai num e-mail próprio, com assunto fixo. A troca é pelo site, com um e-mail em cada etapa.</p>
+      <p class="take"><b>Para a Annis:</b> serve como piso, não como modelo. Para ver os e-mails de verdade, só comprando.</p>
+      <a href="https://www.haight.com.br/faq" target="_blank" rel="noopener">Ver o FAQ da Haight</a>
+    </article>
+
+    <article class="case">
+      <div class="case-head"><h3>Made In</h3><span class="where">utensílios, EUA · e-mail de entregue</span></div>
+      <p>No dia da entrega: "seu pedido chegou", guia de cuidados com a peça, "ainda não recebeu? avise a gente" e resposta direta ao e-mail.</p>
+      <p class="take"><b>Para a Annis:</b> junta o que temos no e-mail 8 com o aviso de entrega. Resolve também o caso do pacote que o rastreio dá como entregue e não chegou.</p>
+      <a href="https://reallygoodemails.com/emails/your-order-has-been-delivered-made-in" target="_blank" rel="noopener">Ver o e-mail</a>
+    </article>
+
+    <article class="case">
+      <div class="case-head"><h3>Vuori</h3><span class="where">roupa, EUA · pedido de avaliação</span></div>
+      <p>Foto da peça comprada e a nota em estrelas dentro do e-mail. Tocar numa estrela abre a página da avaliação já com a nota.</p>
+      <p class="take"><b>Para a Annis:</b> é o desenho do nosso e-mail 9. A foto da peça ajuda a cliente a lembrar do que está avaliando.</p>
+      <a href="https://reallygoodemails.com/emails/review-your-vuori-purchase" target="_blank" rel="noopener">Ver o e-mail</a>
+    </article>
+
+    <article class="case">
+      <div class="case-head"><h3>Going</h3><span class="where">serviço, EUA · pesquisa</span></div>
+      <p>Avisa no preview do e-mail: "três perguntas curtas, prometemos". A primeira pergunta (sim ou não) já está no e-mail; o resto continua na página.</p>
+      <p class="take"><b>Para a Annis:</b> mesmo fluxo que montamos. Vale copiar a promessa de brevidade na linha que aparece ao lado do assunto.</p>
+      <a href="https://reallygoodemails.com/emails/hey-smiles-davis-please-give-us-your-feedback" target="_blank" rel="noopener">Ver o e-mail</a>
+    </article>
+
+    <article class="case">
+      <div class="case-head"><h3>Christy Dawn</h3><span class="where">moda slow, EUA · pré-venda</span></div>
+      <p>Peça em pré-venda mostra a data estimada de envio no topo da página do produto. Pedido misturado manda primeiro a peça pronta, salvo se a cliente pedir para esperar.</p>
+      <p class="take"><b>Para a Annis:</b> a data na página da bolsa e da Loulou ajudaria antes da compra (hoje está só na descrição). Mandar em dois envios dobra o frete; não copiar.</p>
+      <a href="https://christydawn.com/pages/faq" target="_blank" rel="noopener">Ver o FAQ da Christy Dawn</a>
+    </article>
+
+    <article class="case">
+      <div class="case-head"><h3>Proper Cloth</h3><span class="where">camisa sob medida, EUA · produção</span></div>
+      <p>Mostra as etapas da produção no histórico do pedido ("sendo cortada e costurada") e deixa alterar o pedido por algumas horas, até ele ir para o corte.</p>
+      <p class="take"><b>Para a Annis:</b> sem sistema de produção, o nosso e-mail 3 (metade do prazo) é a versão possível desse acompanhamento.</p>
+      <a href="https://propercloth.com/reference/how-to-modify-an-outstanding-order/" target="_blank" rel="noopener">Ver a página da Proper Cloth</a>
+    </article>
+
+    <article class="case avoid">
+      <div class="case-head"><h3>Son de Flor</h3><span class="where">vestido de linho sob encomenda, Lituânia</span></div>
+      <p>Avisa na compra que a produção leva até 4 semanas e manda guia de tamanho com o vestido. Mesmo assim, as avaliações públicas reclamam de atraso sem aviso.</p>
+      <p class="take"><b>O que evitar:</b> prazo longo informado só uma vez. É o buraco que os nossos e-mails 3, 4 e 5 fecham.</p>
+      <a href="https://au.trustpilot.com/review/sondeflor.com?page=10" target="_blank" rel="noopener">Ver as avaliações</a>
+    </article>
+
+    <article class="case avoid">
+      <div class="case-head"><h3>Blume</h3><span class="where">bebidas, Canadá · "enquanto você espera"</span></div>
+      <p>O e-mail da espera vira vitrine: seis produtos com botão de comprar e convite para o Instagram.</p>
+      <p class="take"><b>O que evitar:</b> oferta dentro do e-mail de pedido. A cliente quer saber do pedido dela.</p>
+      <a href="https://reallygoodemails.com/emails/while-you-wait-for-your-order" target="_blank" rel="noopener">Ver o e-mail</a>
+    </article>
+
+    <article class="case avoid">
+      <div class="case-head"><h3>Aluf</h3><span class="where">moda, Brasil · troca</span></div>
+      <p>Status do pedido pelos e-mails e em "Meus pedidos". Para trocar, exige a DANFE com o motivo escrito no verso.</p>
+      <p class="take"><b>O que evitar:</b> atrito na troca. Quem não consegue trocar devolve ou reclama em público.</p>
+      <a href="https://aluf.com.br/trocas-e-devolucoes" target="_blank" rel="noopener">Ver a política da Aluf</a>
+    </article>
+  </div>
+
+  <h3>O que os benchmarks sugerem mudar</h3>
+  <ol class="ideas">
+    <li><strong>Aviso de entrega:</strong> feito. O e-mail 8 saiu do D+2 para o dia da entrega e junta chegada, cuidados e "ainda não recebeu?" num e-mail só.</li>
+    <li><strong>Data prevista na página da peça sob encomenda</strong>, além do checkout: "encomende hoje, postamos até 29/10".</li>
+    <li><strong>Foto da peça e promessa de brevidade no e-mail 9</strong>: "duas perguntas rápidas" na linha ao lado do assunto.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="h-blocos">
+  <h2 id="h-blocos">Blocos para o design</h2>
+  <p class="intro muted">Os e-mails são montados com as mesmas peças. Cada bloco aparece na largura de e-mail no computador (600 px) e no celular (375 px). Proposta para o time de design validar, na linguagem do site: faixa marrom no topo, foto da campanha de ponta a ponta, creme de fundo, fotos das peças em destaque, Newsreader fino nos títulos, Poppins no texto e o ANNIS grande no rodapé. O Gmail não carrega fonte da web; nele os títulos caem para Georgia e o texto para Arial, e o desenho foi pensado para continuar de pé assim. Peças, valores e códigos são exemplos.</p>
+  <div class="gallery" id="gallery"></div>
+  <dialog class="zoom" id="zoom" aria-labelledby="zoom-title">
+    <div class="zoom-head"><h3 id="zoom-title">Bloco</h3><button type="button" id="zoom-close">Fechar</button></div>
+    <div class="zoom-body" id="zoom-body"></div>
+  </dialog>
+  <details>
+  <summary class="muted" style="cursor:pointer">Lista dos blocos em tabela</summary>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Bloco</th><th>E-mails</th><th>O que mostra</th></tr></thead>
+      <tbody>
+        <tr><td>Cabeçalho</td><td class="mono">todos</td><td>Logo da Annis</td></tr>
+        <tr><td>Saudação e texto</td><td class="mono">todos</td><td>"Oi, {nome}." e o texto do e-mail</td></tr>
+        <tr><td>Detalhe do pedido</td><td class="mono">1, 2, 6</td><td>Como no e-mail da Shopify: foto, nome, cor, tamanho, quantidade e preço de cada peça; subtotal, cupom, frete com o serviço, desconto Pix e total; forma de pagamento e endereço de entrega</td></tr>
+        <tr><td>Peças do pedido (curto)</td><td class="mono">3, 5, 8, 9</td><td>Foto e nome das peças e o número do pedido, sem valores</td></tr>
+        <tr><td>Pix</td><td class="mono">1</td><td>QR Code, código copia e cola com botão Copiar e a hora em que expira</td></tr>
+        <tr><td>Datas do pedido</td><td class="mono">2, 3</td><td>Postagem e entrega previstas, com a marca de sob encomenda quando houver</td></tr>
+        <tr><td>Linha do tempo</td><td class="mono">2, 3, 6</td><td>Pago, produção, postado, entregue, com a etapa atual em destaque</td></tr>
+        <tr><td>Código de rastreio</td><td class="mono">6, 7</td><td>Código grande e copiável, serviço (SEDEX ou PAC)</td></tr>
+        <tr><td>Botão principal</td><td class="mono">6 e 7</td><td>Rastrear nos Correios, abre o site dos Correios com o código já digitado</td></tr>
+        <tr><td>Botão de WhatsApp</td><td class="mono">todos</td><td>Abre a conversa com a mensagem pronta e o número do pedido</td></tr>
+        <tr><td>Nota anexada</td><td class="mono">6</td><td>Uma linha dizendo que a nota fiscal vai em anexo</td></tr>
+        <tr><td>Cuidados com a peça</td><td class="mono">8</td><td>Um bloco por material</td></tr>
+        <tr><td>Pesquisa</td><td class="mono">9</td><td>Três botões de caimento e escala de 0 a 10</td></tr>
+        <tr><td>Rodapé</td><td class="mono">todos</td><td>Annis, CNPJ, Instagram, WhatsApp e "responda este e-mail"</td></tr>
+      </tbody>
+    </table>
+  </div>
+  </details>
+</section>
+
+<section aria-labelledby="h-decisoes">
+  <h2 id="h-decisoes">Decisões</h2>
+  <ul class="decisions">
+    <li><span class="box-done" aria-label="decidido">✓</span><span><strong>E-mails da Shopify:</strong> a confirmação do pedido não desliga no plano Basic. Ela vira o e-mail 0, "recebemos seu pedido", no nosso visual, com as peças e os valores; o modelo é trocado no dia da virada. Pagamento aprovado e envio saem só pelos nossos, e a baixa no app do celular passa a ser feita sem e-mail.</span></li>
+    <li><span class="box-done" aria-label="decidido">✓</span><span><strong>Pix no e-mail 1:</strong> a Shopify não guarda o Pix, só o código do pagamento. Esse código bate com a cobrança na Pagar.me, que tem o QR Code, o copia e cola e a hora em que expira (conferido no pedido #1149).</span></li>
+    <li><span class="box-done" aria-label="decidido">✓</span><span><strong>Avaliação pública:</strong> a loja não tem app de avaliações. O e-mail 9 fica com caimento e nota de 0 a 10, gravados por nós.</span></li>
+    <li><span class="box-done" aria-label="decidido">✓</span><span><strong>Assinatura:</strong> Annis.</span></li>
+    <li><span class="box-done" aria-label="decidido">✓</span><span><strong>Rastreio parado:</strong> os Correios não definem "parado", mas o rastreio traz a data prevista de entrega de cada pacote. A exceção virou "entrega atrasada": passou dessa data e não foi entregue. A mesma data entra no e-mail 6.</span></li>
+    <li><span class="box-done" aria-label="decidido">✓</span><span><strong>Por onde os e-mails saem:</strong> Gmail, por pedidos@annis.store, disparado pelo nosso fluxo (o mesmo que já gera nota, etiqueta e baixa).</span></li>
+    <li><span class="box-open" aria-label="em aberto"></span><span><strong>Cuidados por material:</strong> conferir os textos do e-mail 8 com as etiquetas das peças. Fica para depois e não bloqueia nada.</span></li>
+  </ul>
+</section>
+
+</div>
+
+<script>
+(function () {
+  var IMG = { logo: "https://annis.store/cdn/shop/files/Artboard_1_copy_6.png?width=600", logoClaro: "https://annis.store/cdn/shop/files/Artboard_1_copy_6.png?width=600", hero1: "https://annis.store/cdn/shop/files/628A2821.png?width=1400&format=pjpg", hero2: "https://annis.store/cdn/shop/files/628A2760.png?width=1400&format=pjpg", blazer: "https://cdn.shopify.com/s/files/1/0717/0005/4051/files/ANNIS_BLAZER_DELAUNAY_BEGE_03_d058dc5e-3ac2-4901-bad1-e11d94b50e26.png?v=1757516138&width=480&height=720&crop=center", calca: "https://cdn.shopify.com/s/files/1/0717/0005/4051/files/ANNIS_CALCA_JOAN_BEGE_01_84d0f0ef-65e2-42c5-ba1e-208cc9e0f89d.png?v=1751339827&width=480&height=720&crop=center", bolsa: "https://cdn.shopify.com/s/files/1/0717/0005/4051/files/628A1191-Edit.png?v=1779738240&width=480&height=720&crop=center" };
+
+  // QR de mentira, só para o desenho: padrão fixo gerado por semente.
+  function qr() {
+    var n = 25, s = 7, cells = "";
+    function rnd() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+    function finder(x, y) { return '<rect x="' + x + '" y="' + y + '" width="7" height="7" fill="#1c1c1c"/><rect x="' + (x + 1) + '" y="' + (y + 1) + '" width="5" height="5" fill="#fff"/><rect x="' + (x + 2) + '" y="' + (y + 2) + '" width="3" height="3" fill="#1c1c1c"/>'; }
+    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) {
+      var inF = (x < 8 && y < 8) || (x > 16 && y < 8) || (x < 8 && y > 16);
+      if (!inF && rnd() > 0.52) cells += '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="#1c1c1c"/>';
+    }
+    return '<svg viewBox="0 0 25 25" shape-rendering="crispEdges">' + cells + finder(0, 0) + finder(18, 0) + finder(0, 18) + '</svg>';
+  }
+
+  // Peças reutilizáveis: cada função devolve o HTML de um bloco.
+  var P = {
+    strip: function (t) { return '<div class="em-strip">' + t + '</div>'; },
+    header: function () { return '<div class="em-top"><img class="em-logo" src="' + IMG.logo + '" alt="ANNIS"></div>'; },
+    hero: function (img, t, s) { return '<div class="em-hero"><img src="' + img + '" alt=""><div class="over"><span class="t">' + t + '</span><span class="s">' + s + '</span></div></div>'; },
+    texto: function (eyebrow, h, ps) { return '<div class="em-sec">' + (eyebrow ? '<span class="em-eyebrow">' + eyebrow + '</span>' : '') + (h ? '<h1 class="em-h">' + h + '</h1>' : '') + ps.map(function (p) { return '<p>' + p + '</p>'; }).join("") + '</div>'; },
+    item: function (img, nome, v, preco) { return '<div class="em-item"><img src="' + img + '" alt=""><div><div class="n">' + nome + '</div><div class="v">' + v + '</div></div><div class="p">' + preco + '</div></div>'; },
+    detalhe: function (o) {
+      var itens = o.itens.map(function (i) { return P.item(i[0], i[1], i[2], i[3]); }).join("");
+      var sums = o.sums.map(function (s, k) { var last = k === o.sums.length - 1; return '<span' + (last ? ' class="t"' : '') + '>' + s[0] + '</span><span' + (last ? ' class="t"' : '') + '>' + s[1] + '</span>'; }).join("");
+      return '<div class="em-sec"><span class="em-eyebrow">' + o.titulo + '</span><div class="em-items">' + itens + '</div><hr class="em-rule"><div class="em-sums">' + sums + '</div><div class="em-cols"><p><span class="em-label">Pagamento</span>' + o.pagamento + '</p><p><span class="em-label">Entrega</span>Maria Exemplo<br>Rua das Flores, 120, ap. 32<br>São Paulo, SP · 01310-100</p></div></div>';
+    },
+    curto: function (imgs, nome, pedido) { return '<div class="em-sec"><div class="em-mini"><div class="thumbs">' + imgs.map(function (i) { return '<img src="' + i + '" alt="">'; }).join("") + '</div><div><div class="n">' + nome + '</div><div class="em-muted">Pedido ' + pedido + '</div></div></div></div>'; },
+    pix: function () { return '<div class="em-sec"><div class="em-pix"><div class="em-qr">' + qr() + '</div><div style="display:grid;gap:10px"><span class="em-eyebrow">Pix · R$ 857,49</span><p class="em-sub">Pague até 14h32 de hoje</p><p class="em-muted">Abra o app do banco e leia o QR Code, ou copie o código.</p><div class="em-code">00020126580014br.gov.bcb.pix0136a1f4…5204000053039865406857.495802BR</div><span class="em-btn">Copiar código Pix</span></div></div></div>'; },
+    datas: function (tag, post, ent) { return '<div class="em-sec">' + (tag ? '<span class="em-tag">' + tag + '</span>' : '') + '<div class="em-dates"><div class="em-date"><span class="em-label">Postagem prevista</span><div class="d">' + post + '</div></div><div class="em-date"><span class="em-label">Entrega prevista</span><div class="d">' + ent + '</div></div></div></div>'; },
+    linha: function (passos) { return '<div class="em-sec"><div class="em-steps">' + passos.map(function (p) { return '<div class="em-step ' + p[0] + '"><span class="em-dot"></span><span class="s">' + p[1] + '</span></div>'; }).join("") + '</div></div>'; },
+    rastreio: function (servico, prev) { return '<div class="em-sec"><span class="em-label">Código de rastreio · ' + servico + '</span><div class="em-track">AE011801002BR</div><p class="em-muted">' + prev + '</p></div>'; },
+    botao: function (t) { return '<div class="em-sec em-center"><span class="em-btn">' + t + '</span></div>'; },
+    whats: function (principal, frase) { return '<div class="em-sec em-center"><p class="em-muted">' + (frase || "Dúvidas? Responda este e-mail ou fale com a gente.") + '</p><span class="em-btn' + (principal ? '' : ' ghost') + '">Falar no WhatsApp</span><p class="em-muted">+55 43 8455-7263</p></div>'; },
+    nota: function () { return '<div class="em-sec"><div class="em-attach"><span class="doc"></span><span>Nota fiscal anexada: NF-e 000.248 (PDF e XML)</span></div></div>'; },
+    cuidados: function (img, material, linhas) { return '<div class="em-sec"><div class="em-care"><img src="' + img + '" alt=""><div style="display:grid;gap:12px"><p class="em-sub">Cuidados com o ' + material + '</p><ul>' + linhas.map(function (l) { return '<li><b>' + l[0] + '</b><span>' + l[1] + '</span></li>'; }).join("") + '</ul></div></div></div>'; },
+    pesquisa: function () { return '<div class="em-sec"><p class="em-sub">Como ficou o tamanho?</p><div class="em-choice"><span>Pequeno</span><span>Certo</span><span>Grande</span></div><p class="em-sub" style="margin-top:8px">De 0 a 10, quanto você indicaria a Annis para uma amiga?</p><div class="em-scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div><div class="em-ends"><span>Nada provável</span><span>Muito provável</span></div><p class="em-center"><a class="em-link">Escrever um comentário</a></p></div>'; },
+    rodape: function () { return '<div class="em-foot"><span>Responda este e-mail se precisar de algo. A gente lê todos.</span><span>WhatsApp +55 43 8455-7263 · Instagram · annis.store</span><img src="' + IMG.logo + '" alt="ANNIS"><span>CIRINO E PAGNAN LTDA · CNPJ 58.859.303/0001-44</span></div>'; },
+    telegram: function (linhas) { return '<div class="tgm"><div class="tgm-top">Avisos Annis · grupo da loja</div><div class="tgm-msg"><span class="tgm-who">Annis Avisos</span>' + linhas.join("<br>") + '<span class="tgm-time">12:00</span></div></div>'; }
+  };
+
+  var ROUPA = [[IMG.blazer, "Blazer de Linho Delaunay", "Bege · PP · 1 un.", "R$ 528,00"], [IMG.calca, "Calça de Linho Joan", "Bege · PP · 1 un.", "R$ 348,00"]];
+  var BOLSA = [[IMG.bolsa, "Bolsa de Jacquard Relíquia", "Vinho · sob encomenda · 1 un.", "R$ 448,00"]];
+  var SUMS_ROUPA = function (rotulo) { return [["Subtotal", "R$ 876,00"], ["Frete · SEDEX", "R$ 25,29"], ["Desconto Pix (5%)", "-R$ 43,80"], [rotulo, "R$ 857,49"]]; };
+  var SUMS_BOLSA = [["Subtotal", "R$ 448,00"], ["Frete · SEDEX", "R$ 25,29"], ["Total", "R$ 473,29"]];
+  var LINHO = [["Lavar", "À mão ou no ciclo delicado, em água fria."], ["Secar", "À sombra, estendida."], ["Passar", "Ainda úmida, do avesso."], ["Saber", "O linho amassa e fica mais macio com o uso."]];
+
+  var MAILS = [
+    { name: "0 · Recebemos seu pedido (Shopify)", used: "Assunto: Recebemos seu pedido #1160", desc: "A confirmação da Shopify no nosso visual, para Pix e cartão. É recibo: peças, valores e pagamento, sem datas nem Pix, que vêm no 1 e no 2.",
+      html: P.strip("Pedido #1160 · recebido") + P.header() + P.texto("Pedido #1160", "Recebemos seu pedido", ["Oi, Maria. Seu pedido chegou até a gente. Assim que o pagamento for confirmado, você recebe outro e-mail com a data de postagem e a previsão de entrega."]) + P.detalhe({ titulo: "Seu pedido", itens: ROUPA, sums: SUMS_ROUPA("Total"), pagamento: "Pix" }) + P.whats(false) + P.rodape() },
+    { name: "1 · Aguardando pagamento", used: "Assunto: Seu pedido #1160 está reservado, falta o Pix", desc: "Lembrete 15 minutos depois, só para Pix ainda não pago. O Pix vem logo depois do título, porque é a única coisa que ela precisa fazer.",
+      html: P.strip("Pedido #1160 · aguardando o Pix") + P.header() + P.texto("Pedido #1160", "Falta só o Pix para confirmar", ["Oi, Maria. Recebemos seu pedido e separamos suas peças. Depois das 14h32 o Pix expira e as peças voltam para a loja."]) + P.pix() + P.detalhe({ titulo: "Seu pedido", itens: ROUPA, sums: SUMS_ROUPA("Total a pagar"), pagamento: "Pix, aguardando" }) + P.whats(false, "Precisa de um Pix novo? Responda este e-mail ou fale com a gente.") + P.rodape() },
+    { name: "2 · Pedido confirmado (pronta entrega)", used: "Assunto: Pedido #1160 confirmado", desc: "Foto da campanha na abertura, as datas no calendário, a linha do tempo e o pedido inteiro.",
+      html: P.strip("Pedido #1160 · confirmado") + P.header() + P.hero(IMG.hero1, "Seu pedido foi confirmado", "Pedido #1160 · postagem prevista para qui, 15/10") + P.texto("", "", ["Oi, Maria. Seu pagamento foi aprovado e seu pedido já está sendo separado. Assim que ele sair daqui, você recebe o código de rastreio neste e-mail."]) + P.datas("", "qui, 15/10", "até 16/10") + P.linha([["done", "Pago<br>13/10"], ["now", "Separação<br>até 15/10"], ["", "Postado"], ["", "Entregue"]]) + P.detalhe({ titulo: "Resumo do pedido", itens: ROUPA, sums: SUMS_ROUPA("Total"), pagamento: "Pix, aprovado em 13/10" }) + P.whats(false) + P.rodape() },
+    { name: "2 · Pedido confirmado (sob encomenda)", used: "Assunto: Pedido #1162 confirmado", desc: "A etiqueta de sob encomenda e a produção no ateliê no texto. A linha do tempo mostra a produção como etapa atual.",
+      html: P.strip("Pedido #1162 · confirmado") + P.header() + P.hero(IMG.hero1, "Sua Relíquia vai ser feita para você", "Pedido #1162 · produção de 10 dias úteis") + P.texto("", "", ["Oi, Maria. Seu pagamento foi aprovado. A sua bolsa é feita sob encomenda no nosso ateliê, e a produção começa agora. No meio do caminho, a gente te conta como ela está."]) + P.datas("Sob encomenda · 10 dias úteis", "qui, 29/10", "até 03/11") + P.linha([["done", "Pago<br>13/10"], ["now", "Produção<br>até 29/10"], ["", "Postado"], ["", "Entregue"]]) + P.detalhe({ titulo: "Resumo do pedido", itens: BOLSA, sums: SUMS_BOLSA, pagamento: "Cartão, 3x sem juros" }) + P.whats(false) + P.rodape() },
+    { name: "3 · Metade da produção", used: "Assunto: Sua Relíquia está em produção", desc: "Só sob encomenda, na metade do prazo. Curto: a peça, a etapa e a data mantida.",
+      html: P.strip("Pedido #1162 · em produção") + P.header() + P.texto("Pedido #1162", "Sua bolsa está sendo feita no ateliê", ["Oi, Maria. Passando para contar que a sua Relíquia segue dentro do prazo. Assim que ela sair daqui, você recebe o código de rastreio."]) + P.curto([IMG.bolsa], "Bolsa de Jacquard Relíquia · Vinho", "#1162") + P.linha([["done", "Pago<br>13/10"], ["now", "Produção<br>até 29/10"], ["", "Postado"], ["", "Entregue"]]) + P.datas("", "qui, 29/10", "até 03/11") + P.whats(false) + P.rodape() },
+    { name: "4 · Alerta interno", used: "Telegram do grupo da loja, não vai para a cliente", desc: "Sai 1 dia útil antes do prazo de postagem, se o pedido ainda não foi postado. Se postar no prazo, a cliente nunca recebe o e-mail 5.",
+      html: P.telegram(["<b>Vence amanhã e ainda não foi postado</b>", "#1162 Maria Exemplo · Bolsa Relíquia Vinho · SEDEX", "Prazo de postagem: qui, 29/10"]) },
+    { name: "5 · Produção atrasada", used: "Assunto: Uma atualização sobre o seu pedido #1162", desc: "A loja assume o atraso antes da cobrança. Aqui o WhatsApp vira o botão principal, porque conversar é a ação que importa.",
+      html: P.strip("Pedido #1162 · atualização") + P.header() + P.texto("Pedido #1162", "Sua bolsa precisou de mais alguns dias", ["Oi, Maria. A sua Relíquia precisou de mais alguns dias no ateliê. Já estamos finalizando e avisamos assim que for postada."]) + P.curto([IMG.bolsa], "Bolsa de Jacquard Relíquia · Vinho", "#1162") + P.whats(true, "Se quiser falar com a gente, é só responder este e-mail ou chamar no WhatsApp.") + P.rodape() },
+    { name: "6 · Postado", used: "Assunto: Seu pedido #1160 foi postado", desc: "O rastreio é o centro: código grande, botão para acompanhar e a data prevista dos Correios. A nota vai anexada.",
+      html: P.strip("Pedido #1160 · postado") + P.header() + P.hero(IMG.hero1, "Seu pedido está a caminho", "Saiu hoje pelos Correios · SEDEX") + P.rastreio("SEDEX", "Entrega prevista até qui, 15/10") + P.botao("Rastrear nos Correios") + P.linha([["done", "Pago<br>13/10"], ["done", "Separação"], ["now", "Postado<br>14/10"], ["", "Entregue"]]) + P.detalhe({ titulo: "Peças nesta remessa", itens: ROUPA, sums: SUMS_ROUPA("Total pago"), pagamento: "Pix" }) + P.nota() + P.whats(false) + P.rodape() },
+    { name: "7 · Exceção no rastreio (entrega atrasada)", used: "Assunto: Seu pedido #1160 segue a caminho", desc: "Exemplo da exceção mais comum. As outras (aguardando retirada, tentativa sem sucesso) usam o mesmo esqueleto com outro texto.",
+      html: P.strip("Pedido #1160 · acompanhando a entrega") + P.header() + P.texto("Pedido #1160", "Seu pedido segue a caminho", ["Oi, Maria. A entrega passou da data prevista pelos Correios. Estamos acompanhando e avisamos se precisar de algo de você."]) + P.rastreio("SEDEX", "Previsão dos Correios era qui, 15/10") + P.botao("Rastrear nos Correios") + P.whats(false, "Algum problema com o endereço? Responda este e-mail ou fale com a gente.") + P.rodape() },
+    { name: "8 · Chegou, e os cuidados com a sua peça", used: "Assunto: Seu pedido #1160 chegou", desc: "No dia da entrega: o aviso, os cuidados com a foto da peça e o \"ainda não recebeu?\".",
+      html: P.strip("Pedido #1160 · entregue") + P.header() + P.hero(IMG.hero1, "Seu pedido chegou", "Entregue hoje pelos Correios") + P.texto("", "", ["Oi, Maria. A gente quer que o seu blazer te acompanhe por muito tempo, então separamos alguns cuidados."]) + P.cuidados(IMG.blazer, "linho", LINHO) + P.texto("", "", ["Ainda não recebeu? Responda este e-mail ou chame a gente no WhatsApp, que a gente vai atrás com os Correios. Se algo não ficou como você esperava, é só responder também."]) + P.whats(false, " ") + P.rodape() },
+    { name: "9 · Avaliação, caimento e NPS", used: "Assunto: Como ficou o seu blazer? · prévia: duas perguntas rápidas", desc: "Seis dias depois da entrega. A foto da peça lembra do que ela está avaliando; um toque já registra a resposta.",
+      html: P.strip("Pedido #1160 · duas perguntas rápidas") + P.header() + P.texto("Pedido #1160", "Como ficou o seu blazer?", ["Oi, Maria. Já deu para usar? A gente quer saber como ele ficou em você."]) + P.curto([IMG.blazer], "Blazer de Linho Delaunay · Bege · PP", "#1160") + P.pesquisa() + P.rodape() }
+  ];
+
+  var BLOCKS = [
+    { name: "Faixa de status", used: "todos os e-mails", desc: "A faixa marrom do topo do site, com o status do pedido em uma linha.", html: P.strip("Pedido #1160 · confirmado") },
+    { name: "Cabeçalho", used: "todos", desc: "Logo da Annis em marrom sobre o creme, como no topo do site.", html: P.header() },
+    { name: "Imagem de abertura", used: "e-mails 2, 6 e 8", desc: "Foto da campanha de ponta a ponta com o título em Newsreader fino e branco por cima. No Outlook do computador, texto sobre imagem precisa de ajuste próprio (VML); a alternativa é o título abaixo da foto.", html: P.hero(IMG.hero1, "Seu pedido foi confirmado", "Pedido #1160 · postagem prevista para qui, 15/10") },
+    { name: "Saudação e texto", used: "todos", desc: "Título em Newsreader fino e texto curto em Poppins, direto no creme.", html: P.texto("Pedido #1160", "Oi, Maria. Seu pedido já está sendo separado.", ["Seu pagamento foi aprovado. Assim que ele sair daqui, você recebe o código de rastreio neste e-mail."]) },
+    { name: "Detalhe do pedido", used: "e-mails 1, 2 e 6", desc: "Como no e-mail da Shopify, com a foto da peça em tamanho de vitrine.", html: P.detalhe({ titulo: "Resumo do pedido", itens: ROUPA, sums: SUMS_ROUPA("Total"), pagamento: "Pix, aprovado em 13/10" }) },
+    { name: "Peças do pedido (curto)", used: "e-mails 3, 5 e 9", desc: "Foto e nome das peças e o número do pedido, sem valores.", html: P.curto([IMG.blazer, IMG.calca], "Blazer Delaunay e Calça Joan", "#1160") },
+    { name: "Pix", used: "e-mail 1", desc: "QR Code e copia e cola num quadro branco, com a hora em que expira como título.", html: P.pix() },
+    { name: "Datas do pedido", used: "e-mails 2 e 3", desc: "Postagem e entrega previstas, grandes, entre duas linhas marrons. Etiqueta só em sob encomenda.", html: P.datas("Sob encomenda · 10 dias úteis", "qui, 29/10", "até 03/11") },
+    { name: "Linha do tempo", used: "e-mails 2, 3 e 6", desc: "Etapas feitas em marrom cheio, a atual com anel, as próximas em bege.", html: P.linha([["done", "Pago<br>13/10"], ["now", "Produção<br>até 29/10"], ["", "Postado"], ["", "Entregue"]]) },
+    { name: "Código de rastreio", used: "e-mails 6 e 7", desc: "Código em Newsreader grande e marrom, com o serviço e a data prevista dos Correios.", html: P.rastreio("SEDEX", "Entrega prevista até qui, 15/10") },
+    { name: "Botão principal", used: "e-mail 6", desc: "O botão marrom do site. No celular, ocupa a largura toda.", html: P.botao("Rastrear nos Correios") },
+    { name: "Botão de WhatsApp", used: "todos", desc: "Vazado nos e-mails em geral; cheio no e-mail 5, onde conversar é a ação principal.", html: P.whats(false) },
+    { name: "Nota anexada", used: "e-mail 6", desc: "Uma linha avisando que a nota fiscal vai em anexo.", html: P.nota() },
+    { name: "Cuidados com a peça", used: "e-mail 8", desc: "Foto da peça ao lado dos cuidados do material. Textos em rascunho.", html: P.cuidados(IMG.blazer, "linho", LINHO) },
+    { name: "Pesquisa", used: "e-mail 9", desc: "Caimento em três botões claros e escala de 0 a 10 em marrom cheio.", html: P.pesquisa() },
+    { name: "Rodapé", used: "todos", desc: "O ANNIS grande do rodapé do site, com contato.", html: P.rodape() }
+  ];
+
+  var zoom = document.getElementById("zoom");
+  var zoomBody = document.getElementById("zoom-body");
+  var zoomTitle = document.getElementById("zoom-title");
+  var SCALE = 0.56;
+
+  function emailEl(width, html) {
+    var em = document.createElement("div");
+    em.className = "em";
+    em.style.width = width + "px";
+    em.innerHTML = html;
+    return em;
+  }
+
+  function frame(label, width, html, scale) {
+    var f = document.createElement("div");
+    f.className = "frame";
+    var l = document.createElement("span");
+    l.className = "frame-label";
+    l.textContent = label + " · " + width + " px";
+    var box = document.createElement("div");
+    box.className = "frame-box";
+    var em = emailEl(width, html);
+    box.style.width = Math.round(width * scale) + "px";
+    if (scale !== 1) em.style.transform = "scale(" + scale + ")";
+    box.appendChild(em);
+    f.appendChild(l);
+    f.appendChild(box);
+    function fit() { box.style.height = Math.ceil(em.offsetHeight * scale) + "px"; }
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(em);
+    em.querySelectorAll("img").forEach(function (img) { img.addEventListener("load", fit); });
+    requestAnimationFrame(fit);
+    return f;
+  }
+
+  function render(containerId, list, prefix, scale) {
+    var gallery = document.getElementById(containerId);
+    if (!gallery) return;
+    list.forEach(function (b, i) {
+      var wrap = document.createElement("article");
+      wrap.className = "blk";
+      var head = document.createElement("div");
+      head.className = "blk-head";
+      head.innerHTML = '<h3></h3><span class="used"></span>';
+      head.querySelector("h3").textContent = b.name;
+      head.querySelector(".used").textContent = b.used;
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = prefix + "-ampliar-" + i;
+      btn.textContent = "Ampliar";
+      btn.addEventListener("click", function () {
+        zoomTitle.textContent = b.name;
+        zoomBody.innerHTML = "";
+        zoomBody.appendChild(frame("Computador", 600, b.html, 1));
+        zoomBody.appendChild(frame("Celular", 375, b.html, 1));
+        if (zoom.showModal) zoom.showModal(); else zoom.setAttribute("open", "");
+      });
+      head.appendChild(btn);
+      var desc = document.createElement("p");
+      desc.className = "blk-desc";
+      desc.textContent = b.desc;
+      var frames = document.createElement("div");
+      frames.className = "frames";
+      frames.appendChild(frame("Computador", 600, b.html, scale));
+      frames.appendChild(frame("Celular", 375, b.html, scale));
+      wrap.appendChild(head);
+      wrap.appendChild(desc);
+      wrap.appendChild(frames);
+      gallery.appendChild(wrap);
+    });
+  }
+
+  render("mails-gallery", MAILS, "email", 0.5);
+  render("gallery", BLOCKS, "bloco", SCALE);
+
+  document.getElementById("zoom-close").addEventListener("click", function () {
+    if (zoom.close) zoom.close(); else zoom.removeAttribute("open");
+  });
+  zoom.addEventListener("click", function (e) { if (e.target === zoom && zoom.close) zoom.close(); });
+})();
+
+document.querySelectorAll("[data-variants]").forEach(function (box) {
+  var buttons = box.querySelectorAll("button[data-show]");
+  buttons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      buttons.forEach(function (b) {
+        var on = b === btn;
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+        var target = document.getElementById(b.getAttribute("data-show"));
+        if (target) target.hidden = !on;
+      });
+    });
+  });
+});
+</script>
+
+{%- endraw -%}
+</html>

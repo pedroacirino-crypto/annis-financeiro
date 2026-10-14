@@ -1,0 +1,54 @@
+# Régua pós-compra: manda os e-mails que venceram (avisos/regua/motor.py).
+#
+# Sem agendamento aqui (o do GitHub atrasa horas): quem dispara é o Supabase,
+# a cada 10 minutos (avisos/regua/regua.sql). Rodar duas vezes não repete
+# e-mail: cada envio fica anotado em avisos.enviados.
+#
+# Variáveis do repositório: REGUA_INICIO (só pedidos a partir daí), REGUA_MODO
+# (sombra = tudo só para a contato@), REGUA_CCO (cópia oculta).
+name: Régua pós-compra
+
+on:
+  workflow_dispatch:
+    inputs:
+      simular:
+        description: "Só mostrar o que mandaria (sim/nao)"
+        required: false
+        default: "nao"
+
+concurrency:
+  group: regua
+  cancel-in-progress: false
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar
+        run: pip install --quiet requests sqlalchemy psycopg2-binary pyyaml "qrcode[pil]"
+
+      - name: Mandar o que venceu
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          CORREIOS_USUARIO: ${{ secrets.CORREIOS_USUARIO }}
+          CORREIOS_CODIGO_ACESSO: ${{ secrets.CORREIOS_CODIGO_ACESSO }}
+          CORREIOS_CARTAO: ${{ secrets.CORREIOS_CARTAO }}
+          CORREIOS_AMBIENTE: ${{ vars.CORREIOS_AMBIENTE }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GMAIL_SENHA_APP: ${{ secrets.GMAIL_SENHA_APP }}
+          PAGARME_SECRET_KEY: ${{ secrets.PAGARME_SECRET_KEY }}
+          REGUA_INICIO: ${{ vars.REGUA_INICIO }}
+          REGUA_MODO: ${{ vars.REGUA_MODO }}
+          REGUA_CCO: ${{ vars.REGUA_CCO }}
+        run: python -m avisos.regua.motor ${{ inputs.simular == 'sim' && '--simular' || '' }}
