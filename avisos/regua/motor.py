@@ -169,7 +169,7 @@ def vencidos(seq: list, ja: dict, numero: str, agora: dt.datetime) -> list:
         if f"regua:{qual}:{numero}" in ja:
             continue
         # Atropelado: um e-mail posterior também já venceu há mais de 1 hora.
-        if any(q2 > q and qual2 not in ("e4", "cancelado") and q2 <= agora - dt.timedelta(hours=1) for q2, qual2, _ in venc) \
+        if any(q2 > q and qual2 not in ("e4", "cancelado", "devolucao") and q2 <= agora - dt.timedelta(hours=1) for q2, qual2, _ in venc) \
                 and q < ultimo:
             continue
         saida.append((q, qual, d))
@@ -228,6 +228,14 @@ def _enviar(con, o, numero, qual, dados, modo, cco, simular):
             telegram(texto)
             con.execute(text("insert into avisos.enviados (id, tipo) values (:i, 'regua telegram') on conflict do nothing"),
                         {"i": f"regua:e4:{numero}"})
+        return
+    if qual == "devolucao":
+        print(f"{o['name']} devolução (Telegram)")
+        if not simular:
+            telegram(f"{o['name']}: {dados['evento']} ({dados['rastreio']['codigo']}). Sem e-mail automático: "
+                     "chamar a cliente para combinar o reenvio.")
+            con.execute(text("insert into avisos.enviados (id, tipo) values (:i, 'regua telegram') on conflict do nothing"),
+                        {"i": f"regua:devolucao:{numero}"})
         return
     if qual == "cancelado":
         if not simular:

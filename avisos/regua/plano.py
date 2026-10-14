@@ -17,6 +17,7 @@ contato@. As regras:
 - 6: postado (primeiro evento PO dos Correios).
 - 7: tentativa sem sucesso, aguardando retirada, entrega atrasada (passou da
   data prevista dos Correios).
+- Em devolução ao remetente: sem e-mail, só aviso no Telegram ("devolucao").
 - 8: entregue. 9: avaliação, 6 dias depois da entrega.
 - Cancelado: nada depois do cancelamento.
 
@@ -243,6 +244,11 @@ def _depois_do_pago(o, criado, pago, base, saida, ev, somas, total, pix, dp, mis
             q = corr(e["quando"])
             ev(q, "e7_tentativa", rastreio=rast, data_evento=f"{dia(q.date())} às {q:%Hh%M}",
                previsao_correios=prev_txt if prevista and prevista >= q else "")
+            break
+    for e in sorted(ev_rastro, key=lambda e: e["quando"]):
+        # Em devolução ao remetente: sem e-mail; a loja chama a cliente (só Telegram).
+        if "devolu" in (e["desc"] or "").lower():
+            ev(corr(e["quando"]), "devolucao", rastreio=rast, evento=e["desc"])
             break
     for e in sorted(ev_rastro, key=lambda e: e["quando"]):
         if "aguardando retirada" in (e["desc"] or "").lower():
