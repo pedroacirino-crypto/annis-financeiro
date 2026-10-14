@@ -906,3 +906,47 @@ def ler_cliques(campanha: str) -> List[dict]:
                 f" WHERE campanha = :c ORDER BY criado_em DESC"), {"c": campanha}).mappings().all()]
     except Exception:
         return []
+
+
+# ─── Marca de dado novo ──────────────────────────────────────────────────────
+# O portal fica congelado até "Atualizar dados" (14/10/2026). O que entra no
+# banco por fora do app (carga.py daqui do Mac, a rotina da Stone no GitHub)
+# deixa esta marca, e o app confere uma vez por clique: mudou, recalcula.
+
+TABELA_DADO_NOVO = "portal_dado_novo"
+_dado_novo_garantido = False
+
+
+def _garantir_dado_novo(con) -> None:
+    global _dado_novo_garantido
+    if _dado_novo_garantido:
+        return
+    from sqlalchemy import text
+    con.execute(text(f"""CREATE TABLE IF NOT EXISTS {TABELA_DADO_NOVO} (
+        id INT PRIMARY KEY DEFAULT 1, em TIMESTAMPTZ NOT NULL DEFAULT now(), origem TEXT)"""))
+    con.execute(text(f"ALTER TABLE {TABELA_DADO_NOVO} ENABLE ROW LEVEL SECURITY"))
+    con.execute(text(f"REVOKE ALL ON {TABELA_DADO_NOVO} FROM anon, authenticated"))
+    _dado_novo_garantido = True
+
+
+def marcar_dado_novo(origem: str) -> None:
+    if not configurado():
+        return
+    from sqlalchemy import text
+    with _conectar().begin() as con:
+        _garantir_dado_novo(con)
+        con.execute(text(f"INSERT INTO {TABELA_DADO_NOVO} (id, em, origem) VALUES (1, now(), :o)"
+                         f" ON CONFLICT (id) DO UPDATE SET em = now(), origem = EXCLUDED.origem"),
+                    {"o": origem[:60]})
+
+
+def dado_novo_em():
+    """Quando entrou o último dado por fora do app, ou None."""
+    if not configurado():
+        return None
+    from sqlalchemy import text
+    try:
+        with _conectar().connect() as con:
+            return con.execute(text(f"SELECT em FROM {TABELA_DADO_NOVO} WHERE id = 1")).scalar()
+    except Exception:
+        return None

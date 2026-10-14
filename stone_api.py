@@ -117,6 +117,9 @@ def sincronizar(desde: dt.date = None, ate: dt.date = None) -> dict:
     gravadas = dados_fin.salvar_vendas_stone(pd.DataFrame(vendas)) if vendas else 0
     if cancelados:
         dados_fin.marcar_vendas_stone_canceladas(cancelados)
+    if gravadas or cancelados:
+        import nuvem
+        nuvem.marcar_dado_novo("rotina stone")  # o portal recalcula no próximo clique
     return {"vendas": gravadas, "cancelamentos": len(cancelados), "falhas": falhas,
             "de": desde, "ate": ate}
 

@@ -93,9 +93,9 @@ def grafico_barras_sinal(df, coluna, rotulo, altura=220):
     ).properties(height=altura)
 
 
-@st.cache_data(ttl=3600, show_spinner="Montando o resultado…")
+@st.cache_data(show_spinner="Montando o resultado…")
 def _dados(versao: str = ""):
-    """Tudo que é pesado, uma vez por hora.
+    """Tudo que é pesado, guardado até "Atualizar dados" (ou dado novo no banco).
 
     `versao` entra só para compor a chave do cache: publicação nova troca o
     commit, o cache vira outro e o dado velho não sobrevive ao deploy. Sem

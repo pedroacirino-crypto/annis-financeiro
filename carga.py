@@ -320,6 +320,11 @@ def main(argv):
         print(f"extrato: {r['extrato_linhas']} linhas, até {r['extrato_ate']}")
         print(f"contas a pagar: {r['contas_linhas']} linhas, carregadas em {r['contas_em']}")
         print(f"meta ads: até {r['meta_ate']}")
+        return 0
+    # O portal fica congelado até "Atualizar dados"; esta marca faz ele
+    # recalcular sozinho no próximo clique, sem ninguém precisar apertar.
+    import nuvem
+    nuvem.marcar_dado_novo(f"carga {cmd}")
     return 0
 
 

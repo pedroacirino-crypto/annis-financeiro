@@ -48,6 +48,7 @@ def _esquecer_derivados():
     guardava o PnL calculado pelo código antigo.
     """
     for fn in (globals().get("_pedido_por_cobranca"), globals().get("_estoque_atual"),
+               globals().get("_saldo_pagarme"),
                getattr(aba_resultado, "_dados", None)):
         try:
             fn.clear()
@@ -518,6 +519,14 @@ if db.get_db_counts()["charges"] == 0 or _idade is None or _idade > HORAS_ATE_EN
             _esquecer_derivados()
     except Exception as _e:
         st.warning(f"Não foi possível atualizar os dados automaticamente: {_e}")
+
+# O portal fica congelado até "Atualizar dados" (14/10/2026). O que entra no
+# banco por fora do app (carga.py, rotina da Stone) deixa uma marca; mudou
+# desde o último clique, o portal recalcula uma vez. É a única consulta que
+# todo clique faz.
+import memo as _memo
+if _memo.mudou(nuvem.dado_novo_em()):
+    _esquecer_derivados()
 
 exigir_senha()
 
@@ -1190,22 +1199,31 @@ def _detalhe_cliente(c: dict):
             )
 
 
-@st.cache_data(ttl=600)
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(show_spinner=False)
 def _pedido_por_cobranca() -> dict:
-    """Casamento cobrança ↔ pedido, guardado por 10 minutos: a tela redesenha
-    a cada clique e isso lê a nuvem."""
+    """Casamento cobrança ↔ pedido, guardado até "Atualizar dados": a tela
+    redesenha a cada clique e isso lê a nuvem."""
     try:
         return db.pedido_de_cada_cobranca()
     except Exception:
         return {}
 
 
+@st.cache_data(show_spinner=False)
+def _saldo_pagarme(recip) -> dict:
+    """Saldo da Pagar.me com a hora em que foi lido. Era buscado ao vivo duas
+    vezes por clique (4 chamadas, uns 2 s); agora fica até "Atualizar dados"."""
+    bal = pagarme_client.get_balance(recip)
+    return {**bal, "_lido_em": (datetime.utcnow() - timedelta(hours=3)).strftime("%H:%M")}
+
+
+@st.cache_data(show_spinner=False)
 def _estoque_atual() -> dict:
     """Estoque por (produto, tamanho), direto da Shopify.
 
-    Guardado por 10 minutos: a lista de espera consulta isso a cada abertura,
-    e sem cache seria uma varredura na API por clique.
+    Guardado até "Atualizar dados": a lista de espera consulta isso a cada
+    abertura, e sem cache seria uma varredura na API por clique. (O cache
+    deste estava declarado em dobro na função de cima e faltava aqui.)
     """
     if not shopify_client.configurado():
         return {}
@@ -2734,11 +2752,13 @@ if "A receber" in abas:
     st.header("Quanto tem a receber, e quando" + ("" if visao == omni.CONSOLIDADO else f" · {visao.lower()}"))
 
     avail = waiting = 0
+    saldo_lido = ""
     ar = {"tarifas": 0}
     agenda = []
     if omni.ver_digital(visao):
         try:
-            bal = pagarme_client.get_balance(recip)
+            bal = _saldo_pagarme(recip)
+            saldo_lido = bal.get("_lido_em", "")
             avail = bal.get("available_amount", 0)
             waiting = bal.get("waiting_funds_amount", 0)
         except Exception as e:
@@ -2758,8 +2778,9 @@ if "A receber" in abas:
         c2.metric("Vendas a repassar", int(ar_fis.vendas.sum()) if not ar_fis.empty else 0)
         c3.metric("Extrato lido até", ult.strftime("%d/%m") if ult is not None else "—")
     else:
-        c1.metric("Já disponível para sacar", fmt_brl(avail),
-                  help="Saldo da Pagar.me que já pode ser transferido.")
+        c1.metric("Já disponível para sacar" + (f" (saldo de {saldo_lido})" if saldo_lido else ""), fmt_brl(avail),
+                  help="Saldo da Pagar.me que já pode ser transferido. Fica parado na hora "
+                       "em que foi lido e só muda ao clicar em Atualizar dados.")
         c2.metric("Ainda a receber", fmt_brl(waiting + fis_total),
                   help=("Pagar.me ainda por liquidar" + (f" mais {fmt_brl(fis_total)} de repasse da Stone" if fis_total else "")))
         c3.metric("Com tudo que está previsto", fmt_brl(avail + waiting + fis_total),
@@ -2939,7 +2960,7 @@ if "Extrato" in abas:
 
     if omni.ver_digital(visao):
         try:
-            saldo_api = pagarme_client.get_balance(recip).get("available_amount", 0)
+            saldo_api = _saldo_pagarme(recip).get("available_amount", 0)
         except Exception as e:
             st.warning(f"Não foi possível ler o saldo da API: {e}")
             saldo_api = None
