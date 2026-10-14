@@ -282,7 +282,8 @@ def _enviar(con, o, numero, qual, dados, modo, cco, simular):
     para = email
     if modo == "sombra":
         para, assunto, cco = CONTATO, f"[sombra {o['name']}] {assunto}", []
-    print(f"{o['name']} {qual} -> {'(simulado) ' if simular else ''}{para}: {assunto}")
+    # Nunca o e-mail da cliente no log: o repositório é público e o log do Actions também.
+    print(f"{o['name']} {qual} -> {'(simulado) ' if simular else ''}{'contato@' if para == CONTATO else 'cliente'}: {assunto}")
     if simular or not para:
         return
     mid = gmail.enviar(para, assunto, html, texto, imagens=m["imagens"], cco=cco, anexos=anexos)
