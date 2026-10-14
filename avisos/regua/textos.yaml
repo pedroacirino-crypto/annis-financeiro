@@ -135,7 +135,7 @@ e6:
   rastreio_previsao: "Entrega prevista até {previsao_correios}"
   botao: "Rastrear nos Correios"
   resumo: "Peças nesta remessa"
-  nota: "Nota fiscal anexada: NF-e {nota} (PDF e XML)"
+  nota: "Nota fiscal anexada: NF-e {nota}"
 
 e7_atrasada:
   assunto: "Seu pedido {pedido} segue a caminho"

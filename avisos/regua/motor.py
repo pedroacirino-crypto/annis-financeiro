@@ -234,6 +234,14 @@ def _enviar(con, o, numero, qual, dados, modo, cco, simular):
             con.execute(text("insert into avisos.enviados (id, tipo) values (:i, 'regua parada') on conflict do nothing"),
                         {"i": f"regua:cancelado:{numero}"})
         return
+    anexos = []
+    if qual == "e6":  # nota anexada, guardada por avisos/danfe.py
+        nota = con.execute(text("select numero, pdf, xml from avisos.regua_notas where pedido = :p"), {"p": numero}).first()
+        if nota and nota.pdf:
+            dados = {**dados, "nota": nota.numero}
+            anexos.append((f"NF ANNIS_{nota.numero}.pdf", bytes(nota.pdf), "application/pdf"))
+            if nota.xml:
+                anexos.append((f"NF ANNIS_{nota.numero}.xml", nota.xml.encode("utf-8"), "application/xml"))
     m = modelos.montar(qual, dados)
     html, texto, assunto = m["html"], m["texto"], m["assunto"]
     if TOKEN in html:
@@ -254,7 +262,7 @@ def _enviar(con, o, numero, qual, dados, modo, cco, simular):
     print(f"{o['name']} {qual} -> {'(simulado) ' if simular else ''}{para}: {assunto}")
     if simular or not para:
         return
-    mid = gmail.enviar(para, assunto, html, texto, imagens=m["imagens"], cco=cco)
+    mid = gmail.enviar(para, assunto, html, texto, imagens=m["imagens"], cco=cco, anexos=anexos)
     prefixo = "regua_sombra" if modo == "sombra" else "regua"
     con.execute(text("insert into avisos.enviados (id, tipo) values (:i, :t) on conflict do nothing"),
                 {"i": f"{prefixo}:{qual}:{numero}", "t": f"regua {mid}"})

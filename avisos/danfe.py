@@ -21,6 +21,7 @@ Variáveis: OLIST_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, SUPABASE_URL_BANC
 
 import datetime as dt
 import os
+import re
 import sys
 import tempfile
 
@@ -72,6 +73,28 @@ def anotar(n: dict) -> None:
                          "on conflict do nothing"), {"id": f"nf:{n['id']}"})
         con.execute(text("delete from avisos.enviados where id = :id"),
                     {"id": f"aguarda_nf:{n.get('numero_ecommerce')}"})
+
+
+def guardar_para_regua(n: dict, arquivo: str) -> None:
+    """PDF (e XML, se a Olist der) da nota no banco, para o e-mail 6 da régua
+    ir com a nota anexada (avisos/regua/motor.py). Falha aqui não segura nada."""
+    if not n.get("numero_ecommerce"):
+        return
+    try:
+        xml = None
+        try:  # este método da Olist responde em XML, não em JSON
+            r = requests.post(API.format("nota.fiscal.obter.xml"), timeout=30,
+                              data={"token": os.environ["OLIST_TOKEN"], "id": n["id"]})
+            m = re.search(r"<nfeProc.*</nfeProc>", r.text, re.S)
+            xml = '<?xml version="1.0" encoding="UTF-8"?>' + m.group(0) if m else None
+        except Exception as erro:
+            print("XML da nota:", erro)
+        with open(arquivo, "rb") as f, nuvem._conectar().begin() as con:
+            con.execute(text("insert into avisos.regua_notas (pedido, numero, pdf, xml) values (:p, :n, :pdf, :xml) "
+                             "on conflict (pedido) do update set numero = excluded.numero, pdf = excluded.pdf, xml = excluded.xml"),
+                        {"p": str(n["numero_ecommerce"]), "n": str(int(n["numero"])), "pdf": f.read(), "xml": xml})
+    except Exception as erro:
+        print("Nota para a régua:", erro)
 
 
 def legenda(n: dict) -> str:
@@ -126,6 +149,7 @@ def main(so_id: str = None) -> None:
             nome = f"NF ANNIS_{int(n['numero'])}.pdf"
             arquivo = os.path.join(pasta, nome)
             pdf_da_danfe(navegador, link, arquivo)
+            guardar_para_regua(n, arquivo)
             # Desde 09/10/2026 a nota vai para a pasta do pedido no Drive e entra
             # no PDF do dia (avisos/envios.py). No grupo fica só um resumo com os
             # checks de nota e etiqueta; o PDF avulso só se o Drive cair.

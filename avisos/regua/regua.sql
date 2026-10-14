@@ -34,6 +34,15 @@ create table if not exists avisos.regua_respostas (
   atualizado timestamptz not null default now()
 );
 
+-- Nota de cada pedido, guardada por avisos/danfe.py, para ir anexada no e-mail 6.
+create table if not exists avisos.regua_notas (
+  pedido text primary key,
+  numero text not null,
+  pdf    bytea,
+  xml    text,
+  criado timestamptz not null default now()
+);
+
 create or replace function avisos.correios_token() returns text
 language plpgsql security definer set search_path = extensions, public as $$
 declare t text; e timestamptz; r http_response;
