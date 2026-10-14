@@ -12,7 +12,8 @@
 --   - pix e pesquisa só abrem com o token do e-mail (aleatório, criado no
 --     envio); a página do Pix nunca mostra um código que não seja nosso, para
 --     ninguém usar o endereço da loja com um Pix de golpe;
---   - rastreio só consulta código de etiqueta emitida por nós
+--   - rastreio só consulta código de etiqueta emitida por nós (o portal usa
+--     avisos.rastro, sem essa trava, pela conexão do banco)
 --     (avisos.enviados), e guarda a resposta por 10 minutos.
 --
 -- Credenciais dos Correios no cofre (annis_correios_*), gravadas por
@@ -158,16 +159,15 @@ begin
   return jsonb_build_object('destino', l.dados ->> 'destino');
 end $$;
 
--- Página do rastreio
-create or replace function site.rastreio(c text) returns jsonb
+-- Rastreio de qualquer código, direto dos Correios, guardado por 10 minutos.
+-- Fora da API pública: quem chama é a página do site (abaixo, só com etiqueta
+-- nossa) e a aba Rastreio do portal, pela conexão do banco.
+create or replace function avisos.rastro(c text) returns jsonb
 language plpgsql security definer set search_path = extensions, public as $$
 declare cod text := upper(btrim(c)); o jsonb; r http_response; j jsonb;
 begin
   if cod !~ '^[A-Z]{2}[0-9]{9}[A-Z]{2}$' then
     return jsonb_build_object('ok', false, 'motivo', 'codigo');
-  end if;
-  if not exists (select 1 from avisos.enviados where id like 'etq:%' and split_part(tipo, ' ', 2) = cod) then
-    return jsonb_build_object('ok', false, 'motivo', 'desconhecido');
   end if;
   select valor::jsonb into o from avisos.estado where chave = 'rastro:' || cod and expira > now();
   if o is not null then
@@ -199,10 +199,24 @@ exception when others then
   return jsonb_build_object('ok', false, 'motivo', 'erro');
 end $$;
 
+-- Página do rastreio
+create or replace function site.rastreio(c text) returns jsonb
+language plpgsql security definer set search_path = extensions, public as $$
+declare cod text := upper(btrim(c));
+begin
+  if cod !~ '^[A-Z]{2}[0-9]{9}[A-Z]{2}$' then
+    return jsonb_build_object('ok', false, 'motivo', 'codigo');
+  end if;
+  if not exists (select 1 from avisos.enviados where id like 'etq:%' and split_part(tipo, ' ', 2) = cod) then
+    return jsonb_build_object('ok', false, 'motivo', 'desconhecido');
+  end if;
+  return avisos.rastro(cod);
+end $$;
+
 -- Funções nascem executáveis por qualquer um; aqui só o site (anon) e o banco.
 revoke all on function site.pix(text), site.pesquisa(text), site.responder(text, text, int, text), site.rastreio(text), site.ir(text) from public;
 grant execute on function site.pix(text), site.pesquisa(text), site.responder(text, text, int, text), site.rastreio(text), site.ir(text) to anon;
-revoke all on function avisos.correios_token() from public;
+revoke all on function avisos.correios_token(), avisos.rastro(text) from public;
 
 -- Motor da régua (workflow regua.yml), a cada 10 minutos. Agenda, rodada uma vez:
 --   select cron.schedule('annis-regua', '*/10 * * * *', 'select avisos.disparar_regua()'); Erro ao disparar

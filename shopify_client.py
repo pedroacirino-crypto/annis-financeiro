@@ -171,6 +171,56 @@ def listar_abandonados(limite: int = 500) -> list:
     return itens[:limite]
 
 
+_CONSULTA_RASTREIOS = """
+query($cursor: String) {
+  orders(first: 50, sortKey: CREATED_AT, reverse: true, after: $cursor) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      name
+      createdAt
+      cancelledAt
+      test
+      customer { displayName }
+      shippingAddress { name city provinceCode }
+      shippingLines(first: 1) { nodes { title } }
+      lineItems(first: 10) { nodes { title quantity } }
+      fulfillments { createdAt trackingInfo { number } }
+    }
+  }
+}
+"""
+
+
+def pedidos_com_rastreio() -> list:
+    """Uma linha por código de rastreio, do pedido mais recente para o mais
+    antigo. Mesmo teto de 60 dias de `listar_pedidos`."""
+    linhas, cursor = [], None
+    while True:
+        bloco = _graphql(_CONSULTA_RASTREIOS, {"cursor": cursor})["orders"]
+        for o in bloco["nodes"]:
+            if o["test"]:
+                continue
+            end = o.get("shippingAddress") or {}
+            frete = (o.get("shippingLines") or {}).get("nodes") or [{}]
+            pecas = [f"{i['quantity']}x {i['title']}" if i["quantity"] > 1 else i["title"]
+                     for i in o["lineItems"]["nodes"]]
+            for f in o.get("fulfillments") or []:
+                for t in f.get("trackingInfo") or []:
+                    if not t.get("number"):
+                        continue
+                    linhas.append({
+                        "pedido": o["name"], "criado": o["createdAt"], "postado": f["createdAt"],
+                        "cliente": end.get("name") or (o.get("customer") or {}).get("displayName") or "",
+                        "cidade": " / ".join(x for x in (end.get("city"), end.get("provinceCode")) if x),
+                        "frete": frete[0].get("title") or "", "pecas": pecas,
+                        "codigo": t["number"].strip().upper(), "cancelado": bool(o.get("cancelledAt")),
+                    })
+        if not bloco["pageInfo"]["hasNextPage"]:
+            break
+        cursor = bloco["pageInfo"]["endCursor"]
+    return linhas
+
+
 # ─── Cupom pessoal de recuperação ───────────────────────────────────────────
 #
 # Um código de desconto na Shopify tem validade única, igual para todo mundo.

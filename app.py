@@ -1678,7 +1678,8 @@ with st.sidebar:
 # trabalho do dia, e não precisa estar na frente de quem abre a seção.
 # Lista de espera escondida em 04/10/2026 a pedido do Pedro, para voltar
 # depois; o código da aba continua aqui e basta devolver o nome à lista.
-TRABALHO = ["Recuperar", "Disparos", "Clientes", "Acessos", "Plano"]
+# Rastreio entrou em 14/10/2026: acompanhar os pacotes é trabalho do dia.
+TRABALHO = ["Recuperar", "Disparos", "Clientes", "Rastreio", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
@@ -3495,6 +3496,159 @@ if "Histórico" in abas:
 if "Resultado" in abas:
     with abas["Resultado"]:
         aba_resultado.render()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA: RASTREIO: onde está cada pacote
+# ════════════════════════════════════════════════════════════════════════════
+# 14/10/2026, pedido do Pedro: a página de rastreio do site (annis.store/pages/
+# rastreio) ficou sem uso quando o botão dos e-mails passou a ir direto para os
+# Correios, e virou ferramenta interna aqui. A consulta é a mesma da página
+# (avisos.rastro no Supabase, guardada 10 minutos lá), sem a trava de "só
+# etiqueta emitida por nós" que a versão pública tem.
+
+_DIAS_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _pedidos_com_rastreio() -> list:
+    return shopify_client.pedidos_com_rastreio()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _rastro(codigo: str) -> dict:
+    from sqlalchemy import text
+    with nuvem._conectar().connect() as con:
+        return con.execute(text("select avisos.rastro(:c)"), {"c": codigo}).scalar() or {}
+
+
+def _quando_correios(iso: str):
+    """Os Correios mandam hora local sem fuso ('2026-10-13T10:22:33')."""
+    try:
+        return datetime.fromisoformat((iso or "")[:19])
+    except ValueError:
+        return None
+
+
+def _cidade_correios(nome: str, uf: str) -> str:
+    if not nome:
+        return ""
+    miudas = {"de", "da", "do", "das", "dos", "e"}
+    t = " ".join(p if p in miudas else p.capitalize() for p in nome.lower().split())
+    return t + (f"/{uf}" if uf else "")
+
+
+def _painel_rastreio(p: dict, r: dict) -> str:
+    import html as _h
+    e = lambda x: _h.escape(str(x or ""))
+    correios = "https://rastreamento.correios.com.br/app/index.php?objetos=" + e(p["codigo"])
+    pecas = "<br>".join(e(x) for x in p["pecas"])
+    topo = (f'<div class="rs-pedido"><b>{e(p["pedido"])}</b> · {e(p["cliente"])}'
+            + (f' · {e(p["cidade"])}' if p["cidade"] else "")
+            + (f'<br><span>{e(p["frete"])} · postado em {e(_dia_br(p["postado"]))}</span>' if p["postado"] else "")
+            + (f'<br><span>{pecas}</span>' if pecas else "")
+            + ('<br><span class="rs-alerta">Pedido cancelado</span>' if p["cancelado"] else "")
+            + "</div>")
+    cab = f'<span class="rs-rotulo">Código de rastreio</span><p class="rs-codigo">{e(p["codigo"])}</p>'
+    if not r.get("ok"):
+        motivo = {"codigo": "Este código não parece dos Correios.",
+                  "correios": "Os Correios não responderam agora. Tente de novo em alguns minutos."}
+        corpo = (f'<div class="rs-titulo">Sem andamento</div><p>{motivo.get(r.get("motivo"), "Não consegui consultar este código.")}</p>')
+    else:
+        ev = r.get("eventos") or []
+        entregue = any("entregue" in (x.get("descricao") or "").lower() for x in ev)
+        prev = _quando_correios(r.get("previsao"))
+        corpo = f'<div class="rs-titulo">{e(ev[0]["descricao"] if ev else "Etiqueta emitida")}</div>'
+        if prev and not entregue:
+            corpo += (f'<hr><span class="rs-rotulo">Entrega prevista</span>'
+                      f'<div class="rs-data">{_DIAS_SEMANA[prev.weekday()]}, {prev:%d/%m}</div>')
+        itens = ""
+        for x in ev:
+            q = _quando_correios(x.get("quando"))
+            lugar = _cidade_correios(x.get("cidade"), x.get("uf"))
+            if x.get("para_cidade"):
+                lugar += " para " + _cidade_correios(x.get("para_cidade"), x.get("para_uf"))
+            itens += (f'<li><span class="rs-q">{(_DIAS_SEMANA[q.weekday()] + ", " + q.strftime("%d/%m") + "<br>" + q.strftime("%Hh%M")) if q else ""}</span>'
+                      f'<span><span class="rs-d">{e(x.get("descricao"))}</span>'
+                      + (f'<br><span class="rs-l">{e(x.get("detalhe"))}</span>' if x.get("detalhe") else "")
+                      + (f'<br><span class="rs-l">{e(lugar)}</span>' if lugar else "")
+                      + "</span></li>")
+        # "consultado" é o now() do banco, em UTC.
+        consultado = pd.to_datetime(r.get("consultado"), errors="coerce", utc=True)
+        corpo += (f'<div class="rs-h">Histórico</div><ul class="rs-eventos">{itens}</ul>'
+                  + ("" if pd.isna(consultado) else
+                     f'<p class="rs-apoio">Consultado às {para_brt(pd.Series([consultado])).iloc[0]:%Hh%M}, direto dos Correios.</p>'))
+    return (
+        "<style>"
+        ".rs{background:#fff6f0;border:1px solid #e6d5c4;padding:22px 26px;color:#1c1c1c}"
+        ".rs-pedido{font-size:13px;color:#4A2C0F;line-height:1.6;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #e6d5c4}"
+        ".rs-pedido span{color:#6e6258}.rs-pedido .rs-alerta{color:#a33}"
+        ".rs-rotulo{display:block;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#68380a;font-weight:500;margin-bottom:4px}"
+        ".rs-codigo{font-family:Newsreader,Georgia,serif;font-size:28px;font-weight:300;letter-spacing:.06em;color:#68380a;line-height:1.1;margin:0 0 12px}"
+        ".rs-titulo{font-family:Newsreader,Georgia,serif;font-weight:300;font-size:28px;line-height:1.15;margin:0 0 12px;color:#1c1c1c}"
+        ".rs-data{font-family:Newsreader,Georgia,serif;font-weight:300;font-size:26px;color:#68380a}"
+        ".rs hr{border:0;border-top:1px solid #e6d5c4;margin:18px 0}"
+        ".rs-h{font-family:Newsreader,Georgia,serif;font-weight:400;font-size:20px;margin:22px 0 8px;color:#1c1c1c}"
+        ".rs-eventos{list-style:none;padding:0;margin:0}"
+        ".rs-eventos li{border-top:1px solid #e6d5c4;padding:11px 0;display:grid;grid-template-columns:86px 1fr;gap:12px;margin:0}"
+        ".rs-eventos li:first-child .rs-d{font-weight:600}"
+        ".rs-q{font-size:12px;color:#6e6258}.rs-d{font-size:14px}.rs-l{font-size:12px;color:#6e6258}"
+        ".rs-apoio{font-size:12px;color:#6e6258;margin:12px 0 0}"
+        ".rs-btn{display:block;margin-top:14px;border:1px solid #68380a;color:#68380a !important;text-align:center;padding:12px;"
+        "text-transform:uppercase;letter-spacing:.12em;font-size:12px;text-decoration:none !important}"
+        "</style>"
+        f'<div class="rs">{topo}{cab}{corpo}<a class="rs-btn" href="{correios}" target="_blank">Ver no site dos Correios</a></div>'
+    )
+
+
+if "Rastreio" in abas:
+  with abas["Rastreio"]:
+    st.header("Rastreio")
+    st.caption(
+        "Pedidos dos últimos 60 dias com código dos Correios, do mais recente "
+        "para o mais antigo. Toque num pedido para ver o andamento ao lado."
+    )
+    if not nuvem.configurado():
+        st.info("Sem o banco na nuvem não há consulta aos Correios: ela mora lá.")
+    else:
+        try:
+            _rast = _pedidos_com_rastreio()
+        except Exception:
+            _rast = None
+            st.error("Não consegui ler os pedidos na Shopify agora. Tente de novo em alguns minutos.")
+        if _rast == []:
+            st.info("Nenhum pedido com código de rastreio nos últimos 60 dias.")
+        elif _rast:
+            r_esq, r_dir = st.columns([1, 1], gap="large")
+            with r_esq:
+                _busca = st.text_input("Buscar", placeholder="Pedido, cliente ou código",
+                                       key="rast_busca", label_visibility="collapsed")
+                _alvo = _normalizar_busca(_busca)
+                _vis = [p for p in _rast if not _alvo or _alvo in _normalizar_busca(
+                    " ".join((p["pedido"], p["cliente"], p["codigo"], p["cidade"])))]
+                _sel = st.dataframe(
+                    pd.DataFrame([{"Pedido": p["pedido"], "Código": p["codigo"], "Postado": _dia_br(p["postado"])[:5],
+                                   "Cliente": p["cliente"]} for p in _vis],
+                                 columns=["Pedido", "Código", "Postado", "Cliente"]),
+                    hide_index=True, use_container_width=True, height=min(38 + 35 * len(_vis), 640),
+                    column_config={"Pedido": st.column_config.TextColumn(width="small"),
+                                   "Código": st.column_config.TextColumn(width="medium"),
+                                   "Postado": st.column_config.TextColumn(width="small")},
+                    on_select="rerun", selection_mode="single-row", key=f"rast_lista_{_alvo}",
+                )
+                st.caption(f"{len(_vis)} de {len(_rast)} códigos")
+            with r_dir:
+                _linhas = _sel.selection.rows if _sel else []
+                if not _linhas:
+                    st.info("Escolha um pedido na lista para ver o rastreio.")
+                else:
+                    _p = _vis[_linhas[0]]
+                    with st.spinner("Consultando os Correios..."):
+                        try:
+                            _r = _rastro(_p["codigo"])
+                        except Exception:
+                            _r = {"ok": False, "motivo": "erro"}
+                    st.markdown(_painel_rastreio(_p, _r), unsafe_allow_html=True)
 
 
 # ════════════════════════════════════════════════════════════════════════════
