@@ -45,6 +45,17 @@ e0:
     - "Oi, {nome}. Recebemos seu pedido e seu pagamento já foi aprovado. Em seguida chega outro e-mail com a data de postagem e a previsão de entrega."
   resumo: "Seu pedido"
 
+# Shopify "Pagamento pendente realizado" (Pix pendente pago depois). Não desliga;
+# fica curto, porque o nosso e-mail 2 chega em seguida com as datas.
+pagamento_shopify:
+  assunto: "Pagamento do pedido {pedido} confirmado"
+  previa: "Os prazos chegam no próximo e-mail."
+  faixa: "Pedido {pedido} · pagamento confirmado"
+  eyebrow: "Pedido {pedido}"
+  titulo: "Pagamento confirmado"
+  texto:
+    - "Oi, {nome}. Recebemos o pagamento do seu pedido. Em seguida chega outro e-mail com a data de postagem e a previsão de entrega."
+
 e1:
   assunto: "Seu pedido {pedido} está reservado, falta o Pix"
   previa: "O Pix vale até {hora_limite} de hoje."

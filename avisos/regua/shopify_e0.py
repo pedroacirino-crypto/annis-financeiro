@@ -6,6 +6,9 @@ Sai avisos/regua/shopify-confirmacao-pedido.liquid, para colar em
 Configurações > Notificações > Confirmação do pedido (corpo do e-mail, HTML).
 Assunto lá: Recebemos seu pedido {{ order_name }}
 
+E avisos/regua/shopify-pagamento-realizado.liquid, para "Pagamento pendente
+realizado". Assunto lá: Pagamento do pedido {{ order_name }} confirmado
+
 É o mesmo e-mail 0 da régua (modelos.py, textos.yaml), com as variáveis da
 Shopify no lugar dos dados do pedido. Leva as duas versões: pedido que já
 nasce pago (cartão e Pix pago no checkout) e Pix pendente.
@@ -60,6 +63,17 @@ def _versao(pago: bool) -> str:
     return html
 
 
+def gerar_pagamento() -> str:
+    """Modelo curto para "Pagamento pendente realizado"."""
+    html = modelos.montar("pagamento_shopify", {"nome": "{{ customer.first_name | default: billing_address.first_name }}",
+                                                "pedido": "{{ order_name }}"})["html"]
+    html = html.replace(quote("{{ order_name }}"), "{{ order_name | url_encode }}")
+    destino = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shopify-pagamento-realizado.liquid")
+    with open(destino, "w", encoding="utf-8") as f:
+        f.write("{% comment %}Régua pós-compra. Gerado por avisos/regua/shopify_e0.py; não editar aqui.{% endcomment %}\n" + html)
+    return destino
+
+
 def gerar() -> str:
     pago, pendente = _versao(True), _versao(False)
     corpo = ("{% comment %}Régua pós-compra, e-mail 0. Gerado por avisos/regua/shopify_e0.py; não editar aqui.{% endcomment %}\n"
@@ -74,3 +88,4 @@ def gerar() -> str:
 
 if __name__ == "__main__":
     print(gerar())
+    print(gerar_pagamento())

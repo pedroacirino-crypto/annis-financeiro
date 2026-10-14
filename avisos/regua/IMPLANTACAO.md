@@ -35,22 +35,22 @@ Legenda: [x] feito · [ ] falta · (você) depende do Pedro
 - [x] Erro em um pedido não trava os outros; erro vai para o Telegram
 - [x] Modo sombra por variável (REGUA_MODO=sombra manda só para contato@), padrão: no ar
 
-## 4. Rodar sozinho (no ar em modo sombra desde 13/10 22h02)
+## 4. Rodar sozinho (NO AR desde 13/10/2026 22h26; sombra de 22h02 a 22h26)
 - [x] Workflow .github/workflows/regua.yml
 - [x] Segredos no GitHub: GMAIL_SENHA_APP, PAGARME_SECRET_KEY (os outros já existem)
 - [x] Supabase: pg_cron a cada 10 minutos disparando o regua.yml
 - [ ] Resumo da régua no fechamento das 23h no Telegram (depois)
-- [ ] (você) Virada: REGUA_MODO=no_ar e REGUA_INICIO na hora da virada
+- [x] Virada: REGUA_MODO=no_ar, REGUA_INICIO=2026-10-13T22:26:33-03:00
 
-## 5. Shopify (no dia da virada)
-- [ ] E-mail 0: colar shopify-confirmacao-pedido.liquid (gerado por shopify_e0.py) em "Confirmação de pedido"
-- [ ] Remetente da Shopify: conferir se dá para sair como pedidos@ (domínio autenticado na Shopify)
-- [ ] Desligar "Saiu para entrega" e "Entregue" (têm botão); "Confirmação de envio" só sai com notificar cliente
-- [ ] "Pagamento pendente realizado" (sem botão): trocar por texto curto no nosso visual, ou deixar
+## 5. Shopify (virada em 13/10/2026)
+- [x] E-mail 0: shopify-confirmacao-pedido.liquid em "Confirmação de pedido", assunto "Recebemos seu pedido {{ order_name }}"
+- [x] Remetente da Shopify: pedidos@annis.store, verificado; 6 CNAMEs da Shopify na GoDaddy (Domain Connect)
+- [x] "Saiu para entrega" e "Entregue" desligados; "Confirmação de envio" só sai com notificar cliente
+- [x] "Pagamento pendente realizado": shopify-pagamento-realizado.liquid, assunto "Pagamento do pedido {{ order_name }} confirmado"
 - [ ] (você) Baixa manual no app: sempre desmarcar "notificar cliente"
 
 ## 6. Depois de ligar
 - [ ] Acompanhar o CCO nos primeiros pedidos
 - [ ] Rodar o backtest de novo na semana que vem (#1134, #1139, 9 do #1132)
 - [ ] Mandar ao design os textos novos: 0 pago, 5 pronta entrega, 2 misto, 7 tentativa, 7 retirada
-- [ ] Botão do rastreio: Correios (hoje) ou a página sem captcha (decisão do Pedro)
+- [x] Botão do rastreio: Correios (Pedro, 13/10: se os Correios falharem, não associam à Annis)

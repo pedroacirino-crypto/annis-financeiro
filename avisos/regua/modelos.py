@@ -140,6 +140,8 @@ def montar(qual: str, dados: dict) -> dict:
     L = [B.faixa(t["faixa"]), B.cabecalho()]
     if qual == "e0":
         L += [B.texto(t["texto"], t["eyebrow"], t["titulo"]), resumo(), whats(), fim]
+    elif qual == "pagamento_shopify":
+        L += [B.texto(t["texto"], t["eyebrow"], t["titulo"]), whats(), fim]
     elif qual == "e1":
         p = dados["pix"]
         imagens.append(("qrpix", _qr_png(p["codigo"])))
