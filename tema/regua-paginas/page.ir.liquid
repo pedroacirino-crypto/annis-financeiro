@@ -1,0 +1,43 @@
+{%- comment -%}
+  annis.store/pages/ir?p=<token>: todo link dos e-mails da régua passa por aqui.
+  Registra o clique (avisos.regua_cliques, pela função site.ir) e manda para o
+  destino gravado no envio. Só redireciona para destino gravado por nós; token
+  desconhecido vai para a loja. Sem layout da loja, para abrir rápido.
+{%- endcomment -%}
+{%- layout none -%}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Annis</title>
+{%- raw -%}
+<style>
+:root { color-scheme: light; }
+body { margin: 0; background: #fff6f0; color: #68380a; font: 15px/1.6 Arial, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+a { color: #68380a; }
+</style>
+</head>
+<body>
+<p id="msg">Abrindo...</p>
+<script>
+(function () {
+  var p = new URLSearchParams(location.search).get("p");
+  var loja = "https://annis.store";
+  var ir = function (url) { location.replace(url || loja); };
+  if (!p) { ir(); return; }
+  // Se o banco demorar, segue para a loja em vez de deixar a cliente parada.
+  var reserva = setTimeout(function () { ir(); }, 6000);
+  fetch("https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/rpc/ir", {
+    method: "POST",
+    headers: { apikey: "sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW", "Content-Type": "application/json", "Content-Profile": "site" },
+    body: JSON.stringify({ p: p })
+  }).then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { clearTimeout(reserva); ir(d && d.destino); })
+    .catch(function () { clearTimeout(reserva); ir(); });
+})();
+</script>
+</body>
+</html>
+{%- endraw -%}

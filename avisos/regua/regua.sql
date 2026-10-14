@@ -3,6 +3,8 @@
 --   annis.store/pages/pix?p=<token>          QR e copia e cola do Pix (e-mail 1)
 --   annis.store/pages/rastreio?c=<código>    andamento do pacote, sem captcha (e-mails 6 e 7)
 --   annis.store/pages/sua-opiniao?p=<token>  caimento, nota e comentário (e-mail 9)
+--   annis.store/pages/ir?p=<token>           todo link dos e-mails: registra o clique e
+--                                            redireciona (só para destino gravado por nós)
 --
 -- As tabelas ficam no esquema avisos, fora da API pública. O site, com a chave
 -- publicável, só chama as funções do esquema site, e cada uma devolve só o
@@ -22,6 +24,20 @@ create table if not exists avisos.regua_links (
   tipo   text not null check (tipo in ('pix', 'pesquisa')),
   dados  jsonb not null default '{}',
   criado timestamptz not null default now()
+);
+
+-- Link de e-mail (tipo 'link'): o destino fica gravado; a página /pages/ir só
+-- redireciona para ele. Abertura não é medida (o Mail do iPhone abre tudo sozinho).
+alter table avisos.regua_links drop constraint if exists regua_links_tipo_check;
+alter table avisos.regua_links add constraint regua_links_tipo_check check (tipo in ('pix', 'pesquisa', 'link'));
+
+create table if not exists avisos.regua_cliques (
+  id     bigserial primary key,
+  token  text not null references avisos.regua_links (token),
+  pedido text not null,
+  email  text,
+  botao  text,
+  em     timestamptz not null default now()
 );
 
 create table if not exists avisos.regua_respostas (
@@ -128,6 +144,20 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+-- Página /pages/ir: registra o clique e devolve o destino.
+create or replace function site.ir(p text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare l avisos.regua_links;
+begin
+  select * into l from avisos.regua_links x where x.token = p and x.tipo = 'link';
+  if not found then
+    return null;
+  end if;
+  insert into avisos.regua_cliques (token, pedido, email, botao)
+  values (p, l.pedido, l.dados ->> 'email', l.dados ->> 'botao');
+  return jsonb_build_object('destino', l.dados ->> 'destino');
+end $$;
+
 -- Página do rastreio
 create or replace function site.rastreio(c text) returns jsonb
 language plpgsql security definer set search_path = extensions, public as $$
@@ -170,8 +200,8 @@ exception when others then
 end $$;
 
 -- Funções nascem executáveis por qualquer um; aqui só o site (anon) e o banco.
-revoke all on function site.pix(text), site.pesquisa(text), site.responder(text, text, int, text), site.rastreio(text) from public;
-grant execute on function site.pix(text), site.pesquisa(text), site.responder(text, text, int, text), site.rastreio(text) to anon;
+revoke all on function site.pix(text), site.pesquisa(text), site.responder(text, text, int, text), site.rastreio(text), site.ir(text) from public;
+grant execute on function site.pix(text), site.pesquisa(text), site.responder(text, text, int, text), site.rastreio(text), site.ir(text) to anon;
 revoke all on function avisos.correios_token() from public;
 
 -- Motor da régua (workflow regua.yml), a cada 10 minutos. Agenda, rodada uma vez:

@@ -31,11 +31,13 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import secrets
 import sys
 import traceback
 
 import requests
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -155,6 +157,39 @@ def criar_link(con, tipo: str, pedido: str, dados: dict) -> str:
     con.execute(text("insert into avisos.regua_links (token, pedido, tipo, dados) values (:t, :p, :tipo, cast(:d as jsonb))"),
                 {"t": token, "p": pedido, "tipo": tipo, "d": json.dumps(dados, ensure_ascii=False)})
     return token
+
+
+def _botao(url: str) -> str:
+    u = url.lower()
+    for chave, nome in (("wa.me", "whatsapp"), ("correios.com.br", "correios"), ("instagram.com", "instagram"),
+                        ("/pages/pix", "pix"), ("/pages/sua-opiniao", "pesquisa"), ("/pages/rastreio", "rastreio")):
+        if chave in u:
+            if nome == "pesquisa":
+                q = parse_qs(urlparse(url.replace("&amp;", "&")).query)
+                return "pesquisa: " + next((f"{k} {v[0]}" for k, v in q.items() if k != "p"), "abrir")
+            return nome
+    return "site" if "annis.store" in u else "outro"
+
+
+def com_cliques(con, html: str, texto: str, pedido: str, qual: str, modo: str, simular: bool):
+    """Troca cada link do e-mail por annis.store/pages/ir?p=<token>: a página
+    registra o clique (pedido, e-mail, botão) e redireciona para o destino gravado.
+    Abertura não se mede: o Mail do iPhone carrega tudo sozinho."""
+    tokens = {}
+    # Só links clicáveis (<a>); o <link> das fontes fica como está. O mesmo
+    # endereço no botão VML do Outlook é trocado junto, no replace abaixo.
+    for url in dict.fromkeys(re.findall(r'<a [^>]*?href="(https?://[^"]+)"', html)):
+        destino = url.replace("&amp;", "&")
+        token = "simulado" if simular else secrets.token_urlsafe(9)
+        if not simular:
+            con.execute(text("insert into avisos.regua_links (token, pedido, tipo, dados) values (:t, :p, 'link', cast(:d as jsonb))"),
+                        {"t": token, "p": pedido, "d": json.dumps({"destino": destino, "email": qual, "botao": _botao(destino),
+                                                                   "sombra": modo == "sombra"}, ensure_ascii=False)})
+        tokens[url] = f"https://annis.store/pages/ir?p={token}"
+    for url, curto in tokens.items():
+        html = html.replace(f'href="{url}"', f'href="{curto}"')
+        texto = texto.replace(f"({url.replace('&amp;', '&')})", f"({curto})")
+    return html, texto
 
 
 def telegram(texto: str) -> None:
@@ -279,6 +314,7 @@ def _enviar(con, o, numero, qual, dados, modo, cco, simular):
                 "nome": dados["nome"], "peca": dados["peca"], "peca_nome": principal["nome"], "img": principal["img"],
                 "o_seu": g["o_seu"], "roupa": unica_roupa})
         html, texto = html.replace(TOKEN, token), texto.replace(TOKEN, token)
+    html, texto = com_cliques(con, html, texto, o["name"], qual, modo, simular)
     para = email
     if modo == "sombra":
         para, assunto, cco = CONTATO, f"[sombra {o['name']}] {assunto}", []
