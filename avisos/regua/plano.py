@@ -187,7 +187,8 @@ def montar_pedido(nome, completo, detalhe, pagarme):
         exp = local(cob["expira"]) if cob.get("expira") else criado + dt.timedelta(hours=1)
         ev(criado + dt.timedelta(minutes=15), "e1", somas=somas + [("Total a pagar", total)], pagamento="Pix, aguardando",
            hora_limite=f"{exp:%Hh%M}",
-           pix={"valor": total, "codigo": cob.get("qr") or "", "link_copiar": link_pagina("pix", nome)})
+           pix={"valor": total, "codigo": cob.get("qr") or "", "expira": cob.get("expira") or "",
+                "link_copiar": link_pagina("pix", nome)})
     if not pago:
         return saida
     saida_final = _depois_do_pago(o, criado, pago, base, saida, ev, somas, total, pix, dp, misto, frete, end, itens)

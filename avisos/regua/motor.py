@@ -138,9 +138,9 @@ def _agencia(ev: dict) -> str:
 
 
 def cobranca_pix(payment_id: str) -> dict:
-    d = pagarme_client._get("/orders", {"code": payment_id}).get("data") or []
-    ch = ((d[0].get("charges") or [{}])[0]) if d else {}
-    lt = ch.get("last_transaction") or {}
+    # A listagem de pedidos não traz a cobrança; a de cobranças, pelo mesmo código, traz.
+    d = pagarme_client._get("/charges", {"code": payment_id}).get("data") or []
+    lt = (d[0].get("last_transaction") or {}) if d else {}
     return {"qr": lt.get("qr_code"), "expira": lt.get("expires_at"), "parcelas": lt.get("installments")}
 
 
@@ -203,6 +203,8 @@ def main(simular: bool = False) -> None:
                         continue
                     if qual == "e1" and not pix_pendente:
                         continue
+                    if qual == "e1" and not dados["pix"]["codigo"]:
+                        raise RuntimeError("Pix pendente sem código na Pagar.me: e-mail 1 não saiu")
                     _enviar(con, o, numero, qual, dados, modo, cco, simular)
                     ja[f"regua:{qual}:{numero}"] = "agora"
         except Exception as e:
@@ -255,7 +257,7 @@ def _enviar(con, o, numero, qual, dados, modo, cco, simular):
     if TOKEN in html:
         if qual == "e1":
             token = "simulado" if simular else criar_link(con, "pix", o["name"], {
-                "codigo": dados["pix"]["codigo"], "valor": dados["pix"]["valor"], "expira": dados.get("pix_expira", "")})
+                "codigo": dados["pix"]["codigo"], "valor": dados["pix"]["valor"], "expira": dados["pix"].get("expira") or ""})
         else:
             unica_roupa = dados.get("roupa", True) and len(dados["itens"]) == 1
             principal = max(dados["itens"], key=lambda i: modelos._valor(i["preco"]))
