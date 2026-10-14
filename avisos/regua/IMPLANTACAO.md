@@ -17,6 +17,7 @@ Legenda: [x] feito · [ ] falta · (você) depende do Pedro
 - [x] Criar as 3 páginas no admin (visíveis, fora do menu, ocultas da busca)
 - [x] Comentário e nota de 0 a 6 avisam no Telegram
 - [x] Testar as 3 no computador e no celular com tokens de teste
+- [x] templates/page.ir.liquid + página "Ir" (14/10): todo link dos e-mails passa por ela; grava o clique em avisos.regua_cliques e redireciona
 
 ## 3. Motor de envio (avisos/regua/motor.py)
 - [x] Ler pedidos recentes da Shopify e decidir o que vence agora (mesma lógica do backtest)
@@ -33,6 +34,7 @@ Legenda: [x] feito · [ ] falta · (você) depende do Pedro
 - [x] E-mail 9: token da pesquisa
 - [x] Pedido cancelado ou reembolsado: para tudo
 - [x] Erro em um pedido não trava os outros; erro vai para o Telegram
+- [x] Cliques: cada link vira annis.store/pages/ir?p=<token> (regua_links tipo link); abertura não é medida
 - [x] Modo sombra por variável (REGUA_MODO=sombra manda só para contato@), padrão: no ar
 
 ## 4. Rodar sozinho (NO AR desde 13/10/2026 22h26; sombra de 22h02 a 22h26)
