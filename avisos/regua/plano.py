@@ -121,6 +121,20 @@ _tk = None
 
 
 def prazo_correios(servico, cep, postagem):
+    """Data máxima de entrega pela API de prazo dos Correios, guardada no banco
+    (a mesma consulta se repete a cada rodada do motor)."""
+    chave = f"regua_prazo:{servico}:{cep}:{postagem:%Y-%m-%d}"
+    v = _db().execute(text("select valor from avisos.estado where chave = :c"), {"c": chave}).scalar()
+    if v:
+        return dt.date.fromisoformat(v)
+    d = _prazo_api(servico, cep, postagem)
+    _db().execute(text("insert into avisos.estado (chave, valor, expira, em) values (:c, :v, now() + interval '60 days', now()) "
+                       "on conflict (chave) do update set valor = excluded.valor, em = now()"), {"c": chave, "v": d.isoformat()})
+    _db().commit()
+    return d
+
+
+def _prazo_api(servico, cep, postagem):
     global _tk
     _tk = _tk or etiqueta._token_correios()
     r = requests.get(f"https://api.correios.com.br/prazo/v1/nacional/{SERVICO[servico]}",

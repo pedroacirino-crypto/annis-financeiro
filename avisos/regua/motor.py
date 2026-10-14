@@ -2,7 +2,8 @@
 
 Roda a cada 10 minutos (workflow regua.yml, disparado pelo Supabase). Para cada
 pedido criado depois de REGUA_INICIO, monta a sequência (plano.py), e manda o
-que já venceu e ainda não saiu. Cada envio fica anotado em avisos.enviados como
+que já venceu e ainda não saiu. Pedido de antes de REGUA_INICIO (até 60 dias)
+recebe só do 6 em diante, e só o que acontece depois de REGUA_INICIO. Cada envio fica anotado em avisos.enviados como
 "regua:<e-mail>:<número>", então rodar de novo nunca repete.
 
     python -m avisos.regua.motor              manda o que venceu
@@ -47,7 +48,11 @@ from sqlalchemy import text  # noqa: E402
 
 TZ = plano.TZ
 CONTATO = "contato@annis.store"
-HORARIO = {"e3", "e4", "e5", "e5_pronta", "e9"}  # só em horário comercial
+HORARIO = {"e3", "e4", "e5", "e5_pronta", "e7_atrasada", "e9"}  # só em horário comercial
+# Pedidos de antes da virada (Pedro, 14/10): do 6 em diante, e só eventos que
+# acontecem depois da virada (o 6 só para quem for postado de 14/10 em diante).
+# Do 0 ao 5 é só para pedido novo.
+LEGADO = {"e6", "e7_atrasada", "e7_tentativa", "e7_retirada", "e8", "e9", "devolucao"}
 TOKEN = "__TOKEN__"
 
 CONSULTA = '''query($c:String, $q:String){orders(first:50, after:$c, sortKey:CREATED_AT, query:$q){pageInfo{hasNextPage endCursor}
@@ -72,8 +77,9 @@ def inicio() -> dt.datetime:
     return d if d.tzinfo else d.replace(tzinfo=TZ)
 
 
-def pedidos(desde: dt.datetime) -> list:
-    desde = max(desde, plano.agora() - dt.timedelta(days=60))
+def pedidos() -> list:
+    """Pedidos dos últimos 60 dias (os de antes da virada entram só do 7 em diante)."""
+    desde = plano.agora() - dt.timedelta(days=60)
     q = f"created_at:>={desde.astimezone(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}"
     nodes, c = [], None
     while True:
@@ -185,8 +191,10 @@ def main(simular: bool = False) -> None:
     with eng.connect() as con:
         ja, etq = enviados(con), etiquetas(con)
     erros = []
-    for o in pedidos(inicio()):
+    virada = inicio()
+    for o in pedidos():
         numero = o["name"].lstrip("#")
+        legado = plano.local(o["createdAt"]) < virada
         try:
             with eng.begin() as con:
                 cods = [t["number"].strip().upper() for f in o["fulfillments"] for t in f["trackingInfo"] if t.get("number")]
@@ -194,10 +202,15 @@ def main(simular: bool = False) -> None:
                     cods.append(etq[o["name"]])
                 entregue_ja = f"regua:e8:{numero}" in ja
                 o["rastro"] = {cd: rastro(con, cd, entregue_ja) for cd in cods[:1]}
-                pix_pendente = any("PIX" in g for g in o["paymentGatewayNames"]) and o["displayFinancialStatus"] == "PENDING"
+                if legado and not cods:  # sem pacote, nada do 7 em diante para mandar
+                    continue
+                pix_pendente = (not legado and any("PIX" in g for g in o["paymentGatewayNames"])
+                                and o["displayFinancialStatus"] == "PENDING")
                 pid = next((t["payment_id"] for t in o["transactions"] if t.get("payment_id")), None)
                 cobrancas = {pid: cobranca_pix(pid)} if (pix_pendente and pid) else {}
                 seq = plano.montar_pedido(o["name"], o, o, cobrancas)
+                if legado:
+                    seq = [x for x in seq if x[1] in LEGADO and x[0] >= virada]
                 for quando, qual, dados in vencidos(seq, ja, numero, agora):
                     if qual in HORARIO and not (9 <= agora.hour < 20):
                         continue
