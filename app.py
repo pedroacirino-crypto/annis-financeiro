@@ -525,8 +525,18 @@ if db.get_db_counts()["charges"] == 0 or _idade is None or _idade > HORAS_ATE_EN
 # desde o último clique, o portal recalcula uma vez. É a única consulta que
 # todo clique faz.
 import memo as _memo
-if _memo.mudou(nuvem.dado_novo_em()):
-    _esquecer_derivados()
+# Publicação nova no Streamlit Cloud reexecuta o app.py com o código novo, mas
+# o processo pode manter os módulos importados na versão antiga (14/10/2026:
+# o portal caiu com AttributeError em memo.mudou). Faltou função nova, recarrega.
+if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra"):
+    import importlib
+    _memo = importlib.reload(_memo)
+    nuvem = importlib.reload(nuvem)
+try:
+    if _memo.mudou(nuvem.dado_novo_em()):
+        _esquecer_derivados()
+except Exception:
+    pass  # a conferência de dado novo nunca pode derrubar o portal
 
 exigir_senha()
 
