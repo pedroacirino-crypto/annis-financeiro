@@ -205,22 +205,22 @@ e8:
     - "Ainda não recebeu? Responda este e-mail ou chame a gente no WhatsApp, que a gente vai atrás com os Correios. Se algo não ficou como você esperava, é só responder também."
 
 e9:
-  assunto: "Como ficou {o_seu} {peca}?"
+  assunto: "{nome}, como ficou {o_seu} {peca}?"
   previa: "Duas perguntas rápidas."
   faixa: "Pedido {pedido} · duas perguntas rápidas"
   eyebrow: "Pedido {pedido}"
   titulo: "Como ficou {o_seu} {peca}?"
   texto:
-    - "Oi, {nome}. Já deu para usar? A gente quer saber como {ele} ficou em você."
-  assunto_plural: "Como ficaram suas peças?"
+    - "Oi, {nome}. A gente quer saber como {ele} ficou em você."
+  assunto_plural: "{nome}, como ficaram suas peças?"
   titulo_plural: "Como ficaram suas peças?"
   texto_plural:
-    - "Oi, {nome}. Já deu para usar? A gente quer saber como elas ficaram em você."
+    - "Oi, {nome}. A gente quer saber como elas ficaram em você."
   # Só bolsa ou acessório (não se veste): "o que achou".
-  assunto_acessorio: "O que achou {do_seu} {peca}?"
+  assunto_acessorio: "{nome}, o que achou {do_seu} {peca}?"
   titulo_acessorio: "O que achou {do_seu} {peca}?"
   texto_acessorio:
-    - "Oi, {nome}. Já deu para usar? A gente quer saber o que você achou."
+    - "Oi, {nome}. A gente quer saber o que você achou."
   pergunta_tamanho: "Como ficou o tamanho?"
   opcoes_tamanho: ["Pequeno", "Certo", "Grande"]
   pergunta_nota: "De 0 a 10, quanto você indicaria a Annis para uma amiga?"

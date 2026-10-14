@@ -200,6 +200,10 @@ def montar(qual: str, dados: dict) -> dict:
         L += [B.abertura(ABERTURA, t["hero_titulo"], t["hero_sub"]), B.texto(abertura_txt), *blocos_cuidados,
               B.texto(t["depois"]), whats(" "), fim]
     elif qual == "e9":
+        if not dados.get("nome"):
+            # O assunto começa pelo nome (Pedro, 14/10); sem nome, não pode começar por vírgula.
+            t["assunto"] = t["assunto"].lstrip(", ")
+            t["assunto"] = t["assunto"][:1].upper() + t["assunto"][1:]
         pergunta_tamanho = dados.get("roupa", True) and not plural
         L += [B.texto(t["texto"], t["eyebrow"], t["titulo"]),
               B.curto([i["img"] for i in dados["itens"]], nomes, dados["pedido"]),
