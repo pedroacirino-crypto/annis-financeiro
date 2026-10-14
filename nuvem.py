@@ -950,3 +950,37 @@ def dado_novo_em():
             return con.execute(text(f"SELECT em FROM {TABELA_DADO_NOVO} WHERE id = 1")).scalar()
     except Exception:
         return None
+
+
+# ─── Régua pós-compra no portal ─────────────────────────────────────────────
+# Aba Pós-compra do Trabalho (14/10/2026): quem recebeu e-mail, em que clicou,
+# que nota deu e o que comentou. Lê ao vivo; as tabelas são da régua
+# (avisos/regua/regua.sql) e os envios ficam em avisos.enviados.
+
+def ler_pos_compra() -> dict:
+    """Envios, cliques e respostas da régua, com o nome da cliente. Pedido de
+    teste (sem número) e envio em modo sombra ficam de fora."""
+    vazio = {"envios": [], "cliques": [], "respostas": [], "clientes": {}, "pecas": {}}
+    if not configurado():
+        return vazio
+    from sqlalchemy import text
+    try:
+        with _conectar().connect() as con:
+            envios = con.execute(text(
+                "SELECT '#' || split_part(id, ':', 3) AS pedido, split_part(id, ':', 2) AS qual, criado"
+                " FROM avisos.enviados WHERE id LIKE 'regua:%' AND tipo LIKE 'regua <%'")).mappings().all()
+            cliques = con.execute(text(
+                "SELECT pedido, botao, em FROM avisos.regua_cliques"
+                " WHERE pedido ~ '^#[0-9]+$' ORDER BY em DESC")).mappings().all()
+            respostas = con.execute(text(
+                "SELECT pedido, tamanho, nota, comentario, criado, atualizado FROM avisos.regua_respostas"
+                " WHERE pedido ~ '^#[0-9]+$' ORDER BY atualizado DESC")).mappings().all()
+            pecas = dict(con.execute(text(
+                "SELECT pedido, dados ->> 'peca_nome' FROM avisos.regua_links WHERE tipo = 'pesquisa'")).fetchall())
+            nums = sorted({e["pedido"] for e in envios} | {c["pedido"] for c in cliques} | {r["pedido"] for r in respostas})
+            clientes = dict(con.execute(text(
+                f"SELECT numero, cliente FROM {TABELA} WHERE numero = ANY(:n)"), {"n": nums}).fetchall()) if nums else {}
+        return {"envios": [dict(e) for e in envios], "cliques": [dict(c) for c in cliques],
+                "respostas": [dict(r) for r in respostas], "clientes": clientes, "pecas": pecas}
+    except Exception:
+        return vazio

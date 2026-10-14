@@ -1697,7 +1697,7 @@ with st.sidebar:
 # Lista de espera escondida em 04/10/2026 a pedido do Pedro, para voltar
 # depois; o código da aba continua aqui e basta devolver o nome à lista.
 # Rastreio entrou em 14/10/2026: acompanhar os pacotes é trabalho do dia.
-TRABALHO = ["Recuperar", "Disparos", "Clientes", "Rastreio", "Acessos", "Plano"]
+TRABALHO = ["Recuperar", "Disparos", "Clientes", "Rastreio", "Pós-compra", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
@@ -3671,6 +3671,89 @@ if "Rastreio" in abas:
                             _r = {"ok": False, "motivo": "erro"}
                     st.markdown(_painel_rastreio(_p, _r), unsafe_allow_html=True)
 
+
+# ════════════════════════════════════════════════════════════════════════════
+# PÓS-COMPRA: e-mails da régua, cliques, notas e comentários (14/10/2026)
+# ════════════════════════════════════════════════════════════════════════════
+# Nome curto de cada e-mail da régua (avisos/regua/textos.yaml).
+_EMAIL_REGUA = {
+    "e0": "Pedido recebido", "pagamento_shopify": "Pagamento confirmado", "e1": "Falta o Pix",
+    "e2_pronta": "Pedido confirmado", "e2_encomenda": "Pedido confirmado", "e3": "Em produção",
+    "e5": "Atualização do prazo", "e5_pronta": "Atualização do prazo", "e6": "Postado",
+    "e7_atrasada": "Segue a caminho", "e7_tentativa": "Tentativa de entrega",
+    "e7_retirada": "Esperando retirada", "e8": "Chegou", "e9": "Pesquisa (como ficou)",
+}
+_BOTAO_REGUA = {"correios": "Rastreio", "site": "Site", "whatsapp": "WhatsApp", "instagram": "Instagram",
+                "pix": "Pix", "checklist": "Checklist", "blueprint": "Blueprint"}
+_CAIMENTO = {"pequeno": "Ficou pequeno", "certo": "Ficou certo", "grande": "Ficou grande"}
+
+
+def _hora_br(ts) -> str:
+    try:
+        return pd.Timestamp(ts).tz_convert("America/Sao_Paulo").strftime("%d/%m %Hh%M")
+    except Exception:
+        return ""
+
+
+if "Pós-compra" in abas:
+  with abas["Pós-compra"]:
+    st.header("Pós-compra")
+    st.caption(
+        "E-mails da régua que cada cliente recebeu, em que ela clicou e o que respondeu "
+        "na pesquisa do e-mail 9 (nota de 0 a 10, caimento e comentário). Ao vivo."
+    )
+    _pc = nuvem.ler_pos_compra()
+    _cli = _pc["clientes"]
+    if not _pc["envios"] and not _pc["respostas"]:
+        st.info("A régua ainda não mandou nenhum e-mail.")
+    else:
+        _resp = _pc["respostas"]
+        _notas = [r["nota"] for r in _resp if r["nota"] is not None]
+        _pesq = {e["pedido"] for e in _pc["envios"] if e["qual"] == "e9"}
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Clientes com e-mail", len({e["pedido"] for e in _pc["envios"]}),
+                  help=f"{len(_pc['envios'])} e-mails enviados no total.")
+        k2.metric("Cliques", len(_pc["cliques"]),
+                  help="Toques em botões dos e-mails (rastreio, site, WhatsApp...). Abertura de e-mail não é medida.")
+        k3.metric("Pesquisas respondidas", f"{len({r['pedido'] for r in _resp})} de {len(_pesq)}")
+        k4.metric("Nota média", f"{sum(_notas) / len(_notas):.1f}".replace(".", ",") if _notas else "—",
+                  help=f"{len(_notas)} nota(s), de 0 a 10.")
+
+        st.subheader("Notas e comentários")
+        if not _resp:
+            st.caption("Nenhuma resposta ainda.")
+        else:
+            tabela(pd.DataFrame([{
+                "Quando": _hora_br(r["atualizado"]), "Pedido": r["pedido"], "Cliente": _cli.get(r["pedido"], ""),
+                "Peça": _pc["pecas"].get(r["pedido"]) or "", "Nota": "" if r["nota"] is None else r["nota"],
+                "Caimento": _CAIMENTO.get(r["tamanho"] or "", r["tamanho"] or ""),
+                "Comentário": r["comentario"] or "",
+            } for r in _resp]), num=("Nota",), titulo="Notas e comentários")
+
+        st.subheader("Cliente a cliente")
+        _por = {}
+        for e in sorted(_pc["envios"], key=lambda x: x["criado"]):
+            _por.setdefault(e["pedido"], {"emails": [], "cliques": [], "ultimo": e["criado"]})
+            _por[e["pedido"]]["emails"].append(_EMAIL_REGUA.get(e["qual"], e["qual"]))
+            _por[e["pedido"]]["ultimo"] = e["criado"]
+        for c in _pc["cliques"]:
+            _por.setdefault(c["pedido"], {"emails": [], "cliques": [], "ultimo": c["em"]})
+            _por[c["pedido"]]["cliques"].append(_BOTAO_REGUA.get(c["botao"] or "", c["botao"] or "link"))
+        _nota_de = {r["pedido"]: r for r in _resp}
+        _linhas = []
+        for ped, v in sorted(_por.items(), key=lambda kv: kv[1]["ultimo"], reverse=True):
+            r = _nota_de.get(ped) or {}
+            _linhas.append({
+                "Pedido": ped, "Cliente": _cli.get(ped, ""),
+                "E-mails recebidos": " · ".join(v["emails"]),
+                "Último": _hora_br(v["ultimo"]),
+                "Clicou em": " · ".join(sorted(set(v["cliques"]), key=v["cliques"].index)) or "—",
+                "Nota": "" if r.get("nota") is None else r["nota"],
+                "Respondeu": "sim" if r else ("não" if ped in _pesq else ""),
+            })
+        tabela(pd.DataFrame(_linhas), num=("Nota",), titulo="Cliente a cliente")
+        st.caption("A régua entrou no ar em 13/10, às 22h. Pedido feito antes disso recebe só "
+                   "o que acontece depois: postagem, entrega e pesquisa.")
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA: ACESSOS: quem entrou no painel, e de onde
