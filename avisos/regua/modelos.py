@@ -162,6 +162,8 @@ def montar(qual: str, dados: dict) -> dict:
               whats(t["frase_whats"], principal=True), fim]
     elif qual == "e6":
         r = dados["rastreio"]
+        if not dados.get("previsao_correios"):
+            t["previa"] = t["previa_sem_previsao"]
         # Previsão em destaque, com a data que os Correios dão para o pacote.
         prev = [B.datas(dados["data_postado"], dados["previsao_correios"], rotulos=("Postado em", "Entrega prevista"))] \
             if dados.get("previsao_correios") else []

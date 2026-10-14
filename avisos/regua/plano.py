@@ -175,12 +175,19 @@ def montar_pedido(nome, completo, detalhe, pagarme):
     dp = max(dps)
     misto = dp > 0 and min(dps) == 0
     frete = (o["shippingLines"]["nodes"][0]["title"] if o["shippingLines"]["nodes"] else "").upper()
-    sub = float(d["subtotalPriceSet"]["shopMoney"]["amount"])
-    desc = float(d["totalDiscountsSet"]["shopMoney"]["amount"])
-    somas = [("Subtotal", brl(sub + desc if desc else sub)), (f"Frete · {frete}", brl(d["totalShippingPriceSet"]["shopMoney"]["amount"]))]
-    if desc:
-        somas.append(("Desconto Pix (5%)" if pix else "Desconto", "-" + brl(desc)))
-    total = brl(d["totalPriceSet"]["shopMoney"]["amount"])
+    # Subtotal = peças pelo preço cheio. O desconto sai da conta (peças + frete - total),
+    # para fechar sempre: o subtotal da Shopify já vem com o desconto das peças, mas
+    # não com o do frete grátis, e somar os dois de volta inflava o subtotal (#1148, 14/10).
+    sub = round(sum(float(li["originalTotalSet"]["shopMoney"]["amount"]) for li in lis), 2)
+    frete_valor = float(d["totalShippingPriceSet"]["shopMoney"]["amount"])
+    total_valor = float(d["totalPriceSet"]["shopMoney"]["amount"])
+    desc = round(sub + frete_valor - total_valor, 2)
+    somas = [("Subtotal", brl(sub)), (f"Frete · {frete}", brl(frete_valor))]
+    if desc > 0:
+        # "Pix (5%)" só quando o desconto é exatamente os 5% do Pix; com frete grátis junto, "Desconto".
+        so_pix = pix and abs(desc - round(sub * 0.05, 2)) < 0.02
+        somas.append(("Desconto Pix (5%)" if so_pix else "Desconto", "-" + brl(desc)))
+    total = brl(total_valor)
     pagamento = "Pix" if pix else ("Cartão de crédito" + (f", {cob['parcelas']}x" if cob.get("parcelas") and cob["parcelas"] > 1 else ""))
     base = {
         "nome": primeiro, "pedido": nome, "genero": genero, "peca": peca, "peca_nome": principal["nome"],
@@ -249,7 +256,15 @@ def _depois_do_pago(o, criado, pago, base, saida, ev, somas, total, pix, dp, mis
     link = f"https://rastreamento.correios.com.br/app/index.php?objetos={codigo}"
     rast = {"codigo": codigo, "link": link}
     prev_txt = dia(prevista.date()) if prevista else ""
-    ev(postado, "e6", somas=somas + [("Total pago", total)], rastreio=rast, previsao_correios=prev_txt,
+    # Logo depois da postagem os Correios ainda não dão data ao pacote (#1148, 14/10):
+    # o 6 usa o prazo do contrato a partir da postagem, como o 2.
+    prev_6 = prev_txt
+    if not prev_6:
+        try:
+            prev_6 = dia(prazo_correios(frete, end.get("zip", "").replace("-", ""), postado.date()))
+        except Exception:
+            prev_6 = ""
+    ev(postado, "e6", somas=somas + [("Total pago", total)], rastreio=rast, previsao_correios=prev_6,
        data_postado=dia(postado.date()),
        passos=[("feito", f"Pago<br>{pago:%d/%m}"), ("feito", fase), ("agora", f"Postado<br>{postado:%d/%m}"), ("", "Entregue")])
     entregue = sorted(corr(e["quando"]) for e in ev_rastro if e["codigo"] in ("BDE", "BDI", "BDR") and e["tipo"] in ("01", "12", "23"))

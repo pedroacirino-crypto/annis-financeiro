@@ -140,6 +140,7 @@ e5_pronta:
 e6:
   assunto: "Seu pedido {pedido} foi postado"
   previa: "Código de rastreio dentro. Entrega prevista até {previsao_correios}."
+  previa_sem_previsao: "Código de rastreio dentro."
   faixa: "Pedido {pedido} · postado"
   hero_titulo: "Seu pedido está a caminho"
   hero_sub: "Saiu hoje pelos Correios · {servico}"
