@@ -107,6 +107,15 @@ begin
     nota = coalesce(excluded.nota, r.nota),
     comentario = coalesce(excluded.comentario, r.comentario),
     atualizado = now();
+  -- Comentário e nota baixa (0 a 6) avisam no grupo; falha no Telegram não perde a resposta.
+  if comentario is not null or (nota is not null and nota <= 6) then
+    begin
+      perform avisos.telegram('Pesquisa do pedido ' || l.pedido
+        || coalesce(' · nota ' || nota, '') || coalesce(E'\n' || comentario, ''));
+    exception when others then
+      null;
+    end;
+  end if;
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -156,7 +165,8 @@ revoke all on function site.pix(text), site.pesquisa(text), site.responder(text,
 grant execute on function site.pix(text), site.pesquisa(text), site.responder(text, text, int, text), site.rastreio(text) to anon;
 revoke all on function avisos.correios_token() from public;
 
--- Motor da régua (workflow regua.yml), a cada 10 minutos. Erro ao disparar
+-- Motor da régua (workflow regua.yml), a cada 10 minutos. Agenda, rodada uma vez:
+--   select cron.schedule('annis-regua', '*/10 * * * *', 'select avisos.disparar_regua()'); Erro ao disparar
 -- vai para avisos.anota_erro, como os outros disparos.
 create or replace function avisos.disparar_regua() returns void
 language plpgsql security definer as $$

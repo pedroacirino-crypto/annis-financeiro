@@ -1,0 +1,152 @@
+{%- layout none -%}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sua opinião · Annis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+{%- raw -%}
+<style>
+:root { color-scheme: light; --marrom: #68380a; --creme: #fff6f0; --fundo: #f3e9df; --tinta: #1c1c1c; --apoio: #6e6258; --linha: #e6d5c4; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fundo); color: var(--tinta); font: 15px/1.6 Poppins, Arial, sans-serif; }
+.caixa { max-width: 600px; margin: 0 auto; background: var(--creme); min-height: 100vh; }
+.faixa { background: var(--marrom); color: var(--creme); text-align: center; font-size: 12px; letter-spacing: .08em; padding: 10px 16px; }
+.topo { text-align: center; padding: 22px 0 6px; }
+.topo img { width: 130px; height: auto; }
+main { padding: 18px 28px 40px; }
+.eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--marrom); font-weight: 500; margin: 0 0 8px; }
+h1 { font-family: Newsreader, Georgia, serif; font-weight: 300; font-size: 34px; line-height: 1.1; margin: 0 0 14px; }
+h2 { font-family: Newsreader, Georgia, serif; font-weight: 400; font-size: 22px; line-height: 1.2; margin: 24px 0 12px; }
+p { margin: 0 0 12px; }
+.apoio { color: var(--apoio); font-size: 13px; }
+.rotulo { display: block; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--marrom); font-weight: 500; margin-bottom: 4px; }
+.data { font-family: Newsreader, Georgia, serif; font-weight: 300; font-size: 30px; line-height: 1.1; color: var(--marrom); }
+.btn { display: block; width: 100%; background: var(--marrom); color: var(--creme); border: 1px solid var(--marrom); text-transform: uppercase; letter-spacing: .12em; font: 500 12px Poppins, Arial, sans-serif; padding: 16px; text-align: center; text-decoration: none; cursor: pointer; margin: 14px 0 0; }
+.btn.vazado { background: transparent; color: var(--marrom); }
+.btn:disabled { opacity: .6; cursor: default; }
+.linha-sep { border: 0; border-top: 1px solid var(--linha); margin: 22px 0; }
+.peca { display: flex; gap: 14px; align-items: center; margin: 6px 0 4px; }
+.peca img { width: 64px; height: 96px; object-fit: cover; background: #efe3d6; }
+.peca .n { font-family: Newsreader, Georgia, serif; font-size: 18px; line-height: 1.25; }
+.carregando { color: var(--apoio); }
+footer { border-top: 1px solid var(--linha); text-align: center; padding: 22px 20px 28px; font-size: 12px; color: var(--marrom); }
+footer a { color: var(--marrom); text-decoration: none; }
+@media (max-width: 480px) { main { padding: 14px 20px 36px; } h1 { font-size: 28px; } .data { font-size: 26px; } }
+
+.opcoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.opcoes button, .escala button { font: 14px Poppins, Arial, sans-serif; cursor: pointer; }
+.opcoes button { border: 1px solid var(--marrom); color: var(--marrom); background: #fff; padding: 13px 4px; }
+.escala { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; }
+.escala button { background: var(--marrom); color: var(--creme); border: 0; padding: 11px 0; }
+.pontas { display: flex; justify-content: space-between; font-size: 11px; color: var(--apoio); margin-top: 6px; }
+.recebido { background: #fff; border-left: 3px solid var(--marrom); padding: 10px 14px; margin: 0 0 14px; }
+textarea { width: 100%; min-height: 140px; border: 1px solid var(--linha); background: #fff; padding: 12px; font: 15px/1.5 Poppins, Arial, sans-serif; resize: vertical; }
+.link { background: none; border: 0; color: var(--marrom); text-decoration: underline; font: 14px Poppins, Arial, sans-serif; cursor: pointer; padding: 0; }
+@media (max-width: 480px) { .escala button { padding: 10px 0; font-size: 12px; } }
+
+</style>
+</head>
+<body>
+<div class="caixa">
+<div class="faixa" id="faixa">ANNIS</div>
+<div class="topo"><a href="https://annis.store"><img src="https://annis.store/cdn/shop/files/Artboard_1_copy_6.png?width=400" alt="ANNIS"></a></div>
+<main id="app"><p class="carregando">Carregando...</p></main>
+<footer>Dúvidas? <a href="https://wa.me/554384557263">WhatsApp +55 43 8455-7263</a> · <a href="https://www.instagram.com/annis____/">Instagram</a> · <a href="https://annis.store">annis.store</a></footer>
+</div>
+<script>
+var API = "https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/rpc/";
+var CHAVE = "sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW";
+function rpc(f, corpo) {
+  return fetch(API + f, { method: "POST", headers: { apikey: CHAVE, "Content-Type": "application/json", "Content-Profile": "site" },
+    body: JSON.stringify(corpo) }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+}
+function param(n) { return new URLSearchParams(location.search).get(n); }
+function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+var DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+function data(iso) { iso = String(iso || ""); if (/[+-]\d\d$/.test(iso)) iso += ":00"; return new Date(iso); }
+function dia(iso) { var d = data(iso); return DIAS[d.getDay()] + ", " + String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0"); }
+function hora(iso) { var d = data(iso); return String(d.getHours()).padStart(2, "0") + "h" + String(d.getMinutes()).padStart(2, "0"); }
+function app(html) { document.getElementById("app").innerHTML = html; }
+function erro(msg) {
+  app('<h1>Não encontramos</h1><p>' + esc(msg) + '</p><a class="btn" href="https://wa.me/554384557263">Falar no WhatsApp</a>');
+}
+
+var p = param("p"), d = null, abriuComentario = param("comentario") === "1", comentou = false;
+var ROTULO = { pequeno: "pequeno", certo: "certo", grande: "grande" };
+function doSeu() { return d.o_seu === "a sua" ? "da sua" : "do seu"; }
+function render() {
+  var respondeu = d.tamanho || d.nota !== null && d.nota !== undefined;
+  var falta = [];
+  if (d.roupa && !d.tamanho) falta.push("tamanho");
+  if (d.nota === null || d.nota === undefined) falta.push("nota");
+  var h = "";
+  if (abriuComentario && !comentou && !d.comentou) {
+    h += '<p class="eyebrow">Pedido ' + esc(d.pedido) + '</p><h1>Conta pra gente</h1>'
+      + '<p>O que você gostou, o que mudaria, como foi ' + (d.roupa ? "vestir" : "usar") + ' ' + esc(d.o_seu) + ' ' + esc(d.peca) + '.</p>'
+      + '<textarea id="txt" maxlength="2000" placeholder="Escreva aqui"></textarea><button class="btn" id="enviar" type="button">Enviar</button>';
+    if (falta.length) h += '<hr class="linha-sep">';
+  } else if (respondeu || comentou || d.comentou) {
+    h += '<p class="eyebrow">Pedido ' + esc(d.pedido) + '</p><h1>Obrigada, ' + esc(d.nome) + '</h1>';
+  } else {
+    h += '<p class="eyebrow">Pedido ' + esc(d.pedido) + '</p><h1>' + (d.roupa ? "Como ficou " + esc(d.o_seu) : "O que achou " + doSeu()) + ' ' + esc(d.peca) + '?</h1>';
+  }
+  if (!abriuComentario || comentou || d.comentou) {
+    h += '<div class="peca">' + (d.img ? '<img src="' + esc(d.img) + '" alt="">' : "") + '<span class="n">' + esc(d.peca_nome) + '</span></div>';
+    var rec = [];
+    if (d.tamanho) rec.push("tamanho " + ROTULO[d.tamanho]);
+    if (d.nota !== null && d.nota !== undefined) rec.push("sua nota " + d.nota);
+    if (rec.length) h += '<p class="recebido" style="margin-top:14px">Recebemos: ' + esc(rec.join(" e ")) + '.</p>';
+    if (comentou || d.comentou) h += '<p class="recebido">Recebemos seu comentário. Obrigada por contar para a gente.</p>';
+  }
+  if (falta.indexOf("tamanho") >= 0) {
+    h += '<h2>' + (d.nota !== null && d.nota !== undefined ? "E como ficou o tamanho?" : "Como ficou o tamanho?") + '</h2>'
+      + '<div class="opcoes"><button data-t="pequeno">Pequeno</button><button data-t="certo">Certo</button><button data-t="grande">Grande</button></div>';
+  }
+  if (falta.indexOf("nota") >= 0) {
+    h += '<h2>' + (d.tamanho ? "E de 0 a 10, quanto você indicaria a Annis para uma amiga?" : "De 0 a 10, quanto você indicaria a Annis para uma amiga?") + '</h2><div class="escala">';
+    for (var n = 0; n <= 10; n++) h += '<button data-n="' + n + '">' + n + '</button>';
+    h += '</div><div class="pontas"><span>Nada provável</span><span>Muito provável</span></div>';
+  }
+  if (!falta.length && !abriuComentario && !comentou && !d.comentou) {
+    h += '<p>Obrigada por contar para a gente.</p><p><button class="link" id="abrir" type="button">'
+      + (d.nota !== null && d.nota <= 6 ? "Conta o que não foi bom?" : "Quer escrever um comentário?") + '</button></p>';
+  }
+  app(h);
+  document.querySelectorAll("[data-t]").forEach(function (b) { b.onclick = function () { responder({ tamanho: b.dataset.t }); }; });
+  document.querySelectorAll("[data-n]").forEach(function (b) { b.onclick = function () { responder({ nota: +b.dataset.n }); }; });
+  var ab = document.getElementById("abrir"); if (ab) ab.onclick = function () { abriuComentario = true; render(); };
+  var env = document.getElementById("enviar");
+  if (env) env.onclick = function () {
+    var t = document.getElementById("txt").value.trim(); if (!t) return;
+    env.disabled = true; env.textContent = "Enviando...";
+    rpc("responder", { p: p, comentario: t }).then(function (r) { if (r && r.ok) { comentou = true; abriuComentario = false; } render(); })
+      .catch(function () { env.disabled = false; env.textContent = "Enviar"; });
+  };
+}
+function responder(campos) {
+  var corpo = Object.assign({ p: p }, campos);
+  return rpc("responder", corpo).then(function (r) {
+    if (r && r.ok) { if (campos.tamanho) d.tamanho = campos.tamanho; if (campos.nota !== undefined) d.nota = campos.nota; }
+    render();
+  });
+}
+function iniciar(x) {
+  d = x;
+  if (!d) { erro("Este link de pesquisa não é válido."); return; }
+  document.getElementById("faixa").textContent = "Pedido " + d.pedido + " · duas perguntas rápidas";
+  var t = param("tamanho"), n = param("nota"), tarefas = [];
+  if (t && ROTULO[t] && d.roupa) tarefas.push(responder({ tamanho: t }));
+  if (n !== null && /^(10|[0-9])$/.test(n)) tarefas.push(responder({ nota: +n }));
+  if (!tarefas.length) render();
+}
+if (!p) erro("Este link de pesquisa não é válido.");
+else rpc("pesquisa", { p: p }).then(iniciar).catch(function () { erro("Não conseguimos abrir a pesquisa agora. Tente de novo em instantes."); });
+
+</script>
+{%- endraw -%}
+</body>
+</html>

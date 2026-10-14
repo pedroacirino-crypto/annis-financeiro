@@ -1,0 +1,105 @@
+{%- layout none -%}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Pix do seu pedido · Annis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+{%- raw -%}
+<style>
+:root { color-scheme: light; --marrom: #68380a; --creme: #fff6f0; --fundo: #f3e9df; --tinta: #1c1c1c; --apoio: #6e6258; --linha: #e6d5c4; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fundo); color: var(--tinta); font: 15px/1.6 Poppins, Arial, sans-serif; }
+.caixa { max-width: 600px; margin: 0 auto; background: var(--creme); min-height: 100vh; }
+.faixa { background: var(--marrom); color: var(--creme); text-align: center; font-size: 12px; letter-spacing: .08em; padding: 10px 16px; }
+.topo { text-align: center; padding: 22px 0 6px; }
+.topo img { width: 130px; height: auto; }
+main { padding: 18px 28px 40px; }
+.eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--marrom); font-weight: 500; margin: 0 0 8px; }
+h1 { font-family: Newsreader, Georgia, serif; font-weight: 300; font-size: 34px; line-height: 1.1; margin: 0 0 14px; }
+h2 { font-family: Newsreader, Georgia, serif; font-weight: 400; font-size: 22px; line-height: 1.2; margin: 24px 0 12px; }
+p { margin: 0 0 12px; }
+.apoio { color: var(--apoio); font-size: 13px; }
+.rotulo { display: block; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--marrom); font-weight: 500; margin-bottom: 4px; }
+.data { font-family: Newsreader, Georgia, serif; font-weight: 300; font-size: 30px; line-height: 1.1; color: var(--marrom); }
+.btn { display: block; width: 100%; background: var(--marrom); color: var(--creme); border: 1px solid var(--marrom); text-transform: uppercase; letter-spacing: .12em; font: 500 12px Poppins, Arial, sans-serif; padding: 16px; text-align: center; text-decoration: none; cursor: pointer; margin: 14px 0 0; }
+.btn.vazado { background: transparent; color: var(--marrom); }
+.btn:disabled { opacity: .6; cursor: default; }
+.linha-sep { border: 0; border-top: 1px solid var(--linha); margin: 22px 0; }
+.peca { display: flex; gap: 14px; align-items: center; margin: 6px 0 4px; }
+.peca img { width: 64px; height: 96px; object-fit: cover; background: #efe3d6; }
+.peca .n { font-family: Newsreader, Georgia, serif; font-size: 18px; line-height: 1.25; }
+.carregando { color: var(--apoio); }
+footer { border-top: 1px solid var(--linha); text-align: center; padding: 22px 20px 28px; font-size: 12px; color: var(--marrom); }
+footer a { color: var(--marrom); text-decoration: none; }
+@media (max-width: 480px) { main { padding: 14px 20px 36px; } h1 { font-size: 28px; } .data { font-size: 26px; } }
+
+.qr { background: #fff; padding: 18px; text-align: center; margin: 8px 0 14px; }
+.qr canvas, .qr img { margin: 0 auto; }
+.codigo { font-family: Menlo, Consolas, monospace; font-size: 12px; background: #fff; border: 1px solid var(--linha); padding: 10px; word-break: break-all; line-height: 1.4; }
+
+</style>
+</head>
+<body>
+<div class="caixa">
+<div class="faixa" id="faixa">ANNIS</div>
+<div class="topo"><a href="https://annis.store"><img src="https://annis.store/cdn/shop/files/Artboard_1_copy_6.png?width=400" alt="ANNIS"></a></div>
+<main id="app"><p class="carregando">Carregando...</p></main>
+<footer>Dúvidas? <a href="https://wa.me/554384557263">WhatsApp +55 43 8455-7263</a> · <a href="https://www.instagram.com/annis____/">Instagram</a> · <a href="https://annis.store">annis.store</a></footer>
+</div>
+<script>
+var API = "https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/rpc/";
+var CHAVE = "sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW";
+function rpc(f, corpo) {
+  return fetch(API + f, { method: "POST", headers: { apikey: CHAVE, "Content-Type": "application/json", "Content-Profile": "site" },
+    body: JSON.stringify(corpo) }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+}
+function param(n) { return new URLSearchParams(location.search).get(n); }
+function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+var DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+function data(iso) { iso = String(iso || ""); if (/[+-]\d\d$/.test(iso)) iso += ":00"; return new Date(iso); }
+function dia(iso) { var d = data(iso); return DIAS[d.getDay()] + ", " + String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0"); }
+function hora(iso) { var d = data(iso); return String(d.getHours()).padStart(2, "0") + "h" + String(d.getMinutes()).padStart(2, "0"); }
+function app(html) { document.getElementById("app").innerHTML = html; }
+function erro(msg) {
+  app('<h1>Não encontramos</h1><p>' + esc(msg) + '</p><a class="btn" href="https://wa.me/554384557263">Falar no WhatsApp</a>');
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+var p = param("p");
+function mostrar(d) {
+  if (!d || !d.codigo) { erro("Este link de Pix não é válido. Fale com a gente que mandamos outro."); return; }
+  document.getElementById("faixa").textContent = "Pedido " + d.pedido + " · aguardando o Pix";
+  var exp = d.expira ? data(d.expira) : null, vencido = exp && exp < new Date();
+  if (vencido) {
+    app('<p class="eyebrow">Pedido ' + esc(d.pedido) + '</p><h1>Este Pix expirou</h1><p>Se ainda quiser suas peças, fale com a gente que geramos um Pix novo.</p>'
+      + '<a class="btn" href="https://wa.me/554384557263?text=' + encodeURIComponent("Oi, o Pix do pedido " + d.pedido + " expirou") + '">Falar no WhatsApp</a>');
+    return;
+  }
+  var hoje = exp && exp.toDateString() === new Date().toDateString();
+  var ate = exp ? (hoje ? "Pague até " + hora(d.expira) + " de hoje" : "Pague até " + dia(d.expira) + ", " + hora(d.expira)) : "Pague pelo Pix";
+  app('<p class="eyebrow">Pix · ' + esc(d.valor) + '</p><h1>' + esc(ate) + '</h1>'
+    + '<p class="apoio">Abra o app do banco e leia o QR Code, ou copie o código e cole na opção Pix copia e cola.</p>'
+    + '<div class="qr" id="qr"></div><div class="codigo" id="codigo">' + esc(d.codigo) + '</div>'
+    + '<button class="btn" id="copiar" type="button">Copiar código Pix</button>'
+    + '<p class="apoio" style="margin-top:14px">Depois desse horário o Pix expira e as peças voltam para a loja.</p>');
+  new QRCode(document.getElementById("qr"), { text: d.codigo, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+  document.getElementById("copiar").onclick = function () {
+    var b = this;
+    var feito = function () { b.textContent = "Código copiado"; setTimeout(function () { b.textContent = "Copiar código Pix"; }, 2500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(d.codigo).then(feito, function () { selecionar(); });
+    else selecionar();
+  };
+  function selecionar() { var r = document.createRange(); r.selectNodeContents(document.getElementById("codigo")); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+}
+if (!p) erro("Este link de Pix não é válido.");
+else rpc("pix", { p: p }).then(mostrar).catch(function () { erro("Não conseguimos abrir o Pix agora. Tente de novo em instantes."); });
+
+</script>
+{%- endraw -%}
+</body>
+</html>

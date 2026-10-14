@@ -1,0 +1,105 @@
+{%- layout none -%}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Rastreio do pedido · Annis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+{%- raw -%}
+<style>
+:root { color-scheme: light; --marrom: #68380a; --creme: #fff6f0; --fundo: #f3e9df; --tinta: #1c1c1c; --apoio: #6e6258; --linha: #e6d5c4; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fundo); color: var(--tinta); font: 15px/1.6 Poppins, Arial, sans-serif; }
+.caixa { max-width: 600px; margin: 0 auto; background: var(--creme); min-height: 100vh; }
+.faixa { background: var(--marrom); color: var(--creme); text-align: center; font-size: 12px; letter-spacing: .08em; padding: 10px 16px; }
+.topo { text-align: center; padding: 22px 0 6px; }
+.topo img { width: 130px; height: auto; }
+main { padding: 18px 28px 40px; }
+.eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--marrom); font-weight: 500; margin: 0 0 8px; }
+h1 { font-family: Newsreader, Georgia, serif; font-weight: 300; font-size: 34px; line-height: 1.1; margin: 0 0 14px; }
+h2 { font-family: Newsreader, Georgia, serif; font-weight: 400; font-size: 22px; line-height: 1.2; margin: 24px 0 12px; }
+p { margin: 0 0 12px; }
+.apoio { color: var(--apoio); font-size: 13px; }
+.rotulo { display: block; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--marrom); font-weight: 500; margin-bottom: 4px; }
+.data { font-family: Newsreader, Georgia, serif; font-weight: 300; font-size: 30px; line-height: 1.1; color: var(--marrom); }
+.btn { display: block; width: 100%; background: var(--marrom); color: var(--creme); border: 1px solid var(--marrom); text-transform: uppercase; letter-spacing: .12em; font: 500 12px Poppins, Arial, sans-serif; padding: 16px; text-align: center; text-decoration: none; cursor: pointer; margin: 14px 0 0; }
+.btn.vazado { background: transparent; color: var(--marrom); }
+.btn:disabled { opacity: .6; cursor: default; }
+.linha-sep { border: 0; border-top: 1px solid var(--linha); margin: 22px 0; }
+.peca { display: flex; gap: 14px; align-items: center; margin: 6px 0 4px; }
+.peca img { width: 64px; height: 96px; object-fit: cover; background: #efe3d6; }
+.peca .n { font-family: Newsreader, Georgia, serif; font-size: 18px; line-height: 1.25; }
+.carregando { color: var(--apoio); }
+footer { border-top: 1px solid var(--linha); text-align: center; padding: 22px 20px 28px; font-size: 12px; color: var(--marrom); }
+footer a { color: var(--marrom); text-decoration: none; }
+@media (max-width: 480px) { main { padding: 14px 20px 36px; } h1 { font-size: 28px; } .data { font-size: 26px; } }
+
+.eventos { list-style: none; padding: 0; margin: 0; }
+.eventos li { border-top: 1px solid var(--linha); padding: 12px 0; display: grid; grid-template-columns: 92px 1fr; gap: 12px; }
+.eventos li:first-child .d { font-weight: 600; color: var(--tinta); }
+.eventos .q { font-size: 12px; color: var(--apoio); }
+.eventos .d { font-size: 14px; }
+.eventos .l { font-size: 12px; color: var(--apoio); }
+.codigo-r { font-family: Newsreader, Georgia, serif; font-size: 30px; font-weight: 300; letter-spacing: .06em; color: var(--marrom); line-height: 1.1; margin: 0 0 14px; }
+
+</style>
+</head>
+<body>
+<div class="caixa">
+<div class="faixa" id="faixa">ANNIS</div>
+<div class="topo"><a href="https://annis.store"><img src="https://annis.store/cdn/shop/files/Artboard_1_copy_6.png?width=400" alt="ANNIS"></a></div>
+<main id="app"><p class="carregando">Carregando...</p></main>
+<footer>Dúvidas? <a href="https://wa.me/554384557263">WhatsApp +55 43 8455-7263</a> · <a href="https://www.instagram.com/annis____/">Instagram</a> · <a href="https://annis.store">annis.store</a></footer>
+</div>
+<script>
+var API = "https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/rpc/";
+var CHAVE = "sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW";
+function rpc(f, corpo) {
+  return fetch(API + f, { method: "POST", headers: { apikey: CHAVE, "Content-Type": "application/json", "Content-Profile": "site" },
+    body: JSON.stringify(corpo) }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+}
+function param(n) { return new URLSearchParams(location.search).get(n); }
+function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+var DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+function data(iso) { iso = String(iso || ""); if (/[+-]\d\d$/.test(iso)) iso += ":00"; return new Date(iso); }
+function dia(iso) { var d = data(iso); return DIAS[d.getDay()] + ", " + String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0"); }
+function hora(iso) { var d = data(iso); return String(d.getHours()).padStart(2, "0") + "h" + String(d.getMinutes()).padStart(2, "0"); }
+function app(html) { document.getElementById("app").innerHTML = html; }
+function erro(msg) {
+  app('<h1>Não encontramos</h1><p>' + esc(msg) + '</p><a class="btn" href="https://wa.me/554384557263">Falar no WhatsApp</a>');
+}
+
+var c = (param("c") || "").toUpperCase().trim();
+function titulo(s) { return (s || "").toLowerCase().replace(/(^|\s)\S/g, function (m) { return m.toUpperCase(); }).replace(/\b(De|Da|Do|Das|Dos|E)\b/g, function (m) { return m.toLowerCase(); }); }
+function lugar(e) { var a = e.cidade ? titulo(e.cidade) + (e.uf ? "/" + e.uf : "") : ""; var b = e.para_cidade ? " para " + titulo(e.para_cidade) + (e.para_uf ? "/" + e.para_uf : "") : ""; return a + b; }
+function mostrar(d) {
+  var correios = "https://rastreamento.correios.com.br/app/index.php?objetos=" + encodeURIComponent(c);
+  if (!d || !d.ok) {
+    app('<h1>Não encontramos este código</h1><p>Confira o código no e-mail do seu pedido ou acompanhe pelo site dos Correios.</p>'
+      + '<a class="btn" href="' + correios + '">Rastrear nos Correios</a>');
+    return;
+  }
+  var ev = d.eventos || [];
+  var ultimo = ev[0] ? ev[0].descricao : "Etiqueta emitida";
+  var entregue = ev.some(function (e) { return /entregue/i.test(e.descricao || ""); });
+  document.getElementById("faixa").textContent = entregue ? "Pedido entregue" : "Acompanhando a entrega";
+  var prev = d.previsao && !entregue ? '<hr class="linha-sep"><span class="rotulo">Entrega prevista</span><div class="data">' + esc(dia(d.previsao)) + '</div>' : "";
+  var lista = ev.map(function (e) {
+    return '<li><span class="q">' + esc(dia(e.quando)) + '<br>' + esc(hora(e.quando)) + '</span><span><span class="d">' + esc(e.descricao)
+      + '</span>' + (e.detalhe ? '<br><span class="l">' + esc(e.detalhe) + '</span>' : "") + (lugar(e) ? '<br><span class="l">' + esc(lugar(e)) + '</span>' : "") + '</span></li>';
+  }).join("");
+  app('<span class="rotulo">Código de rastreio</span><p class="codigo-r">' + esc(d.codigo) + '</p>'
+    + '<h1>' + esc(ultimo) + '</h1>' + prev + '<h2>Histórico</h2><ul class="eventos">' + lista + '</ul>'
+    + '<p class="apoio" style="margin-top:14px">Atualizado às ' + esc(hora(d.consultado)) + ', direto dos Correios.</p>'
+    + '<a class="btn vazado" href="' + correios + '">Ver no site dos Correios</a>');
+}
+if (!/^[A-Z]{2}[0-9]{9}[A-Z]{2}$/.test(c)) mostrar(null);
+else rpc("rastreio", { c: c }).then(mostrar).catch(function () { mostrar(null); });
+
+</script>
+{%- endraw -%}
+</body>
+</html>
