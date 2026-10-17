@@ -28,7 +28,9 @@ from avisos.regua import modelos  # noqa: E402
 ITEM = {
     "img": "{{ line.image | image_url: width: 300, height: 450, crop: 'center' }}",
     "nome": "{{ line.product.title | default: line.title }}",
-    "variante": "{% if line.variant_title != blank %}{{ line.variant_title }} · {% endif %}{{ line.quantity }} un.",
+    # line.variant_title vem vazio nos modelos atuais da Shopify (#1154, 17/10: o "M" sumiu); o tamanho está em line.variant.title.
+    "variante": ("{% assign tam = line.variant.title | default: line.variant_title %}"
+                 "{% if tam != blank and tam != 'Default Title' %}{{ tam }} · {% endif %}{{ line.quantity }} un."),
     "preco": "{{ line.final_line_price | money }}",
 }
 PAGAMENTO = ("{% assign gw = transactions.first.gateway_display_name | default: gateway | downcase %}"
