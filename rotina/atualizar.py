@@ -29,7 +29,7 @@ from playwright.sync_api import sync_playwright
 
 RAIZ = os.environ["APP_URL"].rstrip("/") + "/"
 APP = RAIZ + "~/+/"
-ESPERA_SENHA_MS = 5 * 60 * 1000
+ESPERA_SENHA_MS = 8 * 60 * 1000
 ESPERA_ACORDAR_S = 8 * 60
 BOTAO_ACORDAR = re.compile(r"get this app back up|wake", re.I)
 
@@ -103,12 +103,29 @@ def main() -> int:
         ok = False
         try:
             acordar_se_preciso(pagina)
-            pagina.goto(APP, wait_until="domcontentloaded")
-
             # A tela de senha só aparece depois que a sincronização termina,
             # então esperar por ela é esperar o trabalho acabar.
-            pagina.wait_for_selector("input[type=password]", timeout=ESPERA_SENHA_MS)
-            print("painel atualizado e no ar")
+            #
+            # Logo depois de acordar, o health já diz "ok" mas a primeira
+            # abertura ainda pode voltar 400 e a página fica em branco para
+            # sempre: foi o que derrubou as rotinas da manhã de 16 e 17/10,
+            # que esperaram 5 minutos numa página morta. Agora tenta de novo,
+            # com uma abertura nova a cada 90 s, até o prazo total.
+            inicio = time.time()
+            tentativa = 0
+            while True:
+                tentativa += 1
+                pagina.goto(APP, wait_until="domcontentloaded")
+                restante = ESPERA_SENHA_MS / 1000 - (time.time() - inicio)
+                try:
+                    pagina.wait_for_selector("input[type=password]",
+                                             timeout=int(max(5, min(90, restante)) * 1000))
+                    break
+                except Exception:
+                    if time.time() - inicio >= ESPERA_SENHA_MS / 1000:
+                        raise
+                    print(f"tentativa {tentativa}: página ainda sem a tela de senha, abrindo de novo")
+            print(f"painel atualizado e no ar (tentativa {tentativa})")
             ok = True
         except Exception as e:
             print(f"o painel não chegou na tela de senha a tempo: {e}", file=sys.stderr)
