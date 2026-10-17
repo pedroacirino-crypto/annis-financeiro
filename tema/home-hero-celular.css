@@ -1,0 +1,15 @@
+/* Annis, 17/10/2026. CSS personalizado da seção "Imagem de destaque" (hero) da
+   Página inicial, no tema Atelier (editor > seção > CSS personalizado).
+   Foto do lançamento do Monet: no celular o corte central pegava os rostos pela
+   metade. Só no celular: foto deslocada para os rostos ficarem em ~70% da
+   largura, com a borda direita perto das cabeças, e o texto descido para não
+   cobrir o rosto. Trocou a foto do banner, rever o 70%. */
+@media screen and (max-width: 749px) {
+  .hero__image {
+    object-position: 70% 50% !important;
+  }
+  .hero__content-wrapper {
+    justify-content: flex-end !important;
+    padding-bottom: 48px !important;
+  }
+}
