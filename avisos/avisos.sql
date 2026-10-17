@@ -535,6 +535,34 @@ begin
     || case when n_producao > 0 then E'\nSob encomenda, em produção: ' || n_producao || producao else '' end;
 end $$;
 
+-- Peça ativa no site que não existe na Olist, 17/10/2026. A Olist não recebe
+-- produto novo sozinha: o pedido entra com o item sem cadastro e sem NCM, e a
+-- nota trava "pendente" (foi o Monet Névoa, nota 000155). O fechamento avisa
+-- antes da primeira venda. Compara pelo nome, como a Olist casa os anúncios.
+create or replace function avisos.produtos_fora_da_olist() returns text
+language plpgsql security definer set search_path = extensions, public as $$
+declare o jsonb; d jsonb; pag int := 1; total int; nomes text[] := '{}'; faltam text[];
+begin
+  loop
+    o := avisos.olist('produtos.pesquisa', 'pesquisa=&pagina=' || pag);
+    total := coalesce((o ->> 'numero_paginas')::int, 1);
+    nomes := nomes || array(select lower(btrim(p -> 'produto' ->> 'nome'))
+                            from jsonb_array_elements(coalesce(o -> 'produtos', '[]')) p);
+    exit when pag >= total or pag >= 20;
+    pag := pag + 1;
+  end loop;
+  d := avisos.shopify($q$ query { products(first: 250, query: "status:active") { nodes { title } } } $q$);
+  select array_agg(t order by t) into faltam from (
+    select n ->> 'title' as t from jsonb_array_elements(coalesce(d -> 'products' -> 'nodes', '[]')) n
+    where not (lower(btrim(n ->> 'title')) = any(nomes))) x;
+  if faltam is null then
+    return '';
+  end if;
+  return 'Peças ativas no site que não estão na Olist (a nota delas trava sem NCM):'
+    || E'\n- ' || array_to_string(faltam, E'\n- ')
+    || E'\nNa Olist: Produtos > mais ações > receber produtos do e-commerce, só anúncios novos, com o NCM.';
+end $$;
+
 -- Fechamento do dia, só site (vendas da loja física não passam pela Shopify).
 create or replace function avisos.fechamento() returns text
 language plpgsql security definer set search_path = extensions, public as $$
@@ -549,7 +577,7 @@ declare
   dias text[] := array['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'];
   meses text[] := array['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
                         'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-  h_n int; h_v numeric; s_n int; s_v numeric; m_n int; m_v numeric; carrinhos int;
+  h_n int; h_v numeric; s_n int; s_v numeric; m_n int; m_v numeric; carrinhos int; falta text;
 begin
   d := avisos.shopify($q$
     query($q: String!) {
@@ -588,6 +616,15 @@ begin
     texto := texto || E'\n\n' || avisos.status_pedidos();
   exception when others then
     texto := texto || E'\n\nStatus dos pedidos: não consegui montar (' || left(sqlerrm, 120) || ')';
+  end;
+  -- Só aparece quando falta alguma peça; falha na conferência não segura o fechamento.
+  begin
+    falta := avisos.produtos_fora_da_olist();
+    if falta <> '' then
+      texto := texto || E'\n\n' || falta;
+    end if;
+  exception when others then
+    null;
   end;
   perform avisos.telegram(texto);
   return texto;
