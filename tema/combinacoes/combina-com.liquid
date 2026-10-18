@@ -100,6 +100,15 @@
   .annis-combina__botao:hover{opacity:.85}
   .annis-combina__botao.is-ok{background:transparent;color:#68380A}
   .annis-combina__botao.is-erro{background:transparent;border-color:#A33;color:#A33}
+  /* Computador: título numa coluna à esquerda e a caixa do tamanho do conteúdo,
+     centralizada. Com 2 ou 3 peças a caixa larga sobrava vazia (Pedro, 18/10);
+     com muitas, ela chega à largura da página e as peças rolam dentro. */
+  @media screen and (min-width:750px){
+    .annis-combina{display:grid;grid-template-columns:200px minmax(0,max-content);column-gap:32px;align-items:center;width:fit-content;max-width:100%;margin-left:auto;margin-right:auto;padding:28px 32px}
+    .annis-combina__topo{flex-wrap:wrap;margin-bottom:0}
+    .annis-combina__topo > div{flex-basis:100%}
+    .annis-combina__esta{width:64px}
+  }
   @media screen and (max-width:749px){
     .annis-combina{padding:18px 16px;margin:16px 0 4px}
     .annis-combina__trilho{grid-auto-columns:38%;gap:12px}
