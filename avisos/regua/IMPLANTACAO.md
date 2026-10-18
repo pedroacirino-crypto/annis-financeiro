@@ -54,5 +54,4 @@ Legenda: [x] feito · [ ] falta · (você) depende do Pedro
 ## 6. Depois de ligar
 - [ ] Acompanhar o CCO nos primeiros pedidos
 - [ ] Rodar o backtest de novo na semana que vem (#1134, #1139, 9 do #1132)
-- [ ] Mandar ao design os textos novos: 0 pago, 5 pronta entrega, 2 misto, 7 tentativa, 7 retirada
 - [x] Botão do rastreio: Correios (Pedro, 13/10: se os Correios falharem, não associam à Annis)
