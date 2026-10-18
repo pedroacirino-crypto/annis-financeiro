@@ -37,6 +37,13 @@ P = {
     "saia giverny grafite": "Saia de Jacquard Grafite - Giverny",
     "top giverny grafite": "Top de Jacquard Grafite - Giverny",
     "top giverny rosé": "Top de Jacquard Rosé - Giverny",
+    "vestido loulou": "Vestido de Jacquard - Loulou",
+    # Acessórios
+    "bolsa relíquia vinho": "Bolsa de Jacquard Relíquia - Vinho",
+    "bolsa relíquia cinza": "Bolsa de Jacquard Relíquia - Cinza",
+    "bolsa relíquia mostarda": "Bolsa de Jacquard Relíquia - Mostarda",
+    "bolsa bijou": "Bolsa de Veludo Bijou - Preta",
+    "cinto pingente": "Cinto Pingente",
 }
 
 # Lista do Pedro, 18/10/2026, na ordem dele.
@@ -70,14 +77,42 @@ LISTA = {
 }
 
 
-def montar() -> dict:
-    combina = {k: list(v) for k, v in LISTA.items()}
-    for a, lista in LISTA.items():          # espelho: se A combina com B, B combina com A
-        for b in lista:
+# Acessórios da lista do Pedro, 18/10/2026. "Conjunto" vale para as duas peças
+# dele (colete e calça); "calça + top" também vale para cada peça.
+_TRAMA_VINHO = ["colete trama vinho", "calça trama vinho"]
+_TRAMA_MARROM = ["colete trama marrom", "calça trama marrom"]
+_JOAN_BEGE = ["calça joan bege", "top bloom bege"]
+_JOAN_MARROM = ["calça joan marrom", "top bloom marrom"]
+ACESSORIOS = {
+    **{p: ["bolsa relíquia vinho"] for p in _TRAMA_VINHO},
+    **{p: ["bolsa relíquia mostarda", "bolsa relíquia cinza"] for p in _TRAMA_MARROM},
+    "vestido relicário vinho": ["bolsa relíquia vinho"],
+    "vestido relicário cinza": ["bolsa relíquia cinza"],
+    **{p: ["cinto pingente", "bolsa relíquia cinza", "bolsa relíquia mostarda"] for p in _JOAN_BEGE},
+    **{p: ["cinto pingente", "bolsa relíquia mostarda"] for p in _JOAN_MARROM},
+    "vestido loulou": ["bolsa bijou"],
+}
+
+
+def _espelhar(lista: dict) -> dict:
+    combina = {k: list(v) for k, v in lista.items()}
+    for a, bs in lista.items():          # espelho: se A combina com B, B combina com A
+        for b in bs:
             combina.setdefault(b, [])
             if a not in combina[b]:
                 combina[b].append(a)
-    return {P[a]: [P[b] for b in bs] for a, bs in sorted(combina.items())}
+    return combina
+
+
+def montar() -> dict:
+    """Roupas primeiro, acessórios depois: o bloco lê como "monte o look" e
+    "finalize com". Na página de um acessório, aparecem as roupas dele."""
+    roupas, acess = _espelhar(LISTA), _espelhar(ACESSORIOS)
+    saida = {}
+    for peca in sorted(set(roupas) | set(acess)):
+        lista = roupas.get(peca, []) + [x for x in acess.get(peca, []) if x not in roupas.get(peca, [])]
+        saida[P[peca]] = [P[x] for x in lista]
+    return saida
 
 
 if __name__ == "__main__":

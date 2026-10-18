@@ -5,6 +5,29 @@
   "Blazer Feminino de Linho Marrom - Delaunay": [
     "Calça de Linho Marrom - Joan"
   ],
+  "Bolsa de Veludo Bijou - Preta": [
+    "Vestido de Jacquard - Loulou"
+  ],
+  "Bolsa de Jacquard Relíquia - Cinza": [
+    "Colete de Jacquard Trama - Marrom",
+    "Calça de Jacquard Trama - Marrom",
+    "Vestido de Jacquard Relicário — Cinza",
+    "Calça de Linho Bege - Joan",
+    "Top de Linho Bege - Bloom"
+  ],
+  "Bolsa de Jacquard Relíquia - Mostarda": [
+    "Colete de Jacquard Trama - Marrom",
+    "Calça de Jacquard Trama - Marrom",
+    "Calça de Linho Bege - Joan",
+    "Top de Linho Bege - Bloom",
+    "Calça de Linho Marrom - Joan",
+    "Top de Linho Marrom - Bloom"
+  ],
+  "Bolsa de Jacquard Relíquia - Vinho": [
+    "Colete de Jacquard Trama - Vinho",
+    "Calça de Jacquard Trama - Vinho",
+    "Vestido de Jacquard Relicário — Vinho"
+  ],
   "Calça de Linho Cru - Georgia": [
     "Camisa de Algodão Herança — Rosa",
     "Camisa de Algodão Herança — Branca"
@@ -20,7 +43,10 @@
     "Camisa de Algodão Herança — Rosa",
     "Camisa de Algodão Herança — Branca",
     "Colete de Jacquard Trama - Marrom",
-    "Top de Jacquard Grafite - Giverny"
+    "Top de Jacquard Grafite - Giverny",
+    "Cinto Pingente",
+    "Bolsa de Jacquard Relíquia - Cinza",
+    "Bolsa de Jacquard Relíquia - Mostarda"
   ],
   "Calça de Linho Marrom - Joan": [
     "Top de Linho Marrom - Bloom",
@@ -29,7 +55,9 @@
     "Top de Jacquard Rosé - Giverny",
     "Top de Jacquard Grafite - Giverny",
     "Camisa de Algodão Herança — Branca",
-    "Corset de Linho Marrom - Joan"
+    "Corset de Linho Marrom - Joan",
+    "Cinto Pingente",
+    "Bolsa de Jacquard Relíquia - Mostarda"
   ],
   "Calça de Jacquard Trama - Marrom": [
     "Colete de Jacquard Trama - Marrom",
@@ -38,14 +66,17 @@
     "Top de Linho Bege - Bloom",
     "Corset de Linho Bege - Joan",
     "Colete de Jacquard Estampado - Klint",
-    "Top de Jacquard Grafite - Giverny"
+    "Top de Jacquard Grafite - Giverny",
+    "Bolsa de Jacquard Relíquia - Mostarda",
+    "Bolsa de Jacquard Relíquia - Cinza"
   ],
   "Calça de Jacquard Trama - Vinho": [
     "Colete de Jacquard Trama - Vinho",
     "Camisa de Algodão Herança — Branca",
     "Camisa de Algodão Herança — Rosa",
     "Top de Linho Bege - Bloom",
-    "Colete de Jacquard Estampado - Klint"
+    "Colete de Jacquard Estampado - Klint",
+    "Bolsa de Jacquard Relíquia - Vinho"
   ],
   "Camisa de Algodão Herança — Branca": [
     "Calça de Linho Bege - Joan",
@@ -79,6 +110,12 @@
     "Vestido de Jacquard Monet - Aurora",
     "Vestido de Jacquard Monet - Névoa"
   ],
+  "Cinto Pingente": [
+    "Calça de Linho Bege - Joan",
+    "Top de Linho Bege - Bloom",
+    "Calça de Linho Marrom - Joan",
+    "Top de Linho Marrom - Bloom"
+  ],
   "Colete de Jacquard Estampado - Klint": [
     "Calça de Jacquard Trama - Marrom",
     "Calça de Jacquard Trama - Vinho",
@@ -90,12 +127,15 @@
     "Calça de Jacquard Trama - Marrom",
     "Calça de Linho Bege - Joan",
     "Camisa de Algodão Herança — Branca",
-    "Camisa de Algodão Herança — Rosa"
+    "Camisa de Algodão Herança — Rosa",
+    "Bolsa de Jacquard Relíquia - Mostarda",
+    "Bolsa de Jacquard Relíquia - Cinza"
   ],
   "Colete de Jacquard Trama - Vinho": [
     "Calça de Jacquard Trama - Vinho",
     "Camisa de Algodão Herança — Rosa",
-    "Camisa de Algodão Herança — Branca"
+    "Camisa de Algodão Herança — Branca",
+    "Bolsa de Jacquard Relíquia - Vinho"
   ],
   "Corset de Linho Bege - Joan": [
     "Calça de Jacquard Trama - Marrom",
@@ -125,12 +165,17 @@
     "Calça de Jacquard Trama - Vinho",
     "Saia de Jacquard Rosé - Giverny",
     "Saia de Jacquard Grafite - Giverny",
-    "Calça de Linho Bege - Joan"
+    "Calça de Linho Bege - Joan",
+    "Cinto Pingente",
+    "Bolsa de Jacquard Relíquia - Cinza",
+    "Bolsa de Jacquard Relíquia - Mostarda"
   ],
   "Top de Linho Marrom - Bloom": [
     "Saia de Jacquard Rosé - Giverny",
     "Saia de Jacquard Grafite - Giverny",
-    "Calça de Linho Marrom - Joan"
+    "Calça de Linho Marrom - Joan",
+    "Cinto Pingente",
+    "Bolsa de Jacquard Relíquia - Mostarda"
   ],
   "Top de Jacquard Grafite - Giverny": [
     "Calça de Linho Bege - Joan",
@@ -141,6 +186,9 @@
   ],
   "Top de Jacquard Rosé - Giverny": [
     "Calça de Linho Marrom - Joan"
+  ],
+  "Vestido de Jacquard - Loulou": [
+    "Bolsa de Veludo Bijou - Preta"
   ],
   "Vestido de Jacquard Monet - Aurora": [
     "Camisa de Algodão Herança — Branca",
@@ -155,10 +203,12 @@
     "Camisa de Algodão Herança — Rosa"
   ],
   "Vestido de Jacquard Relicário — Cinza": [
-    "Camisa de Algodão Herança — Branca"
+    "Camisa de Algodão Herança — Branca",
+    "Bolsa de Jacquard Relíquia - Cinza"
   ],
   "Vestido de Jacquard Relicário — Vinho": [
     "Camisa de Algodão Herança — Rosa",
-    "Camisa de Algodão Herança — Branca"
+    "Camisa de Algodão Herança — Branca",
+    "Bolsa de Jacquard Relíquia - Vinho"
   ]
 }

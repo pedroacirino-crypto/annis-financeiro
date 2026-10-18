@@ -37,6 +37,10 @@
           {%- assign disponiveis = p.variants | where: 'available' -%}
           {%- if p.has_only_default_variant or disponiveis.size == 1 -%}
             <input type="hidden" name="id" value="{{ disponiveis.first.id }}">
+            {%- comment -%} Roupa com um tamanho só em estoque: diz qual é. Bolsa e cinto (U) não precisam. {%- endcomment -%}
+            {%- unless p.has_only_default_variant or disponiveis.first.title == 'U' -%}
+              <span class="annis-combina__unico">Último tamanho: {{ disponiveis.first.title }}</span>
+            {%- endunless -%}
           {%- else -%}
             <select name="id" class="annis-combina__tam" aria-label="Tamanho de {{ p.title | escape }}">
               <option value="">Tamanho</option>
@@ -99,6 +103,7 @@
   .annis-combina__preco{font-family:Poppins,sans-serif;font-size:12px;margin:0;color:#4A2C0F}
   .annis-combina__compra{display:flex;flex-direction:column;gap:6px;margin-top:auto}
   .annis-combina__tam{width:100%;height:32px;padding:0 8px;border:1px solid #D9C7B5;background:#FFF6F0;color:#4A2C0F;font-family:Poppins,sans-serif;font-size:12px;border-radius:0}
+  .annis-combina__unico{display:flex;align-items:center;height:32px;font-family:Poppins,sans-serif;font-size:12px;color:#7F6040}
   .annis-combina__botao{display:flex;align-items:center;justify-content:center;height:34px;border:1px solid #68380A;background:#68380A;color:#FFF6F0;font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:opacity .2s}
   .annis-combina__botao:hover{opacity:.85}
   .annis-combina__botao.is-ok{background:transparent;color:#68380A}
