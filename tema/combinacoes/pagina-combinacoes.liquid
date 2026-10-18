@@ -224,8 +224,9 @@
   .annis-combina__tam{width:100%;height:32px;padding:0 8px;border:1px solid #D9C7B5;background:#FFF6F0;color:#4A2C0F;font-family:Poppins,sans-serif;font-size:12px;border-radius:0}
   /* Celular (Pedro, 18/10: "um monte de blocos, com foto grande"): os looks
      viram carrossel com as duas peças em linha compacta, e no Peça por peça a
-     peça principal vira cabeçalho pequeno em cima do carrossel. Computador
-     fica como está. */
+     peça principal fica em destaque (metade da largura, ao lado do nome) e as
+     que combinam vêm menores embaixo; com a principal pequena e as outras
+     grandes parecia invertido (Pedro, 18/10). Computador fica como está. */
   @media screen and (max-width:749px){
     .annis-combinacoes__topo{margin-bottom:24px}
     .annis-combinacoes__topo h1{font-size:34px}
@@ -250,13 +251,17 @@
     .annis-combinacoes__secao{font-size:26px}
     .annis-combinacoes__bloco{grid-template-columns:1fr;gap:12px;padding:22px 0}
     .annis-combinacoes__secao + .annis-combinacoes__bloco{border-top:0}
-    .annis-combinacoes__principal{display:grid;grid-template-columns:56px 1fr;grid-template-areas:"f n" "f p";column-gap:14px;row-gap:2px;align-items:center}
+    .annis-combinacoes__principal{display:grid;grid-template-columns:50% 1fr;grid-template-areas:"f n" "f p";column-gap:16px;row-gap:2px;align-items:center}
     .annis-combinacoes__principal .annis-combinacoes__foto{grid-area:f;aspect-ratio:2/3}
-    .annis-combinacoes__nome{grid-area:n;font-size:20px;line-height:1.15;align-self:end}
-    .annis-combinacoes__preco{grid-area:p;font-size:12px;align-self:start}
+    .annis-combinacoes__nome{grid-area:n;font-size:22px;line-height:1.15;align-self:end}
+    .annis-combinacoes__preco{grid-area:p;font-size:12px;align-self:start;white-space:nowrap}
     .annis-combinacoes__rotulo{margin:0 0 10px}
-    .annis-combina__trilho{grid-auto-columns:40vw;gap:12px;margin-right:-20px;padding-right:20px}
-    .annis-combina__nome{font-size:12px}
-    .annis-combina__preco{font-size:12px}
+    .annis-combina__trilho{grid-auto-columns:29vw;gap:10px;margin-right:-20px;padding-right:20px}
+    .annis-combina__card{gap:5px}
+    .annis-combina__nome{font-size:11px;line-height:1.3}
+    .annis-combina__preco{font-size:11px}
+    .annis-combina__compra{gap:5px}
+    .annis-combinacoes__bloco .annis-combina__tam{height:30px;font-size:11px;padding:0 2px 0 6px}
+    .annis-combinacoes__bloco .annis-combina__botao{height:30px;font-size:10px;letter-spacing:.04em}
   }
 </style>
