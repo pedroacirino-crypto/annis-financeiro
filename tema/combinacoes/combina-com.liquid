@@ -8,10 +8,17 @@
   Adiciona na sacola sem sair da página e atualiza o contador do topo.
 {%- endcomment -%}
 {%- assign combina = product.metafields.custom.combina_com.value -%}
-{%- assign mostrar = 0 -%}
-{%- for p in combina -%}{%- if p.available -%}{%- assign mostrar = mostrar | plus: 1 -%}{%- endif -%}{%- endfor -%}
+{%- comment -%} Acessório é o que a loja cadastra como Bolsa ou Cinto. {%- endcomment -%}
+{%- assign n_roupas = 0 -%}{%- assign n_acess = 0 -%}
+{%- for p in combina -%}
+  {%- if p.available -%}
+    {%- if p.type == 'Bolsa' or p.type == 'Cinto' -%}{%- assign n_acess = n_acess | plus: 1 -%}{%- else -%}{%- assign n_roupas = n_roupas | plus: 1 -%}{%- endif -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- assign mostrar = n_roupas | plus: n_acess -%}
 {%- if mostrar > 0 -%}
-<section class="annis-combina" aria-label="Para completar o look">
+{%- if n_roupas > 0 and n_acess > 0 -%}{%- assign dois_grupos = true -%}{%- else -%}{%- assign dois_grupos = false -%}{%- endif -%}
+<section class="annis-combina{% if dois_grupos %} tem-acessorios{% endif %}" aria-label="Para completar o look">
   <header class="annis-combina__topo">
     {%- if product.featured_image -%}
       <span class="annis-combina__esta">{{ product.featured_image | image_url: width: 160 | image_tag: loading: 'lazy', alt: product.title }}</span>
@@ -23,35 +30,47 @@
     </div>
   </header>
   <div class="annis-combina__trilho">
-    {%- for p in combina -%}
-      {%- unless p.available -%}{%- continue -%}{%- endunless -%}
-      <article class="annis-combina__card">
-        <a href="{{ p.url }}" class="annis-combina__foto">
-          {%- if p.featured_image -%}
-            {{ p.featured_image | image_url: width: 400 | image_tag: loading: 'lazy', widths: '200, 300, 400', sizes: '(min-width: 750px) 160px, 40vw', alt: p.title }}
-          {%- endif -%}
-        </a>
-        <a href="{{ p.url }}" class="annis-combina__nome">{{ p.title }}</a>
-        <p class="annis-combina__preco">{{ p.price | money }}</p>
-        <form class="annis-combina__compra" data-annis-combina>
-          {%- assign disponiveis = p.variants | where: 'available' -%}
-          {%- if p.has_only_default_variant or disponiveis.size == 1 -%}
-            <input type="hidden" name="id" value="{{ disponiveis.first.id }}">
-            {%- comment -%} Roupa com um tamanho só em estoque: diz qual é. Bolsa e cinto (U) não precisam. {%- endcomment -%}
-            {%- unless p.has_only_default_variant or disponiveis.first.title == 'U' -%}
-              <span class="annis-combina__unico">Último tamanho: {{ disponiveis.first.title }}</span>
-            {%- endunless -%}
-          {%- else -%}
-            <select name="id" class="annis-combina__tam" aria-label="Tamanho de {{ p.title | escape }}">
-              <option value="">Tamanho</option>
-              {%- for v in p.variants -%}
-                <option value="{{ v.id }}"{% unless v.available %} disabled{% endunless %}>{{ v.title }}{% unless v.available %} · esgotado{% endunless %}</option>
-              {%- endfor -%}
-            </select>
-          {%- endif -%}
-          <button type="submit" class="annis-combina__botao">Adicionar</button>
-        </form>
-      </article>
+    {%- assign grupos = 'roupas,acessorios' | split: ',' -%}
+    {%- for grupo in grupos -%}
+      {%- if grupo == 'roupas' and n_roupas == 0 -%}{%- continue -%}{%- endif -%}
+      {%- if grupo == 'acessorios' and n_acess == 0 -%}{%- continue -%}{%- endif -%}
+      <div class="annis-combina__grupo annis-combina__grupo--{{ grupo }}">
+        {%- if dois_grupos -%}<p class="annis-combina__rotulo">{% if grupo == 'roupas' %}Roupas{% else %}Acessórios{% endif %}</p>{%- endif -%}
+        <div class="annis-combina__cards">
+          {%- for p in combina -%}
+            {%- unless p.available -%}{%- continue -%}{%- endunless -%}
+            {%- if p.type == 'Bolsa' or p.type == 'Cinto' -%}{%- assign e_grupo = 'acessorios' -%}{%- else -%}{%- assign e_grupo = 'roupas' -%}{%- endif -%}
+            {%- if e_grupo != grupo -%}{%- continue -%}{%- endif -%}
+            <article class="annis-combina__card">
+              <a href="{{ p.url }}" class="annis-combina__foto">
+                {%- if p.featured_image -%}
+                  {{ p.featured_image | image_url: width: 400 | image_tag: loading: 'lazy', widths: '200, 300, 400', sizes: '(min-width: 750px) 160px, 40vw', alt: p.title }}
+                {%- endif -%}
+              </a>
+              <a href="{{ p.url }}" class="annis-combina__nome">{{ p.title }}</a>
+              <p class="annis-combina__preco">{{ p.price | money }}</p>
+              <form class="annis-combina__compra" data-annis-combina>
+                {%- assign disponiveis = p.variants | where: 'available' -%}
+                {%- if p.has_only_default_variant or disponiveis.size == 1 -%}
+                  <input type="hidden" name="id" value="{{ disponiveis.first.id }}">
+                  {%- comment -%} Roupa com um tamanho só em estoque: diz qual é. Bolsa e cinto (U) não precisam. {%- endcomment -%}
+                  {%- unless p.has_only_default_variant or disponiveis.first.title == 'U' -%}
+                    <span class="annis-combina__unico">Último tamanho: {{ disponiveis.first.title }}</span>
+                  {%- endunless -%}
+                {%- else -%}
+                  <select name="id" class="annis-combina__tam" aria-label="Tamanho de {{ p.title | escape }}">
+                    <option value="">Tamanho</option>
+                    {%- for v in p.variants -%}
+                      <option value="{{ v.id }}"{% unless v.available %} disabled{% endunless %}>{{ v.title }}{% unless v.available %} · esgotado{% endunless %}</option>
+                    {%- endfor -%}
+                  </select>
+                {%- endif -%}
+                <button type="submit" class="annis-combina__botao">Adicionar</button>
+              </form>
+            </article>
+          {%- endfor -%}
+        </div>
+      </div>
     {%- endfor -%}
   </div>
 </section>
@@ -95,7 +114,12 @@
   .annis-combina__mais{font-family:Newsreader,serif;font-size:26px;font-weight:300;color:#68380A;line-height:1}
   .annis-combina__titulo{font-family:Newsreader,serif;font-weight:300;font-size:24px;margin:0;color:#4A2C0F;line-height:1.15}
   .annis-combina__sub{font-family:Poppins,sans-serif;font-size:13px;margin:4px 0 0;color:#7F6040}
-  .annis-combina__trilho{display:grid;grid-auto-flow:column;grid-auto-columns:150px;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px}
+  .annis-combina__trilho{display:flex;gap:20px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px}
+  .annis-combina__grupo{flex:0 0 auto;display:flex;flex-direction:column;min-width:0}
+  .annis-combina__grupo--acessorios{padding-left:20px;border-left:1px solid #D9C7B5}
+  .annis-combina__rotulo{font-family:Poppins,sans-serif;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7F6040;margin:0 0 8px}
+  .annis-combina__cards{display:grid;grid-auto-flow:column;grid-auto-columns:150px;grid-template-rows:1fr;gap:14px;flex:1 0 auto}
+  /* Botões na mesma linha nos dois grupos, com ou sem caixinha de tamanho. */
   .annis-combina__card{scroll-snap-align:start;display:flex;flex-direction:column;gap:5px;min-width:0}
   .annis-combina__foto{display:block;aspect-ratio:3/4;overflow:hidden;background:#EADBCB}
   .annis-combina__foto img{width:100%;height:100%;object-fit:cover;display:block}
@@ -116,10 +140,16 @@
     .annis-combina__topo{flex-wrap:wrap;margin-bottom:0}
     .annis-combina__topo > div{flex-basis:100%}
     .annis-combina__esta{width:64px}
+    .annis-combina__trilho{overflow:visible;padding-bottom:0}
+    .annis-combina__grupo--roupas{flex:0 1 auto}
+    .annis-combina__grupo--roupas .annis-combina__cards{overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px}
+    .annis-combina__grupo--acessorios .annis-combina__cards{padding-bottom:8px}
   }
   @media screen and (max-width:749px){
     .annis-combina{padding:18px 16px;margin:16px 0 4px}
-    .annis-combina__trilho{grid-auto-columns:38%;gap:12px}
+    .annis-combina__cards{grid-auto-columns:38vw;gap:12px}
+    .annis-combina__trilho{gap:14px}
+    .annis-combina__grupo--acessorios{padding-left:14px}
     .annis-combina__titulo{font-size:21px}
   }
 </style>
