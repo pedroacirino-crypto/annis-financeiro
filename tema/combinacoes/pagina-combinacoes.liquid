@@ -1,0 +1,134 @@
+{%- comment -%}
+  Annis, 18/10/2026. Bloco "Liquid personalizado" da página Combinações.
+  Uma seção por peça, na ordem da lista do Pedro (mais os Monet novos): a peça
+  grande à esquerda e as que combinam com ela num carrossel, com tamanho e
+  botão de sacola. As combinações vêm do campo custom.combina_com de cada
+  produto (tema/combinacoes/gravar.py). Peça esgotada some sozinha; peça
+  principal esgotada some com a seção inteira.
+  As peças que só entram por espelho (blazer, corset, top bloom...) aparecem
+  aqui como combinação e na página delas; não ganham seção própria.
+{%- endcomment -%}
+{%- assign ordem = 'colete-de-jacquard-trama-marrom,calca-de-jacquard-trama-marrom,colete-de-jacquard-trama-vinho,calca-de-jacquard-trama-vinho,vestido-de-jacquard-relicario-vinho,vestido-de-jacquard-relicario-cinza,camisa-de-algodao-heranca-rosa,camisa-de-algodao-heranca-branca,saia-de-jacquard-rose-giverny,saia-de-jacquard-grafite-giverny,top-de-jacquard-grafite-giverny,calca-de-linho-marrom-joan,calca-de-linho-bege-joan,vestido-de-jacquard-monet-aurora,vestido-de-jacquard-monet-nevoa' | split: ',' -%}
+<div class="annis-combinacoes">
+  <header class="annis-combinacoes__topo">
+    <h1>Combinações</h1>
+    <p>Peças da Annis que conversam entre si. Escolha uma e veja com o que ela fica bonita.</p>
+  </header>
+  {%- paginate collections.all.products by 250 -%}
+  {%- for h in ordem -%}
+    {%- for principal in collections.all.products -%}
+      {%- if principal.handle != h -%}{%- continue -%}{%- endif -%}
+      {%- assign combina = principal.metafields.custom.combina_com.value -%}
+      {%- assign ha = 0 -%}
+      {%- for p in combina -%}{%- if p.available -%}{%- assign ha = ha | plus: 1 -%}{%- endif -%}{%- endfor -%}
+      {%- if principal.available and ha > 0 -%}
+      <section class="annis-combinacoes__bloco" id="{{ principal.handle }}">
+        <a class="annis-combinacoes__principal" href="{{ principal.url }}">
+          <span class="annis-combinacoes__foto">
+            {%- if principal.featured_image -%}
+              {{ principal.featured_image | image_url: width: 900 | image_tag: loading: 'lazy', widths: '450, 700, 900', sizes: '(min-width: 750px) 30vw, 90vw', alt: principal.title }}
+            {%- endif -%}
+          </span>
+          <span class="annis-combinacoes__nome">{{ principal.title }}</span>
+          <span class="annis-combinacoes__preco">{{ principal.price | money }} · ver a peça</span>
+        </a>
+        <div class="annis-combinacoes__lado">
+          <p class="annis-combinacoes__rotulo">Combina com</p>
+          <div class="annis-combina__trilho">
+            {%- for p in combina -%}
+              {%- unless p.available -%}{%- continue -%}{%- endunless -%}
+              <article class="annis-combina__card">
+                <a href="{{ p.url }}" class="annis-combina__foto">
+                  {%- if p.featured_image -%}
+                    {{ p.featured_image | image_url: width: 600 | image_tag: loading: 'lazy', widths: '300, 450, 600', sizes: '(min-width: 750px) 18vw, 60vw', alt: p.title }}
+                  {%- endif -%}
+                </a>
+                <a href="{{ p.url }}" class="annis-combina__nome">{{ p.title }}</a>
+                <p class="annis-combina__preco">{{ p.price | money }}</p>
+                <form class="annis-combina__compra" data-annis-combina>
+                  {%- assign disponiveis = p.variants | where: 'available' -%}
+                  {%- if p.has_only_default_variant or disponiveis.size == 1 -%}
+                    <input type="hidden" name="id" value="{{ disponiveis.first.id }}">
+                    {%- unless p.has_only_default_variant -%}<span class="annis-combina__unico">{{ disponiveis.first.title }}</span>{%- endunless -%}
+                  {%- else -%}
+                    <div class="annis-combina__tamanhos" role="radiogroup" aria-label="Tamanho de {{ p.title | escape }}">
+                      {%- for v in p.variants -%}
+                        <label class="annis-combina__tam{% unless v.available %} is-esgotado{% endunless %}">
+                          <input type="radio" name="id" value="{{ v.id }}"{% unless v.available %} disabled{% endunless %}>
+                          <span>{{ v.title }}</span>
+                        </label>
+                      {%- endfor -%}
+                    </div>
+                  {%- endif -%}
+                  <button type="submit" class="annis-combina__botao">Adicionar à sacola</button>
+                </form>
+              </article>
+            {%- endfor -%}
+          </div>
+        </div>
+      </section>
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endfor -%}
+  {%- endpaginate -%}
+</div>
+<script>
+  document.querySelectorAll('[data-annis-combina]').forEach(function (f) {
+    if (f.dataset.ligado) return;
+    f.dataset.ligado = '1';
+    var botao = f.querySelector('button');
+    f.addEventListener('change', function () { botao.textContent = 'Adicionar à sacola'; botao.classList.remove('is-erro'); });
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var escolhido = f.querySelector('input[name="id"]:checked, input[type="hidden"][name="id"]');
+      if (!escolhido) { botao.textContent = 'Escolha o tamanho'; botao.classList.add('is-erro'); return; }
+      botao.disabled = true; botao.textContent = 'Adicionando…';
+      fetch('/cart/add.js', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ items: [{ id: Number(escolhido.value), quantity: 1 }] })
+      }).then(function (r) { if (!r.ok) throw r; return r.json(); }).then(function () {
+        botao.disabled = false;
+        botao.outerHTML = '<a class="annis-combina__botao is-ok" href="/cart">Na sacola · ver sacola</a>';
+        document.dispatchEvent(new CustomEvent('cart:refresh'));
+      }).catch(function () {
+        botao.disabled = false; botao.textContent = 'Não deu, tente de novo'; botao.classList.add('is-erro');
+      });
+    });
+  });
+</script>
+<style>
+  .annis-combinacoes{max-width:1280px;margin:0 auto;padding:24px 20px 48px}
+  .annis-combinacoes__topo{text-align:center;max-width:560px;margin:0 auto 40px}
+  .annis-combinacoes__topo h1{font-family:Newsreader,serif;font-weight:300;font-size:44px;margin:0 0 12px;color:#4A2C0F}
+  .annis-combinacoes__topo p{font-family:Poppins,sans-serif;font-size:14px;color:#7F6040;margin:0}
+  .annis-combinacoes__bloco{display:grid;grid-template-columns:minmax(260px,30%) 1fr;gap:32px;padding:32px 0;border-top:1px solid #E8DACB;scroll-margin-top:90px}
+  .annis-combinacoes__principal{display:flex;flex-direction:column;gap:8px;text-decoration:none;color:#4A2C0F}
+  .annis-combinacoes__foto{display:block;aspect-ratio:2/3;overflow:hidden;background:#F3E9E0}
+  .annis-combinacoes__foto img{width:100%;height:100%;object-fit:cover;display:block}
+  .annis-combinacoes__nome{font-family:Newsreader,serif;font-size:22px;font-weight:300}
+  .annis-combinacoes__preco{font-family:Poppins,sans-serif;font-size:13px;color:#7F6040}
+  .annis-combinacoes__lado{min-width:0;display:flex;flex-direction:column}
+  .annis-combinacoes__rotulo{font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7F6040;margin:0 0 14px}
+  .annis-combina__trilho{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(200px,31%);gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:12px}
+  .annis-combina__card{scroll-snap-align:start;display:flex;flex-direction:column;gap:8px}
+  .annis-combina__foto{display:block;aspect-ratio:2/3;overflow:hidden;background:#F3E9E0}
+  .annis-combina__foto img{width:100%;height:100%;object-fit:cover;display:block}
+  .annis-combina__nome{font-family:Poppins,sans-serif;font-size:13px;color:#4A2C0F;text-decoration:none;line-height:1.35}
+  .annis-combina__preco{font-family:Poppins,sans-serif;font-size:13px;margin:0;color:#4A2C0F}
+  .annis-combina__compra{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+  .annis-combina__tamanhos{display:flex;flex-wrap:wrap;gap:6px}
+  .annis-combina__tam input{position:absolute;opacity:0;pointer-events:none}
+  .annis-combina__tam span{display:inline-flex;min-width:36px;height:32px;padding:0 8px;align-items:center;justify-content:center;border:1px solid #D9C7B5;font-family:Poppins,sans-serif;font-size:12px;color:#4A2C0F;cursor:pointer}
+  .annis-combina__tam input:checked + span{border-color:#68380A;background:#68380A;color:#FFF6F0}
+  .annis-combina__tam.is-esgotado span{opacity:.35;text-decoration:line-through;cursor:default}
+  .annis-combina__unico{font-family:Poppins,sans-serif;font-size:12px;color:#7F6040}
+  .annis-combina__botao{display:flex;align-items:center;justify-content:center;height:44px;border:1px solid #68380A;background:transparent;color:#68380A;font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:background .2s,color .2s}
+  .annis-combina__botao:hover,.annis-combina__botao.is-ok{background:#68380A;color:#FFF6F0}
+  .annis-combina__botao.is-erro{border-color:#A33;color:#A33}
+  @media screen and (max-width:749px){
+    .annis-combinacoes__topo h1{font-size:34px}
+    .annis-combinacoes__bloco{grid-template-columns:1fr;gap:18px}
+    .annis-combinacoes__principal .annis-combinacoes__foto{aspect-ratio:4/5}
+    .annis-combina__trilho{grid-auto-columns:62%;gap:14px}
+  }
+</style>
