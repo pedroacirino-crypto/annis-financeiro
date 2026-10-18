@@ -149,7 +149,9 @@
     .annis-combina{padding:18px 16px;margin:16px 0 4px}
     .annis-combina__cards{grid-auto-columns:38vw;gap:12px}
     .annis-combina__trilho{gap:14px}
-    .annis-combina__grupo--acessorios{padding-left:14px}
+    /* Celular: acessórios primeiro (são no máximo 3), com o fio do lado direito;
+       no fim do carrossel ninguém chegava neles (Pedro, 18/10). */
+    .annis-combina__grupo--acessorios{order:-1;padding-left:0;border-left:0;padding-right:14px;border-right:1px solid #D9C7B5}
     .annis-combina__titulo{font-size:21px}
   }
 </style>
