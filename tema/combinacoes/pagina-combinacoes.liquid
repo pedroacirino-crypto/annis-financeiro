@@ -1,6 +1,6 @@
 {%- comment -%}
   Annis, 18/10/2026. Bloco "Liquid personalizado" da página Combinações.
-  Uma seção por peça, na ordem da lista do Pedro (mais os Monet novos): a peça
+  Uma seção por peça: os Monet novos primeiro (Pedro, 18/10), depois a ordem da lista dele: a peça
   grande à esquerda e as que combinam com ela num carrossel, com tamanho e
   botão de sacola. As combinações vêm do campo custom.combina_com de cada
   produto (tema/combinacoes/gravar.py). Peça esgotada some sozinha; peça
@@ -15,7 +15,7 @@
   uma das duas peças esgotar, o look some. Para trocar um look, mudar a linha
   em `looks` (número da capa | peça 1 | peça 2 | título).
 {%- endcomment -%}
-{%- assign ordem = 'colete-de-jacquard-trama-marrom,calca-de-jacquard-trama-marrom,colete-de-jacquard-trama-vinho,calca-de-jacquard-trama-vinho,vestido-de-jacquard-relicario-vinho,vestido-de-jacquard-relicario-cinza,camisa-de-algodao-heranca-rosa,camisa-de-algodao-heranca-branca,saia-de-jacquard-rose-giverny,saia-de-jacquard-grafite-giverny,top-de-jacquard-grafite-giverny,calca-de-linho-marrom-joan,calca-de-linho-bege-joan,vestido-de-jacquard-monet-aurora,vestido-de-jacquard-monet-nevoa' | split: ',' -%}
+{%- assign ordem = 'vestido-de-jacquard-monet-aurora,vestido-de-jacquard-monet-nevoa,colete-de-jacquard-trama-marrom,calca-de-jacquard-trama-marrom,colete-de-jacquard-trama-vinho,calca-de-jacquard-trama-vinho,vestido-de-jacquard-relicario-vinho,vestido-de-jacquard-relicario-cinza,camisa-de-algodao-heranca-rosa,camisa-de-algodao-heranca-branca,saia-de-jacquard-rose-giverny,saia-de-jacquard-grafite-giverny,top-de-jacquard-grafite-giverny,calca-de-linho-marrom-joan,calca-de-linho-bege-joan' | split: ',' -%}
 <div class="annis-combinacoes">
   <header class="annis-combinacoes__topo">
     <h1>Combinações</h1>
@@ -111,18 +111,16 @@
                   {%- assign disponiveis = p.variants | where: 'available' -%}
                   {%- if p.has_only_default_variant or disponiveis.size == 1 -%}
                     <input type="hidden" name="id" value="{{ disponiveis.first.id }}">
-                    {%- unless p.has_only_default_variant -%}<span class="annis-combina__unico">{{ disponiveis.first.title }}</span>{%- endunless -%}
+                    {%- unless p.has_only_default_variant or disponiveis.first.title == 'U' -%}<span class="annis-combina__unico">Último tamanho: {{ disponiveis.first.title }}</span>{%- endunless -%}
                   {%- else -%}
-                    <div class="annis-combina__tamanhos" role="radiogroup" aria-label="Tamanho de {{ p.title | escape }}">
+                    <select name="id" class="annis-combina__tam" aria-label="Tamanho de {{ p.title | escape }}">
+                      <option value="">Tamanho</option>
                       {%- for v in p.variants -%}
-                        <label class="annis-combina__tam{% unless v.available %} is-esgotado{% endunless %}">
-                          <input type="radio" name="id" value="{{ v.id }}"{% unless v.available %} disabled{% endunless %}>
-                          <span>{{ v.title }}</span>
-                        </label>
+                        <option value="{{ v.id }}"{% unless v.available %} disabled{% endunless %}>{{ v.title }}{% unless v.available %} · esgotado{% endunless %}</option>
                       {%- endfor -%}
-                    </div>
+                    </select>
                   {%- endif -%}
-                  <button type="submit" class="annis-combina__botao">Adicionar à sacola</button>
+                  <button type="submit" class="annis-combina__botao">Adicionar</button>
                 </form>
               </article>
             {%- endfor -%}
@@ -139,7 +137,7 @@
     if (f.dataset.ligado) return;
     f.dataset.ligado = '1';
     var botao = f.querySelector('button');
-    f.addEventListener('change', function () { botao.textContent = 'Adicionar à sacola'; botao.classList.remove('is-erro'); });
+    f.addEventListener('change', function () { botao.textContent = 'Adicionar'; botao.classList.remove('is-erro'); });
     f.addEventListener('submit', function (e) {
       e.preventDefault();
       var escolhido = f.querySelector('select[name="id"], input[name="id"]:checked, input[type="hidden"][name="id"]');
@@ -150,7 +148,7 @@
         body: JSON.stringify({ items: [{ id: Number(escolhido.value), quantity: 1 }] })
       }).then(function (r) { if (!r.ok) throw r; return r.json(); }).then(function () {
         botao.disabled = false;
-        botao.outerHTML = '<a class="annis-combina__botao is-ok" href="/cart">Na sacola · ver sacola</a>';
+        botao.outerHTML = '<a class="annis-combina__botao is-ok" href="/cart">Na sacola ✓</a>';
         // Contador da sacola no topo: o tema (Horizon) escuta este evento.
         fetch('/cart.js').then(function (r) { return r.json(); }).then(function (cart) {
           var ev = new Event('cart:update', { bubbles: true });
@@ -185,14 +183,10 @@
   .annis-combina__nome{font-family:Poppins,sans-serif;font-size:13px;color:#4A2C0F;text-decoration:none;line-height:1.35}
   .annis-combina__preco{font-family:Poppins,sans-serif;font-size:13px;margin:0;color:#4A2C0F}
   .annis-combina__compra{display:flex;flex-direction:column;gap:8px;margin-top:auto}
-  .annis-combina__tamanhos{display:flex;flex-wrap:wrap;gap:6px}
-  .annis-combina__tam input{position:absolute;opacity:0;pointer-events:none}
-  .annis-combina__tam span{display:inline-flex;min-width:36px;height:32px;padding:0 8px;align-items:center;justify-content:center;border:1px solid #D9C7B5;font-family:Poppins,sans-serif;font-size:12px;color:#4A2C0F;cursor:pointer}
-  .annis-combina__tam input:checked + span{border-color:#68380A;background:#68380A;color:#FFF6F0}
-  .annis-combina__tam.is-esgotado span{opacity:.35;text-decoration:line-through;cursor:default}
-  .annis-combina__unico{font-family:Poppins,sans-serif;font-size:12px;color:#7F6040}
-  .annis-combina__botao{display:flex;align-items:center;justify-content:center;height:44px;border:1px solid #68380A;background:transparent;color:#68380A;font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:background .2s,color .2s}
-  .annis-combina__botao:hover,.annis-combina__botao.is-ok{background:#68380A;color:#FFF6F0}
+  .annis-combina__unico{display:flex;align-items:center;height:32px;font-family:Poppins,sans-serif;font-size:12px;color:#7F6040}
+  .annis-combina__botao{display:flex;align-items:center;justify-content:center;height:36px;border:1px solid #68380A;background:#68380A;color:#FFF6F0;font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:background .2s,color .2s}
+  .annis-combina__botao:hover{opacity:.85}
+  .annis-combina__botao.is-ok{background:transparent;color:#68380A}
   .annis-combina__botao.is-erro{border-color:#A33;color:#A33}
   .annis-looks{margin:0 0 56px;display:flex;flex-direction:column;gap:72px}
   .annis-combinacoes__secao{font-family:Newsreader,serif;font-weight:300;font-size:32px;color:#4A2C0F;margin:0;padding-top:28px;border-top:1px solid #E8DACB}
