@@ -60,7 +60,12 @@
       }).then(function (r) { if (!r.ok) throw r; return r.json(); }).then(function () {
         botao.disabled = false;
         botao.outerHTML = '<a class="annis-combina__botao is-ok" href="/cart">Na sacola · ver sacola</a>';
-        document.dispatchEvent(new CustomEvent('cart:refresh'));
+        // Contador da sacola no topo: o tema (Horizon) escuta este evento.
+        fetch('/cart.js').then(function (r) { return r.json(); }).then(function (cart) {
+          var ev = new Event('cart:update', { bubbles: true });
+          ev.detail = { resource: cart, sourceId: 'annis-combina', data: { itemCount: cart.item_count, source: 'annis-combina' } };
+          document.dispatchEvent(ev);
+        });
       }).catch(function () {
         botao.disabled = false; botao.textContent = 'Não deu, tente de novo'; botao.classList.add('is-erro');
       });
