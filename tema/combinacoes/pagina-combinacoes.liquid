@@ -21,29 +21,38 @@
     <h1>Combinações</h1>
     <p>Peças da Annis que conversam entre si. Escolha uma e veja com o que ela fica bonita.</p>
   </header>
-{%- assign looks = '01|top-de-linho-marrom-bloom|saia-de-jacquard-rose-giverny|Top Bloom Marrom e Saia Giverny Rosé;02|top-de-linho-bege-bloom|saia-de-jacquard-grafite-giverny|Top Bloom Bege e Saia Giverny Grafite;04|top-de-linho-bege-bloom|calca-de-linho-bege-joan|Top Bloom Bege e Calça Joan Bege;05|top-de-linho-marrom-bloom|calca-de-linho-marrom-joan|Top Bloom Marrom e Calça Joan Marrom;06|vestido-de-jacquard-relicario-vinho|camisa-de-algodao-heranca-rosa|Vestido Relicário Vinho e Camisa Herança Rosa;07|vestido-de-jacquard-relicario-cinza|camisa-de-algodao-heranca-branca|Vestido Relicário Cinza e Camisa Herança Branca;08|camisa-de-algodao-heranca-rosa|calca-de-jacquard-trama-vinho|Camisa Herança Rosa e Calça Trama Vinho;09|camisa-de-algodao-heranca-branca|calca-de-jacquard-trama-marrom|Camisa Herança Branca e Calça Trama Marrom' | split: ';' -%}
+{%- assign looks = '06|vestido-de-jacquard-relicario-vinho|camisa-de-algodao-heranca-rosa|Vestido Relicário Vinho e Camisa Herança Rosa;07|vestido-de-jacquard-relicario-cinza|camisa-de-algodao-heranca-branca|Vestido Relicário Cinza e Camisa Herança Branca;01|top-de-linho-marrom-bloom|saia-de-jacquard-rose-giverny|Top Bloom Marrom e Saia Giverny Rosé;02|top-de-linho-bege-bloom|saia-de-jacquard-grafite-giverny|Top Bloom Bege e Saia Giverny Grafite;04|top-de-linho-bege-bloom|calca-de-linho-bege-joan|Top Bloom Bege e Calça Joan Bege;05|top-de-linho-marrom-bloom|calca-de-linho-marrom-joan|Top Bloom Marrom e Calça Joan Marrom' | split: ';' -%}
+  {%- comment -%} Ordem: Entretempos (coleção nova) primeiro, depois Botânea e Tela (Pedro, 18/10). Foto editorial (externa ou ambientada) inspira; a foto de estúdio de cada peça monta o look (Pedro, 18/10). Os looks 08 e 09 não têm editorial e ficaram só no Peça por peça. {%- endcomment -%}
   <section class="annis-looks" aria-label="Looks">
-    <h2 class="annis-looks__titulo">Looks</h2>
-    <div class="annis-looks__grade">
-      {%- for linha in looks -%}
-        {%- assign partes = linha | split: '|' -%}
-        {%- assign capa = 'annis-look-' | append: partes[0] | append: '.jpg' -%}
-        {%- assign p1 = all_products[partes[1]] -%}
-        {%- assign p2 = all_products[partes[2]] -%}
-        {%- unless p1.available and p2.available -%}{%- continue -%}{%- endunless -%}
-        <article class="annis-looks__card">
-          <div class="annis-looks__foto">
-            {%- if images[capa] -%}
-              {{ images[capa] | image_url: width: 900 | image_tag: loading: 'lazy', widths: '400, 600, 900', sizes: '(min-width: 750px) 25vw, 78vw', alt: partes[3] }}
-            {%- endif -%}
-          </div>
-          <h3 class="annis-looks__nome">{{ partes[3] }}</h3>
-          {%- for i in (1..2) -%}
-            {%- if i == 1 -%}{%- assign p = p1 -%}{%- else -%}{%- assign p = p2 -%}{%- endif -%}
-            <form class="annis-looks__peca" data-annis-combina>
-              <a href="{{ p.url }}" class="annis-looks__peca-nome">{{ p.title }}</a>
-              <span class="annis-looks__peca-preco">{{ p.price | money }}</span>
-              <div class="annis-looks__peca-compra">
+    {%- assign n_look = 0 -%}
+    {%- for linha in looks -%}
+      {%- assign partes = linha | split: '|' -%}
+      {%- assign foto = 'annis-look-' | append: partes[0] | append: '-editorial.jpg' -%}
+      {%- assign p1 = all_products[partes[1]] -%}
+      {%- assign p2 = all_products[partes[2]] -%}
+      {%- unless p1.available and p2.available -%}{%- continue -%}{%- endunless -%}
+      {%- assign n_look = n_look | plus: 1 -%}
+      {%- assign lado = n_look | modulo: 2 -%}
+      <article class="annis-look{% if lado == 0 %} annis-look--inverso{% endif %}">
+        <div class="annis-look__editorial">
+          {%- if images[foto] -%}
+            {{ images[foto] | image_url: width: 1400 | image_tag: loading: 'lazy', widths: '600, 900, 1200, 1400', sizes: '(min-width: 750px) 50vw, 100vw', alt: partes[3] }}
+          {%- endif -%}
+        </div>
+        <div class="annis-look__texto">
+          <p class="annis-look__numero">Look {{ n_look | prepend: '0' | slice: -2, 2 }}</p>
+          <h2 class="annis-look__nome">{{ partes[3] }}</h2>
+          <div class="annis-look__pecas">
+            {%- for k in (1..2) -%}
+              {%- if k == 1 -%}{%- assign p = p1 -%}{%- else -%}{%- assign p = p2 -%}{%- endif -%}
+              <form class="annis-look__peca" data-annis-combina>
+                <a href="{{ p.url }}" class="annis-look__peca-foto">
+                  {%- if p.featured_image -%}
+                    {{ p.featured_image | image_url: width: 500 | image_tag: loading: 'lazy', widths: '250, 400, 500', sizes: '(min-width: 750px) 14vw, 45vw', alt: p.title }}
+                  {%- endif -%}
+                </a>
+                <a href="{{ p.url }}" class="annis-look__peca-nome">{{ p.title }}</a>
+                <span class="annis-look__peca-preco">{{ p.price | money }}</span>
                 {%- assign disponiveis = p.variants | where: 'available' -%}
                 {%- if p.has_only_default_variant or disponiveis.size == 1 -%}
                   <input type="hidden" name="id" value="{{ disponiveis.first.id }}">
@@ -59,12 +68,12 @@
                   </select>
                 {%- endif -%}
                 <button type="submit" class="annis-combina__botao">Adicionar</button>
-              </div>
-            </form>
-          {%- endfor -%}
-        </article>
-      {%- endfor -%}
-    </div>
+              </form>
+            {%- endfor -%}
+          </div>
+        </div>
+      </article>
+    {%- endfor -%}
   </section>
   <h2 class="annis-combinacoes__secao">Peça por peça</h2>
   {%- paginate collections.all.products by 250 -%}
@@ -155,6 +164,8 @@
   });
 </script>
 <style>
+  /* Fundo creme como o resto da loja; a seção do tema é transparente sobre o branco. */
+  .shopify-section:has(.annis-combinacoes){background:#FFF6F0}
   .annis-combinacoes{max-width:1280px;margin:0 auto;padding:24px 20px 48px}
   .annis-combinacoes__topo{text-align:center;max-width:560px;margin:0 auto 40px}
   .annis-combinacoes__topo h1{font-family:Newsreader,serif;font-weight:300;font-size:44px;margin:0 0 12px;color:#4A2C0F}
@@ -183,25 +194,34 @@
   .annis-combina__botao{display:flex;align-items:center;justify-content:center;height:44px;border:1px solid #68380A;background:transparent;color:#68380A;font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:background .2s,color .2s}
   .annis-combina__botao:hover,.annis-combina__botao.is-ok{background:#68380A;color:#FFF6F0}
   .annis-combina__botao.is-erro{border-color:#A33;color:#A33}
-  .annis-looks{margin:0 0 48px}
-  .annis-combinacoes__secao{border-top:0 !important;padding-top:8px !important;margin-bottom:0 !important}
-  .annis-looks__titulo,.annis-combinacoes__secao{font-family:Newsreader,serif;font-weight:300;font-size:32px;color:#4A2C0F;margin:0 0 20px;padding-top:28px;border-top:1px solid #E8DACB}
-  .annis-looks__grade{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px 20px}
-  .annis-looks__card{display:flex;flex-direction:column;gap:10px;min-width:0}
-  .annis-looks__foto{aspect-ratio:2/3;overflow:hidden;background:#F3E9E0}
-  .annis-looks__foto img{width:100%;height:100%;object-fit:cover;display:block}
-  .annis-looks__nome{font-family:Newsreader,serif;font-weight:300;font-size:19px;line-height:1.25;color:#4A2C0F;margin:2px 0 0}
-  .annis-looks__peca{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding-top:10px;border-top:1px solid #E8DACB}
-  .annis-looks__peca-nome{font-family:Poppins,sans-serif;font-size:12px;color:#4A2C0F;text-decoration:none;line-height:1.3}
-  .annis-looks__peca-preco{font-family:Poppins,sans-serif;font-size:12px;color:#4A2C0F;white-space:nowrap}
-  .annis-looks__peca-compra{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center}
-  .annis-looks__peca-compra .annis-combina__botao{height:32px}
+  .annis-looks{margin:0 0 56px;display:flex;flex-direction:column;gap:72px}
+  .annis-combinacoes__secao{font-family:Newsreader,serif;font-weight:300;font-size:32px;color:#4A2C0F;margin:0;padding-top:28px;border-top:1px solid #E8DACB}
+  .annis-look{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:56px;align-items:center}
+  .annis-look--inverso .annis-look__editorial{order:2}
+  .annis-look__editorial{aspect-ratio:4/5;overflow:hidden;background:#F3E9E0}
+  .annis-look__editorial img{width:100%;height:100%;object-fit:cover;display:block}
+  .annis-look__texto{display:flex;flex-direction:column;gap:14px;max-width:520px}
+  .annis-look--inverso .annis-look__texto{justify-self:end}
+  .annis-look__numero{font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#7F6040;margin:0}
+  .annis-look__nome{font-family:Newsreader,serif;font-weight:300;font-size:38px;line-height:1.1;color:#4A2C0F;margin:0 0 10px}
+  .annis-look__pecas{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .annis-look__peca{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .annis-look__peca-foto{display:block;aspect-ratio:2/3;overflow:hidden;background:#F3E9E0;margin-bottom:4px}
+  .annis-look__peca-foto img{width:100%;height:100%;object-fit:cover;display:block}
+  .annis-look__peca-nome{font-family:Poppins,sans-serif;font-size:12px;color:#4A2C0F;text-decoration:none;line-height:1.3;min-height:31px}
+  .annis-look__peca-preco{font-family:Poppins,sans-serif;font-size:12px;color:#4A2C0F}
+  .annis-look__peca .annis-combina__unico{display:flex;align-items:center;height:32px;font-family:Poppins,sans-serif;font-size:12px;color:#7F6040}
+  .annis-look__peca .annis-combina__botao{height:36px;background:#68380A;color:#FFF6F0}
   .annis-combina__tam{width:100%;height:32px;padding:0 8px;border:1px solid #D9C7B5;background:#FFF6F0;color:#4A2C0F;font-family:Poppins,sans-serif;font-size:12px;border-radius:0}
   @media screen and (max-width:749px){
     .annis-combinacoes__topo h1{font-size:34px}
-    .annis-looks__grade{grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:78%;overflow-x:auto;scroll-snap-type:x mandatory;gap:16px;padding-bottom:8px}
-    .annis-looks__card{scroll-snap-align:start}
-    .annis-looks__titulo,.annis-combinacoes__secao{font-size:26px}
+    .annis-looks{gap:48px}
+    .annis-look{grid-template-columns:1fr;gap:18px}
+    .annis-look--inverso .annis-look__editorial{order:0}
+    .annis-look__editorial{margin:0 -20px;aspect-ratio:4/5}
+    .annis-look__nome{font-size:28px}
+    .annis-look__pecas{gap:12px}
+    .annis-combinacoes__secao{font-size:26px}
     .annis-combinacoes__bloco{grid-template-columns:1fr;gap:18px}
     .annis-combinacoes__principal .annis-combinacoes__foto{aspect-ratio:4/5}
     .annis-combina__trilho{grid-auto-columns:62%;gap:14px}
