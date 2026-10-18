@@ -23,6 +23,7 @@
   </header>
 {%- assign looks = '06|vestido-de-jacquard-relicario-vinho|camisa-de-algodao-heranca-rosa|Vestido Relicário Vinho e Camisa Herança Rosa;07|vestido-de-jacquard-relicario-cinza|camisa-de-algodao-heranca-branca|Vestido Relicário Cinza e Camisa Herança Branca;01|top-de-linho-marrom-bloom|saia-de-jacquard-rose-giverny|Top Bloom Marrom e Saia Giverny Rosé;02|top-de-linho-bege-bloom|saia-de-jacquard-grafite-giverny|Top Bloom Bege e Saia Giverny Grafite;04|top-de-linho-bege-bloom|calca-de-linho-bege-joan|Top Bloom Bege e Calça Joan Bege;05|top-de-linho-marrom-bloom|calca-de-linho-marrom-joan|Top Bloom Marrom e Calça Joan Marrom' | split: ';' -%}
   {%- comment -%} Ordem: Entretempos (coleção nova) primeiro, depois Botânea e Tela (Pedro, 18/10). Foto editorial (externa ou ambientada) inspira; a foto de estúdio de cada peça monta o look (Pedro, 18/10). Os looks 08 e 09 não têm editorial e ficaram só no Peça por peça. {%- endcomment -%}
+  <p class="annis-looks__dica" aria-hidden="true">Looks · <span data-annis-look-n>1</span> de <span data-annis-look-total></span> · deslize para o lado</p>
   <section class="annis-looks" aria-label="Looks">
     {%- assign n_look = 0 -%}
     {%- for linha in looks -%}
@@ -133,6 +134,19 @@
   {%- endpaginate -%}
 </div>
 <script>
+  // Celular: os looks viram um carrossel; o contador diz em qual se está.
+  (function () {
+    var trilho = document.querySelector('.annis-looks');
+    var n = document.querySelector('[data-annis-look-n]');
+    var total = document.querySelector('[data-annis-look-total]');
+    if (!trilho || !n || !total) return;
+    var looks = trilho.querySelectorAll('.annis-look');
+    total.textContent = looks.length;
+    trilho.addEventListener('scroll', function () {
+      var passo = looks.length > 1 ? looks[1].offsetLeft - looks[0].offsetLeft : 1;
+      n.textContent = Math.min(looks.length, Math.round(trilho.scrollLeft / passo) + 1);
+    }, { passive: true });
+  })();
   document.querySelectorAll('[data-annis-combina]').forEach(function (f) {
     if (f.dataset.ligado) return;
     f.dataset.ligado = '1';
@@ -189,6 +203,7 @@
   .annis-combina__botao.is-ok{background:transparent;color:#68380A}
   .annis-combina__botao.is-erro{border-color:#A33;color:#A33}
   .annis-looks{margin:0 0 56px;display:flex;flex-direction:column;gap:72px}
+  .annis-looks__dica{display:none}
   .annis-combinacoes__secao{font-family:Newsreader,serif;font-weight:300;font-size:32px;color:#4A2C0F;margin:0;padding-top:28px;border-top:1px solid #E8DACB}
   .annis-look{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:56px;align-items:center}
   .annis-look--inverso .annis-look__editorial{order:2}
@@ -207,17 +222,41 @@
   .annis-look__peca .annis-combina__unico{display:flex;align-items:center;height:32px;font-family:Poppins,sans-serif;font-size:12px;color:#7F6040}
   .annis-look__peca .annis-combina__botao{height:36px;background:#68380A;color:#FFF6F0}
   .annis-combina__tam{width:100%;height:32px;padding:0 8px;border:1px solid #D9C7B5;background:#FFF6F0;color:#4A2C0F;font-family:Poppins,sans-serif;font-size:12px;border-radius:0}
+  /* Celular (Pedro, 18/10: "um monte de blocos, com foto grande"): os looks
+     viram carrossel com as duas peças em linha compacta, e no Peça por peça a
+     peça principal vira cabeçalho pequeno em cima do carrossel. Computador
+     fica como está. */
   @media screen and (max-width:749px){
+    .annis-combinacoes__topo{margin-bottom:24px}
     .annis-combinacoes__topo h1{font-size:34px}
-    .annis-looks{gap:48px}
-    .annis-look{grid-template-columns:1fr;gap:18px}
+    .annis-looks__dica{display:block;font-family:Poppins,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7F6040;margin:0 0 12px}
+    .annis-looks{flex-direction:row;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -20px 40px;padding:0 20px 10px;scroll-padding:0 20px;scrollbar-width:none}
+    .annis-looks::-webkit-scrollbar{display:none}
+    .annis-look{flex:0 0 88%;min-width:0;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start;scroll-snap-align:start}
     .annis-look--inverso .annis-look__editorial{order:0}
-    .annis-look__editorial{margin:0 -20px;aspect-ratio:4/5}
-    .annis-look__nome{font-size:28px}
-    .annis-look__pecas{gap:12px}
+    .annis-look--inverso .annis-look__texto{justify-self:stretch}
+    .annis-look__texto{max-width:none;min-width:0}
+    .annis-look__editorial{aspect-ratio:4/5}
+    .annis-look__texto{gap:4px}
+    .annis-look__nome{font-size:21px;margin:0 0 8px}
+    .annis-look__pecas{grid-template-columns:minmax(0,1fr);gap:12px}
+    .annis-look__peca{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1fr);grid-template-areas:"f n n" "f p p" "f t b";column-gap:8px;row-gap:3px;align-items:center}
+    .annis-look__peca-foto{grid-area:f;align-self:start;margin:0;margin-right:4px}
+    .annis-look__peca-nome{grid-area:n;min-height:0}
+    .annis-look__peca-preco{grid-area:p}
+    .annis-look__peca .annis-combina__tam,.annis-look__peca .annis-combina__unico{grid-area:t}
+    .annis-look__peca .annis-combina__botao{grid-area:b;height:32px}
+    .annis-look__peca .annis-combina__tam{padding:0 4px 0 8px}
     .annis-combinacoes__secao{font-size:26px}
-    .annis-combinacoes__bloco{grid-template-columns:1fr;gap:18px}
-    .annis-combinacoes__principal .annis-combinacoes__foto{aspect-ratio:4/5}
-    .annis-combina__trilho{grid-auto-columns:62%;gap:14px}
+    .annis-combinacoes__bloco{grid-template-columns:1fr;gap:12px;padding:22px 0}
+    .annis-combinacoes__secao + .annis-combinacoes__bloco{border-top:0}
+    .annis-combinacoes__principal{display:grid;grid-template-columns:56px 1fr;grid-template-areas:"f n" "f p";column-gap:14px;row-gap:2px;align-items:center}
+    .annis-combinacoes__principal .annis-combinacoes__foto{grid-area:f;aspect-ratio:2/3}
+    .annis-combinacoes__nome{grid-area:n;font-size:20px;line-height:1.15;align-self:end}
+    .annis-combinacoes__preco{grid-area:p;font-size:12px;align-self:start}
+    .annis-combinacoes__rotulo{margin:0 0 10px}
+    .annis-combina__trilho{grid-auto-columns:40vw;gap:12px;margin-right:-20px;padding-right:20px}
+    .annis-combina__nome{font-size:12px}
+    .annis-combina__preco{font-size:12px}
   }
 </style>
