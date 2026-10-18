@@ -226,7 +226,8 @@
      viram carrossel com as duas peças em linha compacta, e no Peça por peça a
      peça principal fica em destaque (metade da largura, ao lado do nome) e as
      que combinam vêm menores embaixo; com a principal pequena e as outras
-     grandes parecia invertido (Pedro, 18/10). Computador fica como está. */
+     grandes parecia invertido (Pedro, 18/10). Nos looks, nome e botões pequenos:
+     grandes ficavam encavalados. Computador fica como está. */
   @media screen and (max-width:749px){
     .annis-combinacoes__topo{margin-bottom:24px}
     .annis-combinacoes__topo h1{font-size:34px}
@@ -239,15 +240,16 @@
     .annis-look__texto{max-width:none;min-width:0}
     .annis-look__editorial{aspect-ratio:4/5}
     .annis-look__texto{gap:4px}
-    .annis-look__nome{font-size:21px;margin:0 0 8px}
-    .annis-look__pecas{grid-template-columns:minmax(0,1fr);gap:12px}
-    .annis-look__peca{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1fr);grid-template-areas:"f n n" "f p p" "f t b";column-gap:8px;row-gap:3px;align-items:center}
-    .annis-look__peca-foto{grid-area:f;align-self:start;margin:0;margin-right:4px}
-    .annis-look__peca-nome{grid-area:n;min-height:0}
-    .annis-look__peca-preco{grid-area:p}
+    .annis-look__nome{font-size:19px;margin:0 0 10px}
+    .annis-look__pecas{grid-template-columns:minmax(0,1fr);gap:14px}
+    .annis-look__peca{display:grid;grid-template-columns:44px minmax(0,1fr) auto;grid-template-areas:"f n n" "f p p" "f t b";column-gap:10px;row-gap:4px;align-items:center}
+    .annis-look__peca-foto{grid-area:f;align-self:start;margin:0;margin-right:2px}
+    .annis-look__peca-nome{grid-area:n;min-height:0;font-size:11px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .annis-look__peca-preco{grid-area:p;font-size:11px;color:#7F6040}
     .annis-look__peca .annis-combina__tam,.annis-look__peca .annis-combina__unico{grid-area:t}
-    .annis-look__peca .annis-combina__botao{grid-area:b;height:32px}
-    .annis-look__peca .annis-combina__tam{padding:0 4px 0 8px}
+    .annis-look__peca .annis-combina__botao{grid-area:b;height:28px;font-size:10px;letter-spacing:.04em;padding:0 12px}
+    .annis-look__peca .annis-combina__tam{height:28px;font-size:11px;padding:0 4px 0 8px}
+    .annis-look__peca .annis-combina__unico{height:28px;font-size:11px}
     .annis-combinacoes__secao{font-size:26px}
     .annis-combinacoes__bloco{grid-template-columns:1fr;gap:12px;padding:22px 0}
     .annis-combinacoes__secao + .annis-combinacoes__bloco{border-top:0}
