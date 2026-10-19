@@ -263,10 +263,12 @@ def criar_cupom_pessoal(codigo: str, titulo: str, email: str = "", percentual: f
                         horas: int = 48) -> dict:
     """Cria o cupom e devolve {id, codigo, comeca, expira}.
 
-    Restrito à cliente quando ela existe como cliente na loja; quem comprou
-    como visitante fica com uso único e uma vez por cliente, que é o mais
-    perto que dá. Não acumula com outro desconto, então a cliente escolhe
-    entre este e o frete grátis de primeira compra.
+    Uso único e uma vez por cliente, aberto a qualquer comprador. Até
+    19/10/2026 ele era restrito à cliente quando ela tinha cadastro na loja,
+    mas a Shopify recusava o código no checkout sem login ("não está
+    disponível para você neste momento", Daniela Monaco). Não acumula com
+    outro desconto, então a cliente escolhe entre este e o frete grátis de
+    primeira compra.
     """
     from datetime import datetime, timedelta, timezone
     comeca = datetime.now(timezone.utc)
@@ -276,8 +278,7 @@ def criar_cupom_pessoal(codigo: str, titulo: str, email: str = "", percentual: f
     brasilia = timezone(timedelta(hours=-3))
     ultimo_dia = (comeca + timedelta(hours=horas)).astimezone(brasilia)
     expira = ultimo_dia.replace(hour=23, minute=59, second=59, microsecond=0).astimezone(timezone.utc)
-    cliente = _id_cliente(email)
-    selecao = {"customers": {"add": [cliente]}} if cliente else {"all": True}
+    selecao = {"all": True}
     entrada = {
         "title": titulo, "code": codigo,
         "startsAt": comeca.isoformat(), "endsAt": expira.isoformat(),
@@ -291,4 +292,4 @@ def criar_cupom_pessoal(codigo: str, titulo: str, email: str = "", percentual: f
     if r.get("userErrors"):
         raise RuntimeError(f"Shopify: {r['userErrors']}")
     return {"id": r["codeDiscountNode"]["id"], "codigo": codigo,
-            "comeca": comeca, "expira": expira, "restrito": bool(cliente)}
+            "comeca": comeca, "expira": expira, "restrito": False}
