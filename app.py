@@ -13,6 +13,7 @@ import json
 from datetime import date, timedelta, datetime
 
 import aba_resultado
+import inteligencia
 import omni
 import db
 import nuvem
@@ -528,7 +529,8 @@ import memo as _memo
 # Publicação nova no Streamlit Cloud reexecuta o app.py com o código novo, mas
 # o processo pode manter os módulos importados na versão antiga (14/10/2026:
 # o portal caiu com AttributeError em memo.mudou). Faltou função nova, recarrega.
-if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra"):
+if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra") \
+        or not hasattr(nuvem, "ler_eventos"):
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
@@ -1707,7 +1709,7 @@ with st.sidebar:
 # Lista de espera escondida em 04/10/2026 a pedido do Pedro, para voltar
 # depois; o código da aba continua aqui e basta devolver o nome à lista.
 # Rastreio entrou em 14/10/2026: acompanhar os pacotes é trabalho do dia.
-TRABALHO = ["Recuperar", "Disparos", "Clientes", "Rastreio", "Pós-compra", "Acessos", "Plano"]
+TRABALHO = ["Inteligência", "Recuperar", "Disparos", "Clientes", "Rastreio", "Pós-compra", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
@@ -3764,6 +3766,99 @@ if "Pós-compra" in abas:
         tabela(pd.DataFrame(_linhas), num=("Nota",), titulo="Cliente a cliente")
         st.caption("A régua entrou no ar em 13/10, às 22h. Pedido feito antes disso recebe só "
                    "o que acontece depois: postagem, entrega e pesquisa.")
+
+# ════════════════════════════════════════════════════════════════════════════
+# INTELIGÊNCIA: navegação no site, do anúncio ao pagamento (20/10/2026)
+# ════════════════════════════════════════════════════════════════════════════
+# Dados do pixel próprio (site/pixel.js), no ar desde 20/10/2026: loja e
+# checkout, sem dado pessoal. Lê ao vivo.
+def _reais(v) -> str:
+    try:
+        return "" if pd.isna(v) else "R$ " + f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return ""
+
+
+if "Inteligência" in abas:
+  with abas["Inteligência"]:
+    st.header("Inteligência do site")
+    st.caption(
+        "Cada visita ao site, do primeiro clique ao pagamento, gravada pelo nosso pixel "
+        "desde 20/10/2026 (loja e checkout, sem nome, e-mail ou CPF). Visita é o mesmo "
+        "navegador sem pausa de mais de 30 minutos."
+    )
+    _dias = st.segmented_control("Período", [1, 7, 14, 30], default=7, key="intel_dias",
+                                 format_func=lambda d: "24 horas" if d == 1 else f"{d} dias",
+                                 label_visibility="collapsed") or 7
+    _ev = nuvem.ler_eventos(int(_dias))
+    if _ev.empty:
+        st.info("Ainda não há visitas gravadas nesse período.")
+    else:
+        _v = inteligencia.visitas(_ev)
+        _compras = int(_v.checkout_completed.sum())
+        _t = _v.tempo_s.dropna()
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric("Visitas", len(_v), help=f"{_v.visitante.nunique()} navegadores diferentes.")
+        k2.metric("Páginas por visita", f"{_v.paginas.mean():.1f}".replace(".", ","))
+        k3.metric("Tempo típico de visita",
+                  (f"{int(_t.median() // 60)}min{int(_t.median() % 60):02d}s" if len(_t) else "—"),
+                  help="Mediana, só das visitas com mais de uma página: na última página o fim não é conhecido.")
+        k4.metric("Puseram no carrinho", f"{_v.product_added_to_cart.mean():.1%}".replace(".", ","))
+        k5.metric("Compraram", _compras, help=f"Conversão {_compras / len(_v):.2%} das visitas.".replace(".", ","))
+
+        st.subheader("Funil")
+        tabela(inteligencia.funil(_v), num=("Visitas", "Da etapa anterior", "Do total"), titulo="Funil")
+
+        st.subheader("De onde vêm")
+        tabela(inteligencia.por_origem(_v), num=("Visitas", "Carrinho", "Checkout", "Compras", "Conversão",
+                                                 "Páginas por visita"), titulo="Origem")
+
+        _parados = inteligencia.checkouts_parados(_v)
+        st.subheader("Checkouts que pararam")
+        if _parados.empty:
+            st.caption("Ninguém abriu o checkout e parou no período.")
+        else:
+            st.caption("Visitas que abriram o checkout e não pagaram, com a última etapa preenchida. "
+                       "Quem já tinha digitado o e-mail também aparece em Recuperar.")
+            _parados["Valor"] = _parados["Valor"].map(_reais)
+            tabela(_parados, num=("Valor", "Páginas"), titulo="Checkouts que pararam")
+
+        c_esq, c_dir = st.columns(2, gap="large")
+        with c_esq:
+            st.subheader("Páginas de entrada")
+            _ent = inteligencia.paginas_de_entrada(_v)
+            if _ent.empty:
+                st.caption("Ainda pouco volume (mínimo de 3 visitas por página).")
+            else:
+                tabela(_ent, num=("Visitas", "Saiu sem ver outra página", "Pôs no carrinho", "Compras"),
+                       titulo="Páginas de entrada")
+        with c_dir:
+            st.subheader("Tempo em cada página")
+            _tp = inteligencia.tempo_por_pagina(_ev)
+            if _tp.empty:
+                st.caption("Ainda pouco volume (mínimo de 3 vezes por página).")
+            else:
+                tabela(_tp, num=("Vezes vista", "Tempo típico"), titulo="Tempo por página")
+
+        c_esq, c_dir = st.columns(2, gap="large")
+        with c_esq:
+            st.subheader("Peças")
+            _pc = inteligencia.pecas(_ev)
+            if _pc.empty:
+                st.caption("Nenhuma peça vista no período.")
+            else:
+                tabela(_pc, num=("Pessoas que viram", "Puseram no carrinho", "Carrinho / vistas"), titulo="Peças")
+        with c_dir:
+            st.subheader("O que buscaram")
+            _bs = inteligencia.buscas(_ev)
+            if _bs.empty:
+                st.caption("Nenhuma busca no período.")
+            else:
+                tabela(_bs, num=("Vezes",), titulo="Buscas")
+
+        _ap = _v.groupby("aparelho").agg(v=("visita", "size"), c=("checkout_completed", "sum"))
+        st.caption("Aparelho: " + " · ".join(
+            f"{a} {int(r.v)} visitas ({r.v / len(_v):.0%}), {int(r.c)} compras" for a, r in _ap.iterrows()))
 
 # ════════════════════════════════════════════════════════════════════════════
 # ABA: ACESSOS: quem entrou no painel, e de onde

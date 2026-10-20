@@ -984,3 +984,22 @@ def ler_pos_compra() -> dict:
                 "respostas": [dict(r) for r in respostas], "clientes": clientes, "pecas": pecas}
     except Exception:
         return vazio
+
+
+# ─── Rastreio do site ────────────────────────────────────────────────────────
+# Eventos gravados pelo pixel próprio (site/pixel.js, site/eventos.sql), lidos
+# pela aba Inteligência do Trabalho. Ao vivo, sem cache.
+
+def ler_eventos(dias: int = 30):
+    import pandas as pd
+    if not configurado():
+        return pd.DataFrame()
+    from sqlalchemy import text
+    try:
+        with _conectar().connect() as con:
+            return pd.read_sql_query(text(
+                "SELECT em, visitante, evento, pagina, busca, origem, produto, variante, valor, pedido, aparelho, extra"
+                " FROM site.eventos WHERE em >= now() - make_interval(days => :d) ORDER BY em"),
+                con, params={"d": int(dias)}, parse_dates=["em"])
+    except Exception:
+        return pd.DataFrame()
