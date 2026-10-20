@@ -212,8 +212,67 @@ def baixa() -> None:
             con.execute(text("insert into avisos.enviados (id, tipo) values (:id, :t) on conflict do nothing"),
                         {"id": f"baixa:{numero}", "t": marca})
         print(f"#{numero}: {marca}")
+    erros += baixa_etiquetas_manuais()
     if erros:
         danfe.mensagem("Postados nos Correios, mas sem baixa na Shopify:\n" + "\n".join(erros))
+
+
+def _digitos(t) -> str:
+    return "".join(ch for ch in str(t or "") if ch.isdigit())
+
+
+def baixa_etiquetas_manuais() -> list:
+    """Etiqueta emitida à mão no Meu Correios também dá baixa, 20/10/2026.
+
+    Pedido sem etiqueta do sistema (anterior à automação, ou feito à mão) não
+    tinha baixa nenhuma: a Nicole (#1140) e a Gisela (#1130) foram postadas e
+    seguiam "não processado" na Shopify. Aqui a baixa olha as pré-postagens
+    POSTADAS do contrato nos últimos 20 dias e casa com pedido pago ainda não
+    enviado pelo CEP e pelo primeiro nome do destinatário. Só marca quando o
+    casamento é único dos dois lados. Devolve os erros para o aviso no grupo.
+    """
+    import datetime as _dt
+    hoje = _dt.date.today()
+    r = etiqueta._correios("GET", "/v2/prepostagens", params={
+        "status": "POSTADO", "dataInicial": str(hoje - _dt.timedelta(days=20)), "dataFinal": str(hoje),
+        "page": 0, "size": 100})
+    with nuvem._conectar().connect() as con:
+        usados = {t.split()[1] for (t,) in con.execute(text(
+            "select tipo from avisos.enviados where id like 'etq:%' and tipo like 'etiqueta % % %'"))}
+    postados = []
+    for x in r.get("itens") or []:
+        d = x.get("destinatario") or {}
+        cep = _digitos((d.get("endereco") or {}).get("cep"))
+        if x.get("codigoObjeto") in usados or cep == "86050450":   # etiqueta do sistema ou reversa para a loja
+            continue
+        postados.append({"codigo": x["codigoObjeto"], "cep": cep,
+                         "nome": (d.get("nome") or "").strip().lower().split(" ")[0]})
+    if not postados:
+        return []
+    pedidos = shopify_client._graphql("""{ orders(first: 100, sortKey: CREATED_AT, reverse: true,
+        query: "fulfillment_status:unfulfilled financial_status:paid status:open") {
+        nodes { name shippingAddress { name zip } } } }""")["orders"]["nodes"]
+    abertos = [{"numero": p["name"].lstrip("#"), "cep": _digitos((p.get("shippingAddress") or {}).get("zip")),
+                "nome": ((p.get("shippingAddress") or {}).get("name") or "").strip().lower().split(" ")[0]}
+               for p in pedidos]
+    erros = []
+    for e in postados:
+        cand = [p for p in abertos if p["cep"] == e["cep"] and p["nome"] == e["nome"]]
+        rival = [x for x in postados if x["cep"] == e["cep"] and x["nome"] == e["nome"]]
+        if len(cand) != 1 or len(rival) != 1:
+            continue
+        numero = cand[0]["numero"]
+        try:
+            etiqueta.rastreio_na_shopify(etiqueta.pedido_shopify(numero), e["codigo"])
+        except Exception as erro:
+            erros.append(f"#{numero} ({e['codigo']}, etiqueta à mão): {str(erro)[:150]}")
+            continue
+        with nuvem._conectar().begin() as con:
+            con.execute(text("insert into avisos.enviados (id, tipo) values (:id, :t) on conflict do nothing"),
+                        {"id": f"baixa:{numero}", "t": f"enviado (etiqueta à mão {e['codigo']})"})
+        print(f"#{numero}: enviado, etiqueta à mão {e['codigo']}")
+    return erros
+
 
 if __name__ == "__main__":
     if "--baixa" in sys.argv:
