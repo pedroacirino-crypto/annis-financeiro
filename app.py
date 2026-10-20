@@ -3847,6 +3847,8 @@ if "Inteligência" in abas:
             if _pc.empty:
                 st.caption("Nenhuma peça vista no período.")
             else:
+                st.caption("Contado por peça: quem põe três peças no carrinho entra em três linhas, "
+                           "por isso a soma passa do \"Pôs no carrinho\" do funil, que conta visitas.")
                 tabela(_pc, num=("Pessoas que viram", "Puseram no carrinho", "Carrinho / vistas"), titulo="Peças")
         with c_dir:
             st.subheader("O que buscaram")
