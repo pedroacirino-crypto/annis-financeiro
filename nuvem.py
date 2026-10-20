@@ -1003,3 +1003,18 @@ def ler_eventos(dias: int = 30):
                 con, params={"d": int(dias)}, parse_dates=["em"])
     except Exception:
         return pd.DataFrame()
+
+
+def ler_clarity(dias: int = 7) -> list:
+    """Coletas diárias do Clarity (site/clarity.sql), as do período pedido."""
+    if not configurado():
+        return []
+    from sqlalchemy import text
+    try:
+        with _conectar().connect() as con:
+            return [dict(r) for r in con.execute(text(
+                "SELECT coletado_em, dias, dados FROM public.clarity_coletas"
+                " WHERE coletado_em >= now() - make_interval(days => :d) ORDER BY coletado_em"),
+                {"d": int(dias) + 1}).mappings().all()]
+    except Exception:
+        return []

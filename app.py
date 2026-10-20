@@ -530,10 +530,13 @@ import memo as _memo
 # o processo pode manter os módulos importados na versão antiga (14/10/2026:
 # o portal caiu com AttributeError em memo.mudou). Faltou função nova, recarrega.
 if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra") \
-        or not hasattr(nuvem, "ler_eventos"):
+        or not hasattr(nuvem, "ler_eventos") or not hasattr(nuvem, "ler_clarity"):
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
+if not hasattr(inteligencia, "clarity_paginas"):
+    import importlib
+    inteligencia = importlib.reload(inteligencia)
 try:
     if _memo.mudou(nuvem.dado_novo_em()):
         _esquecer_derivados()
@@ -3839,6 +3842,18 @@ if "Inteligência" in abas:
                 st.caption("Ainda pouco volume (mínimo de 3 vezes por página).")
             else:
                 tabela(_tp, num=("Vezes vista", "Tempo típico"), titulo="Tempo por página")
+
+        st.subheader("Comportamento em cada página (Clarity)")
+        _cl = inteligencia.clarity_paginas(nuvem.ler_clarity(int(_dias)))
+        if _cl.empty:
+            st.caption("O Clarity entrou em 20/10; os números chegam numa coleta por dia, às 3h.")
+        else:
+            st.caption("Rolagem: até onde a página é descida, em média. Volta rápida: quem entra e volta "
+                       "logo atrás. Clique de raiva: vários cliques seguidos no mesmo lugar. Clique morto: "
+                       "clique em algo que não responde. O mapa de calor abre no Clarity, já na página.")
+            st.dataframe(_cl, hide_index=True, use_container_width=True,
+                         height=min(38 + 35 * len(_cl), 560),
+                         column_config={"Mapa de calor": st.column_config.LinkColumn(display_text="abrir")})
 
         c_esq, c_dir = st.columns(2, gap="large")
         with c_esq:

@@ -171,3 +171,95 @@ def checkouts_parados(v: pd.DataFrame) -> pd.DataFrame:
         "Origem": p.origem, "Aparelho": p.aparelho, "Parou em": p["Parou em"],
         "Valor": p.valor, "Páginas": p.paginas,
     })
+
+
+# ─── Clarity ────────────────────────────────────────────────────────────────
+# Números por página da API de exportação do Clarity (site/clarity.sql). O
+# mapa de calor não exporta: cada página leva um link para ele no Clarity.
+
+CLARITY_PROJETO = "z0rp8ouj62"
+
+
+def _caminho(url: str) -> str:
+    from urllib.parse import urlparse
+    try:
+        p = urlparse(url).path or "/"
+    except Exception:
+        return url or ""
+    return p.rstrip("/") or "/"
+
+
+def link_mapa_de_calor(caminho: str) -> str:
+    """Abre o mapa de calor já na página: o Clarity só seleciona a página
+    quando o endereço leva também o filtro URL (regra 2;6 = expressão, com ou
+    sem query string), no formato que ele mesmo gera ao clicar na lista."""
+    import re
+    from urllib.parse import quote
+    completa = "https://annis.store" + caminho
+    regra = "2;6;^" + re.sub(r"([.?+*()\[\]{}|^$])", r"\\\1", completa) + r"(\?.*)?$"
+    return (f"https://clarity.microsoft.com/projects/view/{CLARITY_PROJETO}/heatmaps"
+            f"?date=Last%203%20days&heatmapDeviceType=0&heatmapType=0"
+            f"&url={quote(completa, safe='')}&URL={quote(regra, safe='')}")
+
+
+def clarity_paginas(coletas: list, minimo: int = 3) -> pd.DataFrame:
+    """Uma linha por página, somando as coletas diárias do período.
+
+    Cada coleta cobre as 24 horas anteriores. Uma coleta feita menos de 20
+    horas antes da seguinte cobre o mesmo pedaço de tempo e sai da conta (foi
+    o caso da coleta manual da instalação, em 20/10).
+    """
+    coletas = sorted(coletas, key=lambda c: c["coletado_em"])
+    validas = [c for i, c in enumerate(coletas)
+               if i == len(coletas) - 1
+               or (coletas[i + 1]["coletado_em"] - c["coletado_em"]).total_seconds() >= 20 * 3600]
+    linhas = []
+    for c in validas:
+        for m in c["dados"] or []:
+            nome = m.get("metricName")
+            for info in m.get("information") or []:
+                linhas.append({"pagina": _caminho(info.get("Url", "")), "metrica": nome, **info})
+    if not linhas:
+        return pd.DataFrame()
+    d = pd.DataFrame(linhas)
+    d = d[~d.pagina.str.startswith("/checkouts")]
+    tr = d[d.metrica == "Traffic"].groupby("pagina").totalSessionCount.sum()
+    saida = pd.DataFrame({"visitas": tr})
+
+    def media_pesada(metrica, campo):
+        x = d[d.metrica == metrica][["pagina", campo]].merge(
+            d[d.metrica == "Traffic"][["pagina", "totalSessionCount"]].groupby("pagina").sum(),
+            left_on="pagina", right_index=True, how="left")
+        x["peso"] = x.totalSessionCount.fillna(0)
+        x["v"] = pd.to_numeric(x[campo], errors="coerce") * x.peso
+        g = x.groupby("pagina")
+        return g.v.sum() / g.peso.sum().replace(0, pd.NA)
+
+    def taxa(metrica):
+        x = d[d.metrica == metrica].copy()
+        x["com"] = pd.to_numeric(x.sessionsCount, errors="coerce") * pd.to_numeric(
+            x.sessionsWithMetricPercentage, errors="coerce") / 100
+        g = x.groupby("pagina")
+        return g.com.sum() / pd.to_numeric(g.sessionsCount.sum(), errors="coerce").replace(0, pd.NA)
+
+    saida["rolagem"] = media_pesada("ScrollDepth", "averageScrollDepth")
+    saida["ativo"] = media_pesada("EngagementTime", "activeTime")
+    saida["volta"] = taxa("QuickbackClick")
+    saida["raiva"] = taxa("RageClickCount")
+    saida["morto"] = taxa("DeadClickCount")
+    saida = saida[saida.visitas >= minimo].sort_values("visitas", ascending=False)
+
+    def pct(x):
+        return "" if pd.isna(x) else f"{x:.0%}"
+
+    return pd.DataFrame({
+        "Página": saida.index,
+        "Visitas": saida.visitas.astype(int).values,
+        "Rolagem média": [("" if pd.isna(x) else f"{x:.0f}%") for x in saida.rolagem],
+        "Tempo ativo": [("" if pd.isna(x) else (f"{int(x // 60)}min{int(x % 60):02d}s" if x >= 60 else f"{int(x)}s"))
+                        for x in saida.ativo],
+        "Volta rápida": [pct(x) for x in saida.volta],
+        "Clique de raiva": [pct(x) for x in saida.raiva],
+        "Clique morto": [pct(x) for x in saida.morto],
+        "Mapa de calor": [link_mapa_de_calor(p) for p in saida.index],
+    })
