@@ -228,10 +228,14 @@ def _aplicar_rateios(t: pd.DataFrame) -> pd.DataFrame:
     if r.empty or t.empty:
         return t
     novas = []
+    # Um pagamento pode ter mais de uma parte (19/10/2026: R$ 1.148 para a
+    # Ana = boleto da facção R$ 1.118 + tarifa R$ 30); casa pelo valor
+    # original, antes de descontar as partes já separadas.
+    original = t.valor.round(2).copy()
     for p in r.itertuples(index=False):
         alvo = t[(t.data.dt.normalize() == pd.Timestamp(p.data).normalize())
                  & t.contraparte.str.contains(p.contraparte, case=False, na=False)
-                 & (t.valor.round(2) == round(float(p.valor_total), 2))]
+                 & (original == round(float(p.valor_total), 2))]
         if alvo.empty:
             continue
         i = alvo.index[0]
@@ -242,6 +246,7 @@ def _aplicar_rateios(t: pd.DataFrame) -> pd.DataFrame:
         novas.append(linha)
     if not novas:
         return t
+    t = t[t.valor.round(2) != 0]          # pagamento todo repartido não sobra como linha zerada
     return pd.concat([t, pd.DataFrame(novas)], ignore_index=True).sort_values("data").reset_index(drop=True)
 
 
