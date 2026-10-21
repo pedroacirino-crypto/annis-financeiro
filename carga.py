@@ -38,6 +38,24 @@ def carregar_extrato(caminho: str) -> None:
         print("  sem regra nenhuma:")
         for nome, v in novos.items():
             print(f"    {nome[:50]:50s} R$ {v:,.2f}")
+    _avisar_fatura_sem_transcricao(df)
+
+
+def _avisar_fatura_sem_transcricao(df: pd.DataFrame) -> None:
+    """Pagamento de fatura de cartão (Portoseg) num mês cuja fatura não foi
+    transcrita em legado/faturas_cartao.csv vai inteiro para anúncio, e não
+    é: a fatura da Ana mistura Meta com tecido, aviamento, embalagem e coisa
+    pessoal. Aconteceu em setembro e de novo em outubro/2026."""
+    import financeiro
+    cobertos = set().union(*financeiro.meses_com_fatura().values()) if financeiro.meses_com_fatura() else set()
+    pag = df[df.categoria == financeiro.CATEGORIA_FATURA].copy()
+    if pag.empty:
+        return
+    pag["mes"] = pd.to_datetime(pag.data).dt.strftime("%Y-%m")
+    falta = pag[~pag.mes.isin(cobertos)]
+    for r in falta.itertuples(index=False):
+        print(f"  ATENÇÃO: pagamento de fatura de R$ {abs(r.valor):,.2f} em {pd.to_datetime(r.data):%d/%m} sem a fatura"
+              f" transcrita ({r.mes}). Transcrever em legado/faturas_cartao.csv e rodar carga.py fatura.")
 
 
 def carregar_contas(caminho: str) -> None:
