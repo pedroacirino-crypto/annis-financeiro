@@ -62,6 +62,7 @@ REGRAS_DEBITO = [
     # Fixas e sistemas
     (r"KOYASHIKI", "despesa", "Contador", "ok"),
     (r"OLIST TINY", "despesa", "Sistemas", "ok"),
+    (r"^CLARO", "despesa", "Internet do ateliê", "ok"),  # Pedro, 20/10/2026
     (r"CONDOMINIO|PJBANK", "despesa", "Aluguel e condomínio", "ok"),
     (r"ZOOP|SAFE2PAY|DLOCAL|PIX MARKETPLACE|PAGAR ME", "despesa", "Taxas e apps", "a confirmar"),
     (r"KALUNGA|LJS ESTACIONAMENTOS|PAPELARIA|PAPEL DE PAPEL", "despesa", "Miudezas", "ok"),
