@@ -184,13 +184,23 @@ def ledger_saidas() -> pd.DataFrame:
         "data": pre.data, "valor": pre.valor, "contraparte": pre.descricao,
         "natureza": pre.natureza, "categoria": pre.categoria, "confianca": "ok", "fonte": "planilha",
     }) if not pre.empty else pd.DataFrame()
-    ex = extrato.carregar()
-    ex = ex[ex.sentido == "saida"]
+    ex_todo = extrato.carregar()
+    ex = ex_todo[ex_todo.sentido == "saida"]
     ex = pd.DataFrame({
         "data": ex.data, "valor": ex.valor_abs, "contraparte": ex.contraparte,
         "natureza": ex.natureza, "categoria": ex.categoria, "confianca": ex.confianca, "fonte": "extrato",
     })
-    t = pd.concat([pre, ex], ignore_index=True).sort_values("data").reset_index(drop=True)
+    # Compensação da parte pessoal da fatura do cartão (20/10/2026): a Annis
+    # paga a fatura inteira na Portoseg e, no mesmo dia, o Pedro ou a Ana
+    # devolvem o que é pessoal. Não é aporte nem venda: abate a fatura, em
+    # Despesas. No resultado por competência ela some junto com o pagamento,
+    # porque a fatura transcrita entra no lugar (_trocar_reembolso_por_fatura).
+    comp = ex_todo[(ex_todo.sentido == "entrada") & (ex_todo.natureza == "compensacao")]
+    comp = pd.DataFrame({
+        "data": comp.data, "valor": -comp.valor_abs, "contraparte": comp.contraparte,
+        "natureza": "despesa", "categoria": CATEGORIA_FATURA, "confianca": comp.confianca, "fonte": "extrato",
+    })
+    t = pd.concat([pre, ex, comp], ignore_index=True).sort_values("data").reset_index(drop=True)
     t["mes"] = t.data.dt.strftime("%Y-%m")
     return _aplicar_rateios(t)
 
