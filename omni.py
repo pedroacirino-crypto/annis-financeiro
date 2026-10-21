@@ -137,6 +137,23 @@ def ultimo_extrato():
     return None if ex.empty else pd.to_datetime(ex.data.max())
 
 
+def saldo_conta_stone():
+    """Saldo da conta Stone no último movimento do extrato carregado, em
+    centavos, e a hora desse movimento. (None, None) sem extrato."""
+    import dados_fin
+    try:
+        e = dados_fin.ler_extrato()
+    except Exception:
+        return None, None
+    if e.empty or "saldo_depois" not in e:
+        return None, None
+    e = e.dropna(subset=["saldo_depois"]).sort_values("data")
+    if e.empty:
+        return None, None
+    u = e.iloc[-1]
+    return int(round(float(u.saldo_depois) * 100)), pd.to_datetime(u.data)
+
+
 def _dia_util_seguinte(d: pd.Timestamp) -> pd.Timestamp:
     from avisos.envios import FERIADOS
     d = d.normalize() + pd.Timedelta(days=1)

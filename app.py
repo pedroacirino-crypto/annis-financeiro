@@ -2791,22 +2791,41 @@ if "A receber" in abas:
     ar_fis = omni.a_receber_fisico() if omni.ver_fisico(visao) else pd.DataFrame()
     fis_total = int(ar_fis.liquido.sum()) if not ar_fis.empty else 0
 
-    c1, c2, c3 = st.columns(3)
+    # Cada fonte no seu cartão, e o total à parte dizendo do que é feito
+    # (Pedro, 20/10/2026: misturar Pagar.me e Stone num número só esconde de
+    # onde vem o dinheiro). A conta Stone é onde tudo cai, inclusive o repasse
+    # da Pagar.me; o saldo é o do último movimento do extrato carregado.
+    saldo_stone, saldo_stone_em = omni.saldo_conta_stone() if omni.ver_fisico(visao) else (None, None)
+    s_stone = saldo_stone or 0
+    quando_stone = f"extrato até {saldo_stone_em:%d/%m %Hh%M}" if saldo_stone_em is not None else "sem extrato"
+    rot_pagarme = "Pagar.me, disponível" + (f" (saldo de {saldo_lido})" if saldo_lido else "")
     if visao == omni.FISICO:
-        c1.metric("A receber da Stone", fmt_brl(fis_total),
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Conta Stone", fmt_brl(s_stone), help=f"Saldo da conta Stone no último movimento ({quando_stone}).")
+        c2.metric("Maquininha, a repassar", fmt_brl(fis_total),
                   help="Venda da maquininha e do link feita depois do último repasse que aparece no extrato.")
-        ult = omni.ultimo_extrato()
-        c2.metric("Vendas a repassar", int(ar_fis.vendas.sum()) if not ar_fis.empty else 0)
-        c3.metric("Extrato lido até", ult.strftime("%d/%m") if ult is not None else "—")
-    else:
-        c1.metric("Já disponível para sacar" + (f" (saldo de {saldo_lido})" if saldo_lido else ""), fmt_brl(avail),
+        c3.metric("Total", fmt_brl(s_stone + fis_total), help="Conta Stone + maquininha a repassar.")
+        st.caption(f"Conta Stone: {quando_stone}. Vendas a repassar: {int(ar_fis.vendas.sum()) if not ar_fis.empty else 0}.")
+    elif visao == omni.DIGITAL:
+        c1, c2, c3 = st.columns(3)
+        c1.metric(rot_pagarme, fmt_brl(avail),
                   help="Saldo da Pagar.me que já pode ser transferido. Fica parado na hora "
                        "em que foi lido e só muda ao clicar em Atualizar dados.")
-        c2.metric("Ainda a receber", fmt_brl(waiting + fis_total),
-                  help=("Pagar.me ainda por liquidar" + (f" mais {fmt_brl(fis_total)} de repasse da Stone" if fis_total else "")))
-        c3.metric("Com tudo que está previsto", fmt_brl(avail + waiting + fis_total),
-                  help="O que já dá para sacar mais tudo que ainda vai cair, "
-                       "sem contar venda que ainda não aconteceu.")
+        c2.metric("Pagar.me, a liquidar", fmt_brl(waiting), help="Venda do site que a Pagar.me ainda vai liberar.")
+        c3.metric("Total", fmt_brl(avail + waiting), help="Pagar.me disponível + a liquidar.")
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Conta Stone", fmt_brl(s_stone), help=f"Saldo da conta Stone no último movimento ({quando_stone}).")
+        c2.metric(rot_pagarme, fmt_brl(avail),
+                  help="Saldo da Pagar.me que já pode ser transferido. Fica parado na hora "
+                       "em que foi lido e só muda ao clicar em Atualizar dados.")
+        c3.metric("Total", fmt_brl(s_stone + avail + waiting + fis_total),
+                  help="Conta Stone + Pagar.me disponível + Pagar.me a liquidar + maquininha a repassar.")
+        d1, d2, d3 = st.columns(3)
+        d1.metric("Pagar.me, a liquidar", fmt_brl(waiting), help="Venda do site que a Pagar.me ainda vai liberar.")
+        d2.metric("Maquininha, a repassar", fmt_brl(fis_total),
+                  help="Venda da maquininha e do link feita depois do último repasse que aparece no extrato.")
+        st.caption(f"Conta Stone: {quando_stone}.")
     if omni.ver_fisico(visao):
         st.caption("O repasse da Stone é previsão pelo extrato: a Stone paga no dia útil seguinte à venda, e o que foi "
                    "vendido depois do último repasse visto no extrato aparece aqui. Se o extrato estiver atrasado, "
@@ -2835,7 +2854,8 @@ if "A receber" in abas:
         # previsto é o que se acumula por cima do saldo de hoje. Não é "saldo
         # na conta" porque um saque derruba o número sem que nada tenha
         # mudado na previsão.
-        df_ag["Saldo previsto"] = (avail + df_ag["liquido"].cumsum()).apply(lambda x: fmt_brl(int(x)))
+        base_ag = (avail if omni.ver_digital(visao) else 0) + (s_stone if omni.ver_fisico(visao) else 0)
+        df_ag["Saldo previsto"] = (base_ag + df_ag["liquido"].cumsum()).apply(lambda x: fmt_brl(int(x)))
         colunas = ["Data", "Valor", "parcelas", "Saldo previsto"]
         if visao == omni.CONSOLIDADO:
             colunas.insert(1, "origem")
@@ -2852,8 +2872,11 @@ if "A receber" in abas:
                 use_container_width=True,
             )
         st.caption(
-            f"**Valor** é o que entra no dia. **Saldo previsto** soma isso aos "
-            f"{md(fmt_brl(avail))} que já estão disponíveis na Pagar.me hoje, e supõe que nada "
+            f"**Valor** é o que entra no dia. **Saldo previsto** soma isso a "
+            + " e ".join(x for x in (
+                f"{md(fmt_brl(s_stone))} na conta Stone" if omni.ver_fisico(visao) else "",
+                f"{md(fmt_brl(avail))} disponíveis na Pagar.me" if omni.ver_digital(visao) else "") if x)
+            + ", e supõe que nada "
             "seja sacado no meio do caminho. Valores líquidos, já descontadas "
             "taxa e antecipação."
             + (f" Tarifas pendentes de {md(fmt_brl(ar['tarifas']))} na Pagar.me são cobradas na liquidação."
