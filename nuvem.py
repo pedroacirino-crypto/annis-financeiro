@@ -23,6 +23,24 @@ from typing import List, Optional
 
 TABELA = "pedidos_historicos"
 
+
+# Criar tabela se faltar roda uma vez por processo (20/10/2026). Antes cada
+# garantir_* ia ao banco a cada clique: só o Trabalho fazia ~15 dessas por
+# clique, e da nuvem do Streamlit até São Paulo cada uma custa centenas de ms.
+_GARANTIDAS = set()
+
+
+def _uma_vez(fn):
+    from functools import wraps
+
+    @wraps(fn)
+    def envolvida(*a, **k):
+        if fn.__name__ in _GARANTIDAS:
+            return
+        fn(*a, **k)
+        _GARANTIDAS.add(fn.__name__)
+    return envolvida
+
 _motor = None
 
 
@@ -94,6 +112,7 @@ def _conectar():
     return _motor
 
 
+@_uma_vez
 def garantir_tabelas() -> None:
     """Cria a tabela de histórico se ainda não existir."""
     from sqlalchemy import text
@@ -172,13 +191,34 @@ def salvar_pedidos(pedidos: List[dict]) -> int:
                 "origem": p.get("origem", "shopify"),
                 "cep": "".join(c for c in str(p.get("cep") or "") if c.isdigit()),
             })
+    esquecer_pedidos()
     return len(pedidos)
 
 
+_PEDIDOS_LIDOS = {"linhas": None}
+
+
+def esquecer_pedidos() -> None:
+    _PEDIDOS_LIDOS["linhas"] = None
+
+
 def ler_pedidos() -> List[dict]:
-    """Todos os pedidos guardados. Lista vazia se não estiver configurado."""
+    """Todos os pedidos guardados. Lista vazia se não estiver configurado.
+
+    Fica guardado até a próxima gravação (salvar_pedidos) ou "Atualizar dados"
+    (esquecer_pedidos): eram 3 leituras por clique. Cada chamada recebe cópias,
+    para quem mexe nos dicionários não alterar o guardado."""
     if not configurado():
         return []
+    if _PEDIDOS_LIDOS["linhas"] is not None:
+        return [dict(l) for l in _PEDIDOS_LIDOS["linhas"]]
+    linhas = _ler_pedidos_do_banco()
+    if linhas:
+        _PEDIDOS_LIDOS["linhas"] = linhas
+    return [dict(l) for l in linhas]
+
+
+def _ler_pedidos_do_banco() -> List[dict]:
     from sqlalchemy import text
     try:
         garantir_tabelas()
@@ -363,6 +403,7 @@ def resumo() -> dict:
 TABELA_ESPERA = "lista_espera"
 
 
+@_uma_vez
 def garantir_espera() -> None:
     """Cria a tabela de lista de espera, se ainda não existir.
 
@@ -469,6 +510,7 @@ def marcar_avisado(ids: List[int]) -> int:
 TABELA_CONTATOS = "contatos_feitos"
 
 
+@_uma_vez
 def garantir_contatos() -> None:
     from sqlalchemy import text
     with _conectar().begin() as con:
@@ -547,6 +589,7 @@ TABELA_ACESSOS = "acessos"
 TABELA_APARELHOS = "aparelhos_conhecidos"
 
 
+@_uma_vez
 def garantir_acessos() -> None:
     from sqlalchemy import text
     with _conectar().begin() as con:
@@ -777,6 +820,7 @@ def marcar_plano(id_: str, feito: bool) -> bool:
 TABELA_CUPONS = "cupons_recuperacao"
 
 
+@_uma_vez
 def garantir_cupons() -> None:
     from sqlalchemy import text
     with _conectar().begin() as con:
@@ -793,24 +837,33 @@ def garantir_cupons() -> None:
         """))
 
 
+_CUPONS_LIDOS = {"por_carrinho": None}
+
+
 def cupom_do_carrinho(carrinho: str):
+    """Cupom já criado para o carrinho. Lê todos de uma vez e guarda até
+    guardar_cupom gravar outro (antes era uma ida ao banco por cartão)."""
     if not configurado() or not carrinho:
         return None
-    from sqlalchemy import text
-    try:
-        garantir_cupons()
-        with _conectar().connect() as con:
-            l = con.execute(text(
-                f"SELECT codigo, criado_em, expira_em FROM {TABELA_CUPONS} WHERE carrinho = :c"),
-                {"c": carrinho}).mappings().first()
-        return dict(l) if l else None
-    except Exception:
-        return None
+    if _CUPONS_LIDOS["por_carrinho"] is None:
+        from sqlalchemy import text
+        try:
+            garantir_cupons()
+            with _conectar().connect() as con:
+                linhas = con.execute(text(
+                    f"SELECT carrinho, codigo, criado_em, expira_em FROM {TABELA_CUPONS}")).mappings().all()
+            _CUPONS_LIDOS["por_carrinho"] = {l["carrinho"]: {k: l[k] for k in ("codigo", "criado_em", "expira_em")}
+                                             for l in linhas}
+        except Exception:
+            return None
+    c = _CUPONS_LIDOS["por_carrinho"].get(carrinho)
+    return dict(c) if c else None
 
 
 def guardar_cupom(carrinho: str, codigo: str, cliente: str, email: str, shopify_id: str, expira_em) -> bool:
     if not configurado():
         return False
+    _CUPONS_LIDOS["por_carrinho"] = None
     from sqlalchemy import text
     try:
         garantir_cupons()
@@ -848,6 +901,7 @@ def codigos_de_cupom() -> set:
 TABELA_CLIQUES = "site.cliques_campanha"
 
 
+@_uma_vez
 def garantir_cliques() -> None:
     """Tabela num esquema próprio, `site`, o único exposto na API pública do
     Supabase: o resto do banco continua fora do alcance da chave do site."""

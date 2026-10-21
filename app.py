@@ -60,6 +60,11 @@ def _esquecer_derivados():
         memo.limpar_tudo()
     except Exception:
         pass
+    try:
+        nuvem.esquecer_pedidos()
+        nuvem._CUPONS_LIDOS["por_carrinho"] = None
+    except Exception:
+        pass
 
 
 def sincronizar(ate: date, avisar=None):
@@ -530,7 +535,8 @@ import memo as _memo
 # o processo pode manter os módulos importados na versão antiga (14/10/2026:
 # o portal caiu com AttributeError em memo.mudou). Faltou função nova, recarrega.
 if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra") \
-        or not hasattr(nuvem, "ler_eventos") or not hasattr(nuvem, "ler_clarity"):
+        or not hasattr(nuvem, "ler_eventos") or not hasattr(nuvem, "ler_clarity") \
+        or not hasattr(nuvem, "esquecer_pedidos"):
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
