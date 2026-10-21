@@ -248,6 +248,8 @@ div[data-testid="stDialog"] div[role="dialog"] .tbl-wrap {{ max-height:78vh !imp
 .tbl td.presaL0 {{ bottom:0; }}
 .tbl td.presaL1 {{ bottom:2.35rem; border-top:1px solid {LINHA}; }}
 .tbl td.presaL.presa {{ z-index:3; }}
+/* Primeira coluna das linhas presas embaixo: fica por cima das vizinhas ao rolar para o lado (20/10/2026: o mês sumia debaixo dos valores). */
+.tbl tbody td.presaL:first-child {{ left:0; z-index:4; }}
 .tbl tbody tr:last-child td {{ border-bottom:none; }}
 .tbl tbody tr:hover td {{ background:#FFFBF7; }}
 .tbl tbody tr:hover td:first-child {{ background:#FFFBF7; }}
