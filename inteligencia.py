@@ -149,10 +149,37 @@ def pecas(ev: pd.DataFrame) -> pd.DataFrame:
     return g.reset_index().rename(columns={"produto": "Peça", "index": "Peça"})
 
 
-def buscas(ev: pd.DataFrame) -> pd.DataFrame:
-    b = ev[ev.evento == "search_submitted"].extra.fillna("").str.strip().str.lower()
-    b = b[b != ""]
-    return b.value_counts().rename_axis("Busca").reset_index(name="Vezes")
+def _marca_visitas(ev: pd.DataFrame) -> pd.DataFrame:
+    ev = ev.sort_values(["visitante", "em"]).copy()
+    novo = (ev.visitante != ev.visitante.shift()) | (ev.em - ev.em.shift() > PAUSA)
+    ev["visita"] = novo.cumsum()
+    return ev
+
+
+def buscas(ev: pd.DataFrame) -> tuple:
+    """Buscas feitas navegando, e à parte as que abriram a visita.
+
+    Um link que já cai na página de busca (o anúncio da arara com Relicário
+    abre /search?q=jacquard relic) dispara o mesmo evento de busca sem a
+    pessoa digitar nada; em 21/10 foram 91 "buscas" assim, que pareciam
+    interesse e eram só o destino do anúncio. Busca na primeira página da
+    visita conta como entrada por link, não como busca.
+    """
+    vazio = pd.DataFrame(columns=["Busca", "Vezes"])
+    if ev.empty:
+        return vazio, vazio
+    ev = _marca_visitas(ev)
+    primeira_pagina = ev[ev.evento == "page_viewed"].groupby("visita").em.min()
+    b = ev[ev.evento == "search_submitted"].copy()
+    b["termo"] = b.extra.fillna("").str.strip().str.lower()
+    b = b[b.termo != ""]
+    # Na primeira página da visita, ou com marca de link de anúncio no
+    # endereço (quem clica no anúncio de novo na mesma visita): quem digita
+    # na busca do site não traz utm nem fbclid.
+    de_link = b.busca.fillna("").str.contains(r"utm_|fbclid", case=False)
+    na_entrada = de_link | (b.em <= b.visita.map(primeira_pagina) + pd.Timedelta(seconds=2))
+    contar = lambda x: x.termo.value_counts().rename_axis("Busca").reset_index(name="Vezes")
+    return contar(b[~na_entrada]), contar(b[na_entrada])
 
 
 def checkouts_parados(v: pd.DataFrame) -> pd.DataFrame:

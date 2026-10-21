@@ -542,7 +542,7 @@ if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasa
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
-if not hasattr(inteligencia, "clarity_paginas"):
+if not hasattr(inteligencia, "clarity_paginas") or not hasattr(inteligencia, "_marca_visitas"):
     import importlib
     inteligencia = importlib.reload(inteligencia)
 try:
@@ -3898,11 +3898,14 @@ if "Inteligência" in abas:
                 tabela(_pc, num=("Pessoas que viram", "Puseram no carrinho", "Carrinho / vistas"), titulo="Peças")
         with c_dir:
             st.subheader("O que buscaram")
-            _bs = inteligencia.buscas(_ev)
+            _bs, _bs_link = inteligencia.buscas(_ev)
             if _bs.empty:
-                st.caption("Nenhuma busca no período.")
+                st.caption("Ninguém usou a busca do site no período.")
             else:
                 tabela(_bs, num=("Vezes",), titulo="Buscas")
+            if not _bs_link.empty:
+                st.caption("Fora da conta, entradas por link que já abre a busca (anúncio): " + ", ".join(
+                    f"\"{r.Busca}\" {r.Vezes}x" for r in _bs_link.itertuples()) + ".")
 
         _ap = _v.groupby("aparelho").agg(v=("visita", "size"), c=("checkout_completed", "sum"))
         st.caption("Aparelho: " + " · ".join(
