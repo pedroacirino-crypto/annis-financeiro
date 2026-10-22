@@ -375,10 +375,23 @@ def pedidos_para_nuvem() -> "list[dict]":
     con.row_factory = sqlite3.Row
     linhas = con.execute(
         "SELECT numero, criado_em, email, cliente, cidade, uf, itens, cupom,"
-        " total, situacao, cep FROM shopify_orders WHERE numero != ''"
+        " total, situacao, cep, raw_json FROM shopify_orders WHERE numero != ''"
     ).fetchall()
     con.close()
-    return [dict(l, origem="shopify") for l in linhas]
+    import json
+    from shopify_client import TAG_LINK
+    saida = []
+    for l in linhas:
+        p = dict(l)
+        try:
+            tags = json.loads(p.pop("raw_json") or "{}").get("tags") or []
+        except Exception:
+            tags = []
+        # Venda do link da Stone que virou pedido só para ter nota e etiqueta:
+        # o dinheiro dela já entra pela Stone (ver criar_pedido_link).
+        p["origem"] = "link" if TAG_LINK in tags else "shopify"
+        saida.append(p)
+    return saida
 
 
 def alcance_pedidos() -> str:
@@ -684,6 +697,24 @@ def abandonados_classificados(dias: int = 90) -> "list[dict]":
         if n:
             por_nome.setdefault(n, []).append(c)
 
+    # Pedido pago na loja também conta como compra, mesmo sem cobrança na
+    # Pagar.me: é o caso de quem desistiu do site e pagou pelo link da Stone,
+    # que vira pedido com a etiqueta link-stone. O cruzamento é por nome e
+    # pelos últimos 9 dígitos do telefone, porque quem abandona só com
+    # celular não deixa e-mail.
+    def _fone(t):
+        d = "".join(ch for ch in str(t or "") if ch.isdigit())
+        return d[-9:] if len(d) >= 9 else ""
+    cur.execute("SELECT criado_em, cliente, telefone FROM shopify_orders"
+                " WHERE upper(COALESCE(situacao,'')) = 'PAID'")
+    pagos_nome, pagos_fone = {}, {}
+    for p in cur.fetchall():
+        dia_p = (p["criado_em"] or "")[:10]
+        if _normalizar(p["cliente"]):
+            pagos_nome.setdefault(_normalizar(p["cliente"]), []).append(dia_p)
+        if _fone(p["telefone"]):
+            pagos_fone.setdefault(_fone(p["telefone"]), []).append(dia_p)
+
     corte = (date.today() - timedelta(days=dias)).isoformat()
     cur.execute(
         "SELECT * FROM abandoned_checkouts WHERE substr(criado_em,1,10) >= ? "
@@ -696,10 +727,18 @@ def abandonados_classificados(dias: int = 90) -> "list[dict]":
         # Só cobranças a partir do dia do abandono: compra anterior é outra venda.
         dia = (a["criado_em"] or "")[:10]
         proximas = [c for c in candidatas if (c["created_at"] or "")[:10] >= dia]
+        pedido_depois = any(d >= dia for d in (pagos_nome.get(_normalizar(a["cliente"]), [])
+                                               + pagos_fone.get(_fone(a["telefone"]), [])))
+        # Checkout só com celular não chega a cobrar: a Pagar.me exige e-mail e
+        # a tentativa morre antes de virar cobrança, então não há "failed" para
+        # cruzar. Michelle Gundi, 21/10/2026, tentou três cartões assim e a
+        # tela a mostrava como quem nem tentou. O checkout passou a exigir
+        # e-mail no mesmo dia; isto cobre o histórico.
+        a["sem_email"] = not a["email"]
 
-        if any(c["status"] == "paid" for c in proximas):
+        if any(c["status"] == "paid" for c in proximas) or pedido_depois:
             a["situacao"] = "Já comprou"
-        elif any(c["status"] in ("failed", "canceled") for c in proximas):
+        elif any(c["status"] in ("failed", "canceled") for c in proximas) or a["sem_email"]:
             a["situacao"] = "Tentou e não passou"
         else:
             a["situacao"] = "Não tentou pagar"

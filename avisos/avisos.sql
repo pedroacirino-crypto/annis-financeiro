@@ -564,6 +564,8 @@ begin
 end $$;
 
 -- Fechamento do dia, só site (vendas da loja física não passam pela Shopify).
+-- Pedido com a etiqueta link-stone é venda paga no link da Stone, criado só para
+-- ter nota e etiqueta (shopify_client.criar_pedido_link); não é venda do site.
 create or replace function avisos.fechamento() returns text
 language plpgsql security definer set search_path = extensions, public as $$
 declare
@@ -584,7 +586,7 @@ begin
       orders(first: 250, sortKey: CREATED_AT, reverse: true, query: $q) {
         nodes { createdAt test cancelledAt currentTotalPriceSet { shopMoney { amount } } }
       }
-    }$q$, jsonb_build_object('q', 'created_at:>=' || desde));
+    }$q$, jsonb_build_object('q', 'created_at:>=' || desde || ' tag_not:link-stone'));
   with p as (
     select ((n ->> 'createdAt')::timestamptz at time zone fuso)::date as dia,
            (n -> 'currentTotalPriceSet' -> 'shopMoney' ->> 'amount')::numeric as valor

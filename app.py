@@ -1045,6 +1045,8 @@ def _card_recuperar(a: dict, enviado_em=None):
         cor, rotulo = MARROM, "Não tentou pagar"
     if a["situacao"] == "Já comprou":
         cor, rotulo = "#4A7C46", "Já comprou, não contatar"
+    elif a.get("sem_email"):
+        rotulo += " · só celular, sem e-mail o pagamento não roda"
 
     # O tempo desde o abandono fica na etiqueta, junto da situação, porque é
     # com ele que se decide se ainda vale mandar mensagem. Enterrado na linha

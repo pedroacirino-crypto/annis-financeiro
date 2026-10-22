@@ -11,6 +11,7 @@
     python carga.py plano    legado/plano_2026-10.json plano de ação do mês, que aparece em Trabalho > Plano
     python carga.py orcamento 2026-10                  congela a projeção do mês, para comparar com o realizado
     python carga.py orcamento 2026-10 3000 6.82        congela com decisão de Meta e o ROAS assumido
+    python carga.py pedido-link legado/link_michelle.json  pedido na Shopify de venda pelo link da Stone
     python carga.py resumo                             o que tem lá e até quando
 
 Roda na máquina do Pedro, com o .env apontando para o banco. Nada disso vai
@@ -301,6 +302,18 @@ def _conferir_orcamento(linhas: dict) -> None:
         print("  Cada uma precisa de um motivo, senão é defeito de estimador e não projeção.")
 
 
+def pedido_link(caminho: str) -> None:
+    """Pedido na Shopify para venda feita pelo link da Stone (ver
+    shopify_client.criar_pedido_link). O arquivo fica em legado/, fora do Git,
+    porque leva CPF e endereço da cliente."""
+    import json
+    import shopify_client
+    with open(caminho, encoding="utf-8") as f:
+        venda = json.load(f)
+    pedido = shopify_client.criar_pedido_link(venda)
+    print(f"pedido {pedido['name']} criado, {pedido['displayFinancialStatus']}")
+
+
 def carregar_regras() -> None:
     import json
     with open(extrato.ARQUIVO_REGRAS, encoding="utf-8") as f:
@@ -331,6 +344,8 @@ def main(argv):
         carregar_vendas_stone(argv[2])
     elif cmd == "plano":
         carregar_plano(argv[2])
+    elif cmd == "pedido-link":
+        pedido_link(argv[2])
     elif cmd == "orcamento":
         congelar_orcamento(*argv[2:5])
     else:

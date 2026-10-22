@@ -123,6 +123,7 @@ query($cursor: String) {
       displayFinancialStatus
       totalPriceSet { shopMoney { amount } }
       discountCodes
+      tags
       customer { email displayName phone }
       shippingAddress { name city province provinceCode zip phone }
       billingAddress { name phone }
@@ -293,3 +294,88 @@ def criar_cupom_pessoal(codigo: str, titulo: str, email: str = "", percentual: f
         raise RuntimeError(f"Shopify: {r['userErrors']}")
     return {"id": r["codeDiscountNode"]["id"], "codigo": codigo,
             "comeca": comeca, "expira": expira, "restrito": False}
+
+
+# Venda fora do checkout (link de pagamento da Stone) vira pedido na Shopify
+# para seguir o mesmo caminho das outras: nota pela Olist, etiqueta, rastreio
+# e e-mails da régua. A etiqueta "link-stone" é o que impede o portal e o
+# fechamento das 23h de contar a venda duas vezes: o dinheiro dela já entra
+# pela conciliação da Stone, como venda física. Caso que abriu isto: Michelle
+# Gundi, 21/10/2026, que não conseguiu pagar no site e pagou pelo link.
+TAG_LINK = "link-stone"
+
+_MUT_RASCUNHO = """
+mutation($d: DraftOrderInput!) {
+  draftOrderCreate(input: $d) { draftOrder { id } userErrors { field message } }
+}
+"""
+
+_MUT_FECHAR_RASCUNHO = """
+mutation($id: ID!) {
+  draftOrderComplete(id: $id) {
+    draftOrder { order { id name displayFinancialStatus } }
+    userErrors { field message }
+  }
+}
+"""
+
+
+def cpf_valido(cpf: str) -> bool:
+    d = [int(c) for c in str(cpf) if c.isdigit()]
+    if len(d) != 11 or len(set(d)) == 1:
+        return False
+    for n in (9, 10):
+        soma = sum(d[i] * (n + 1 - i) for i in range(n))
+        if (soma * 10 % 11) % 10 != d[n]:
+            return False
+    return True
+
+
+def criar_pedido_link(v: dict) -> dict:
+    """Cria o pedido já pago de uma venda feita pelo link da Stone.
+
+    `v` tem: nome, sobrenome, email, telefone, cpf, endereco (rua, numero,
+    complemento, bairro, cidade, uf, cep), itens [{variant_id, quantidade,
+    preco}], frete ("Sedex" ou "PAC"), valor_frete e quando (data da venda).
+    O CPF vai no campo nativo TAX_CREDENTIAL_BR, que é o que a Olist lê para
+    a nota. O frete precisa dizer Sedex ou PAC: é dele que a etiqueta tira o
+    serviço (avisos/etiqueta.py).
+    """
+    if not cpf_valido(v["cpf"]):
+        raise ValueError(f"CPF {v['cpf']} não confere")
+    if v.get("frete", "Sedex").upper() not in ("SEDEX", "PAC"):
+        raise ValueError("frete precisa ser Sedex ou PAC")
+    e = v["endereco"]
+    endereco = {
+        "firstName": v["nome"], "lastName": v["sobrenome"],
+        # Mesmo formato que a Olist espera dos pedidos do site:
+        # "Rua, Número" e "Complemento, Bairro".
+        "address1": f"{e['rua']}, {e['numero']}",
+        "address2": ", ".join(x for x in (e.get("complemento"), e.get("bairro")) if x),
+        "city": e["cidade"], "provinceCode": e["uf"], "countryCode": "BR",
+        "zip": e["cep"], "phone": v.get("telefone", ""),
+    }
+    entrada = {
+        "email": v["email"], "phone": v.get("telefone") or None,
+        "shippingAddress": endereco, "billingAddress": endereco,
+        "localizedFields": [{"key": "TAX_CREDENTIAL_BR",
+                             "value": "".join(c for c in v["cpf"] if c.isdigit())}],
+        "lineItems": [
+            {"variantId": i["variant_id"], "quantity": int(i.get("quantidade", 1)),
+             **({"priceOverride": {"amount": str(i["preco"]), "currencyCode": "BRL"}}
+                if i.get("preco") is not None else {})}
+            for i in v["itens"]
+        ],
+        "shippingLine": {"title": v.get("frete", "Sedex"),
+                         "priceWithCurrency": {"amount": str(v.get("valor_frete", 0)),
+                                               "currencyCode": "BRL"}},
+        "tags": [TAG_LINK],
+        "note": f"Venda pelo link de pagamento da Stone em {v.get('quando', '')}".strip(),
+    }
+    r = _graphql(_MUT_RASCUNHO, {"d": entrada})["draftOrderCreate"]
+    if r["userErrors"]:
+        raise RuntimeError(f"Shopify: {r['userErrors']}")
+    f = _graphql(_MUT_FECHAR_RASCUNHO, {"id": r["draftOrder"]["id"]})["draftOrderComplete"]
+    if f["userErrors"]:
+        raise RuntimeError(f"Shopify: {f['userErrors']}")
+    return f["draftOrder"]["order"]

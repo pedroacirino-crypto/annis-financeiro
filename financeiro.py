@@ -1302,6 +1302,11 @@ def pedidos_pagos() -> pd.DataFrame:
         if p["numero"] in vistos or str(p.get("situacao", "")).lower() != "paid":
             continue
         vistos.add(p["numero"])
+        # Pedido de venda pelo link da Stone: a receita já vem da conciliação
+        # da Stone como venda física, e o CMV dela entra pela estimativa da
+        # física. Contar aqui também dobrava a venda (21/10/2026).
+        if p.get("origem") == "link":
+            continue
         linhas.append({
             "numero": p["numero"],
             "quando": pd.Timestamp(str(p["criado_em"])[:19]),
