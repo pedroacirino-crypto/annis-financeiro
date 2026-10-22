@@ -1072,3 +1072,22 @@ def ler_clarity(dias: int = 7) -> list:
                 {"d": int(dias) + 1}).mappings().all()]
     except Exception:
         return []
+
+
+def registrar_tempo(secao: str, ms: int, quem: str = "") -> None:
+    """Quanto o servidor levou para montar a tela num clique (21/10/2026).
+
+    O portal ficou lento no Cloud mesmo depois de rápido na máquina local, e
+    sem número de lá cada melhoria era estimativa. Uma linha por clique, em
+    segundo plano para não somar ao próprio tempo medido."""
+    if not configurado():
+        return
+    from sqlalchemy import text
+    try:
+        with _conectar().begin() as con:
+            con.execute(text("CREATE TABLE IF NOT EXISTS portal_tempos ("
+                             "em TIMESTAMPTZ NOT NULL DEFAULT now(), secao TEXT, ms INT, quem TEXT)"))
+            con.execute(text("INSERT INTO portal_tempos (secao, ms, quem) VALUES (:s, :m, :q)"),
+                        {"s": secao[:40], "m": int(ms), "q": (quem or "")[:40]})
+    except Exception:
+        pass

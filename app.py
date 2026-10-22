@@ -5,6 +5,7 @@ Dashboard de Conciliação Financeira sobre Pagar.me
 import hmac
 import os
 import time
+_INICIO_CLIQUE = time.perf_counter()
 
 import streamlit as st
 import pandas as pd
@@ -545,7 +546,7 @@ import memo as _memo
 # o portal caiu com AttributeError em memo.mudou). Faltou função nova, recarrega.
 if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra") \
         or not hasattr(nuvem, "ler_eventos") or not hasattr(nuvem, "ler_clarity") \
-        or not hasattr(nuvem, "esquecer_pedidos"):
+        or not hasattr(nuvem, "esquecer_pedidos") or not hasattr(nuvem, "registrar_tempo"):
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
@@ -4219,3 +4220,15 @@ if "Acessos" in abas:
                 "Entrou por": [a["via"] for a in acessos],
                 "Reconhecido": ["sim" if a["conhecido"] else "NÃO" for a in acessos],
             }), altura_max=520)
+
+
+# Tempo do clique, gravado em segundo plano (nuvem.registrar_tempo). Só chega
+# aqui quem passou pela senha e o script rodou até o fim.
+try:
+    import threading
+    threading.Thread(target=nuvem.registrar_tempo, daemon=True,
+                     args=(st.session_state.get("secao") or "Financeiro",
+                           (time.perf_counter() - _INICIO_CLIQUE) * 1000,
+                           st.session_state.get("_quem") or "")).start()
+except Exception:
+    pass
