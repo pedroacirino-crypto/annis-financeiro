@@ -316,11 +316,11 @@ def conferir_links(pedidos: list) -> dict:
         if achou is not None:
             usados.add(achou.stone_id)
             parc = int(achou.parcelas or 1)
-            saida[o["name"]] = ("ok", f"Sim, R$ {achou.bruto:,.2f} em {achou.data:%d/%m}"
+            saida[o["name"]] = ("ok", f"Confirmada: R$ {achou.bruto:,.2f} em {achou.data:%d/%m}"
                                       .replace(",", "X").replace(".", ",").replace("X", ".")
                                       + (f", {parc}x" if parc > 1 else ""))
         elif ate is None or ate < dia:
-            saida[o["name"]] = ("espera", "Ainda não: a Stone manda no dia seguinte")
+            saida[o["name"]] = ("espera", "Aguardando o arquivo da Stone, que chega no dia seguinte")
         else:
-            saida[o["name"]] = ("falta", f"Não, e a Stone já veio até {ate:%d/%m}: conferir o link")
+            saida[o["name"]] = ("falta", f"Não encontrada na Stone até {ate:%d/%m}: conferir o link")
     return saida

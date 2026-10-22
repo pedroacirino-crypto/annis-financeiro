@@ -3921,7 +3921,7 @@ if "Venda por link" in abas:
                     except Exception as e:
                         st.error(f"A Shopify recusou: {str(e)[:300]}")
 
-        st.subheader("Lançadas, esperando o link ser pago")
+        st.subheader("Vendas lançadas aguardando o pagamento do link")
         try:
             _rasc = _vl_rascunhos()
         except Exception as e:
@@ -3954,7 +3954,7 @@ if "Venda por link" in abas:
                     except Exception as e:
                         st.error(f"A Shopify recusou: {str(e)[:300]}")
 
-        st.subheader("Vendas por link já pagas: o dinheiro apareceu na Stone?")
+        st.subheader("Vendas por link pagas e conferência do valor na Stone")
         try:
             _peds = _vl_pedidos()
         except Exception as e:
@@ -3967,7 +3967,7 @@ if "Venda por link" in abas:
             tabela(pd.DataFrame([{
                 "Pedido": o["name"], "Cliente": (o.get("shippingAddress") or {}).get("name") or "",
                 "Valor": fmt_brl(round(float(o["totalPriceSet"]["shopMoney"]["amount"]) * 100)),
-                "Apareceu na Stone?": _conf.get(o["name"], ("", ""))[1],
+                "Situação na Stone": _conf.get(o["name"], ("", ""))[1],
                 "Marcada paga em": _hora_br(o["createdAt"]),
                 "Peças": _vl_pecas(o["lineItems"]["nodes"]),
             } for o in _peds]), num=("Valor",), titulo="Vendas por link")
