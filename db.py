@@ -379,7 +379,10 @@ def pedidos_para_nuvem() -> "list[dict]":
     ).fetchall()
     con.close()
     import json
-    from shopify_client import TAG_LINK
+    import shopify_client
+    # getattr: o Streamlit Cloud às vezes segura o módulo antigo depois do
+    # deploy, e um import direto derrubava a tela (já aconteceu com memo.mudou).
+    TAG_LINK = getattr(shopify_client, "TAG_LINK", "link-stone")
     saida = []
     for l in linhas:
         p = dict(l)
