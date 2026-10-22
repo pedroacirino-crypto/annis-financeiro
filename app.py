@@ -225,9 +225,12 @@ section[data-testid="stSidebar"] {{ background: #FFFFFF; border-right: 1px solid
 hr {{ border-color: rgba(104,56,10,0.15); }}
 [data-testid="stDataFrame"] {{ border: 1px solid rgba(104,56,10,0.12); border-radius: 2px; }}
 /* Campo de texto é branco como o fundo do formulário (secondaryBackgroundColor):
-   dentro de st.form ele sumia e só o rótulo aparecia (Venda por link, 21/10/2026). */
-[data-testid="stForm"] [data-baseweb="input"], [data-testid="stForm"] [data-baseweb="base-input"] {{ background: #FFF6F0 !important; }}
-[data-testid="stForm"] [data-baseweb="input"] {{ border: 1px solid rgba(104,56,10,0.28) !important; border-radius: 2px; }}
+   dentro de st.form ele sumia e só o rótulo aparecia (Venda por link, 21/10/2026).
+   O Streamlit do Cloud (mais novo que o local) não usa mais data-baseweb: o
+   campo é stTextInputRootElement. As duas formas ficam cobertas. */
+[data-testid="stForm"] [data-testid="stTextInputRootElement"], [data-testid="stForm"] [data-testid="stNumberInputContainer"],
+[data-testid="stForm"] [data-baseweb="input"] {{ background: #FFF6F0 !important; border: 1px solid rgba(104,56,10,0.28) !important; border-radius: 2px; }}
+[data-testid="stForm"] input {{ background: transparent !important; }}
 .tbl-box {{ position:relative; }}
 .tbl-wrap {{ background:#FFFFFF; border:1px solid rgba(104,56,10,0.12); border-radius:2px; overflow:auto; }}
 /* O diálogo de tela cheia ocupa quase a janela inteira, senão não vale a pena. */
@@ -549,7 +552,8 @@ if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasa
 if not hasattr(inteligencia, "clarity_paginas") or not hasattr(inteligencia, "_marca_visitas"):
     import importlib
     inteligencia = importlib.reload(inteligencia)
-if not hasattr(shopify_client, "rascunhos_link") or not hasattr(omni, "conferir_links"):
+if not hasattr(shopify_client, "rascunhos_link") or not hasattr(shopify_client, "carrinho_abandonado") \
+        or not hasattr(omni, "conferir_links"):
     import importlib
     shopify_client = importlib.reload(shopify_client)
     omni = importlib.reload(omni)
@@ -3792,16 +3796,22 @@ def _vl_puxar_carrinho():
         return
     a = st.session_state["vl_carrinhos"][escolha]
     try:
-        raw = _json.loads(a.get("raw_json") or "{}")
-    except ValueError:
+        raw = shopify_client.carrinho_abandonado(a["id"])
+    except Exception:
         raw = {}
+    if not raw.get("shippingAddress"):
+        try:
+            raw = _json.loads(a.get("raw_json") or "{}")
+        except ValueError:
+            raw = {}
     end = raw.get("shippingAddress") or {}
     rua, numero = _vl_partes(end.get("address1"))
     complemento, bairro = _vl_partes(end.get("address2"), ultimo=False)
     st.session_state.update({
         "vl_nome": end.get("firstName") or (a.get("cliente") or "").split(" ")[0],
         "vl_sobrenome": end.get("lastName") or "",
-        "vl_email": a.get("email") or "", "vl_telefone": a.get("telefone") or "",
+        "vl_email": a.get("email") or (raw.get("customer") or {}).get("email") or "",
+        "vl_telefone": a.get("telefone") or end.get("phone") or "",
         "vl_cep": end.get("zip") or "", "vl_rua": rua, "vl_numero": numero,
         "vl_complemento": complemento, "vl_bairro": bairro,
         "vl_cidade": end.get("city") or a.get("cidade") or "",

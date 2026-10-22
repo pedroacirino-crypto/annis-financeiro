@@ -425,6 +425,20 @@ def pedidos_link(dias: int = 45) -> list:
     return [o for o in d["orders"]["nodes"] if not o["cancelledAt"] and TAG_LINK in (o.get("tags") or [])]
 
 
+def carrinho_abandonado(id_checkout: str) -> dict:
+    """Um carrinho abandonado direto da Shopify, com endereço e peças.
+
+    O formulário da Venda por link busca aqui na hora em vez de usar o que o
+    portal guardou: o guardado pode estar no formato antigo, sem endereço nem
+    peça, até alguém clicar em Atualizar dados (21/10/2026, o Cloud puxou só
+    nome, e-mail e cidade)."""
+    d = _graphql("""query($id: ID!) { node(id: $id) { ... on AbandonedCheckout {
+      customer { displayName email phone }
+      shippingAddress { firstName lastName address1 address2 city provinceCode zip phone }
+      lineItems(first: 20) { nodes { title quantity variant { id title } } } } } }""", {"id": id_checkout})
+    return d.get("node") or {}
+
+
 def variantes_ativas() -> list:
     """Peças à venda, uma linha por tamanho, para escolher no lançamento."""
     itens, cursor = [], None
