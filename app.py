@@ -4268,7 +4268,7 @@ if "Acessos" in abas:
 try:
     import threading
     threading.Thread(target=nuvem.registrar_tempo, daemon=True,
-                     args=(st.session_state.get("secao") or "Financeiro",
+                     args=(f"{st.session_state.get('secao') or 'Financeiro'} / {_aba}",
                            (time.perf_counter() - _INICIO_CLIQUE) * 1000,
                            st.session_state.get("_quem") or "")).start()
 except Exception:
