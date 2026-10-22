@@ -103,9 +103,9 @@ query($cursor: String) {
       totalPriceSet { shopMoney { amount } }
       totalDiscountSet { shopMoney { amount } }
       customer { displayName email phone numberOfOrders }
-      shippingAddress { phone city province provinceCode }
+      shippingAddress { firstName lastName address1 address2 phone city province provinceCode zip }
       billingAddress { phone city province provinceCode }
-      lineItems(first: 20) { nodes { title quantity } }
+      lineItems(first: 20) { nodes { title quantity variant { id title } } }
     }
   }
 }
@@ -306,13 +306,13 @@ TAG_LINK = "link-stone"
 
 _MUT_RASCUNHO = """
 mutation($d: DraftOrderInput!) {
-  draftOrderCreate(input: $d) { draftOrder { id } userErrors { field message } }
+  draftOrderCreate(input: $d) { draftOrder { id name } userErrors { field message } }
 }
 """
 
 _MUT_FECHAR_RASCUNHO = """
 mutation($id: ID!) {
-  draftOrderComplete(id: $id) {
+  draftOrderComplete(id: $id, paymentPending: false) {
     draftOrder { order { id name displayFinancialStatus } }
     userErrors { field message }
   }
@@ -331,8 +331,8 @@ def cpf_valido(cpf: str) -> bool:
     return True
 
 
-def criar_pedido_link(v: dict) -> dict:
-    """Cria o pedido já pago de uma venda feita pelo link da Stone.
+def criar_rascunho_link(v: dict) -> dict:
+    """Lança a venda pelo link da Stone como rascunho, ainda sem pagamento.
 
     `v` tem: nome, sobrenome, email, telefone, cpf, endereco (rua, numero,
     complemento, bairro, cidade, uf, cep), itens [{variant_id, quantidade,
@@ -375,7 +375,65 @@ def criar_pedido_link(v: dict) -> dict:
     r = _graphql(_MUT_RASCUNHO, {"d": entrada})["draftOrderCreate"]
     if r["userErrors"]:
         raise RuntimeError(f"Shopify: {r['userErrors']}")
-    f = _graphql(_MUT_FECHAR_RASCUNHO, {"id": r["draftOrder"]["id"]})["draftOrderComplete"]
+    return r["draftOrder"]
+
+
+def marcar_link_pago(id_rascunho: str) -> dict:
+    """Fecha o rascunho como pago. É aqui que o pedido nasce na Shopify, e com
+    ele a nota na Olist, a etiqueta e a régua. A confirmação do dinheiro vem
+    no dia seguinte, pela conciliação da Stone (ver vendas_link)."""
+    f = _graphql(_MUT_FECHAR_RASCUNHO, {"id": id_rascunho})["draftOrderComplete"]
     if f["userErrors"]:
         raise RuntimeError(f"Shopify: {f['userErrors']}")
     return f["draftOrder"]["order"]
+
+
+def descartar_rascunho_link(id_rascunho: str) -> None:
+    r = _graphql("""mutation($i: DraftOrderDeleteInput!) {
+      draftOrderDelete(input: $i) { deletedId userErrors { message } } }""",
+                 {"i": {"id": id_rascunho}})["draftOrderDelete"]
+    if r["userErrors"]:
+        raise RuntimeError(f"Shopify: {r['userErrors']}")
+
+
+def criar_pedido_link(v: dict) -> dict:
+    """Rascunho e pagamento de uma vez, para quando a venda já foi paga
+    (carga.py pedido-link)."""
+    return marcar_link_pago(criar_rascunho_link(v)["id"])
+
+
+def rascunhos_link() -> list:
+    """Vendas pelo link lançadas e ainda não marcadas como pagas.
+
+    A etiqueta é filtrada aqui, não na busca: "tag:... status:open" junto leva
+    alguns segundos para achar o rascunho recém-criado (índice da Shopify,
+    testado em 21/10/2026), e a Ana o procuraria logo depois de lançar."""
+    d = _graphql("""{ draftOrders(first: 50, reverse: true, query: "status:open") {
+      nodes { id name createdAt email tags totalPriceSet { shopMoney { amount } }
+              shippingAddress { name } lineItems(first: 10) { nodes { title variantTitle quantity } } } } }""")
+    return [r for r in d["draftOrders"]["nodes"] if TAG_LINK in (r.get("tags") or [])]
+
+
+def pedidos_link(dias: int = 45) -> list:
+    """Pedidos de venda pelo link já pagos, para conferir com a Stone."""
+    from datetime import date, timedelta
+    desde = (date.today() - timedelta(days=dias)).isoformat()
+    d = _graphql("""query($q: String!) { orders(first: 100, reverse: true, query: $q) {
+      nodes { name createdAt cancelledAt tags totalPriceSet { shopMoney { amount } }
+              shippingAddress { name } lineItems(first: 10) { nodes { title variantTitle quantity } } } } }""",
+                 {"q": f"created_at:>={desde}"})
+    return [o for o in d["orders"]["nodes"] if not o["cancelledAt"] and TAG_LINK in (o.get("tags") or [])]
+
+
+def variantes_ativas() -> list:
+    """Peças à venda, uma linha por tamanho, para escolher no lançamento."""
+    itens, cursor = [], None
+    while True:
+        d = _graphql("""query($c: String) { productVariants(first: 250, after: $c, query: "product_status:active") {
+          pageInfo { hasNextPage endCursor }
+          nodes { id title price inventoryQuantity product { title } } } }""", {"c": cursor})["productVariants"]
+        itens += [{"id": v["id"], "produto": v["product"]["title"], "tamanho": v["title"],
+                   "preco": float(v["price"]), "estoque": v["inventoryQuantity"]} for v in d["nodes"]]
+        if not d["pageInfo"]["hasNextPage"]:
+            return sorted(itens, key=lambda x: (x["produto"], x["tamanho"]))
+        cursor = d["pageInfo"]["endCursor"]

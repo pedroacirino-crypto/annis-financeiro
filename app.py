@@ -545,6 +545,10 @@ if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasa
 if not hasattr(inteligencia, "clarity_paginas") or not hasattr(inteligencia, "_marca_visitas"):
     import importlib
     inteligencia = importlib.reload(inteligencia)
+if not hasattr(shopify_client, "rascunhos_link") or not hasattr(omni, "conferir_links"):
+    import importlib
+    shopify_client = importlib.reload(shopify_client)
+    omni = importlib.reload(omni)
 try:
     if _memo.mudou(nuvem.dado_novo_em()):
         _esquecer_derivados()
@@ -1722,7 +1726,9 @@ with st.sidebar:
 # Lista de espera escondida em 04/10/2026 a pedido do Pedro, para voltar
 # depois; o código da aba continua aqui e basta devolver o nome à lista.
 # Rastreio entrou em 14/10/2026: acompanhar os pacotes é trabalho do dia.
-TRABALHO = ["Inteligência", "Recuperar", "Disparos", "Clientes", "Rastreio", "Pós-compra", "Acessos", "Plano"]
+# Venda por link entrou em 21/10/2026: venda paga no link da Stone quando o
+# site falha vira pedido na Shopify, para ter nota, etiqueta e régua.
+TRABALHO = ["Inteligência", "Recuperar", "Venda por link", "Disparos", "Clientes", "Rastreio", "Pós-compra", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
@@ -3741,6 +3747,228 @@ def _hora_br(ts) -> str:
         return pd.Timestamp(ts).tz_convert("America/Sao_Paulo").strftime("%d/%m %Hh%M")
     except Exception:
         return ""
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ABA: VENDA POR LINK: venda paga no link da Stone vira pedido na Shopify
+# ════════════════════════════════════════════════════════════════════════════
+# O link da Stone só entra quando a cliente não consegue pagar no site ou o
+# site cai. Sem pedido na Shopify ela ficava sem nota, etiqueta e régua (caso
+# Michelle Gundi, 21/10/2026). O fluxo que o Pedro desenhou: lança o pedido
+# puxando os dados do carrinho abandonado, marca como pago quando o link
+# passar (é aí que nota, etiqueta e régua começam) e no dia seguinte a
+# conciliação da Stone confirma o dinheiro. A receita não conta duas vezes: o
+# pedido leva a etiqueta link-stone (ver shopify_client.criar_rascunho_link).
+_vl_rascunhos = _memo.memo()(shopify_client.rascunhos_link)
+_vl_pedidos = _memo.memo()(shopify_client.pedidos_link)
+_vl_variantes = _memo.memo()(shopify_client.variantes_ativas)
+
+_VL_CAMPOS = ("nome", "sobrenome", "email", "telefone", "cpf", "cep", "rua", "numero",
+              "complemento", "bairro", "cidade", "uf")
+
+
+def _vl_partes(texto: str, ultimo: bool = True) -> tuple:
+    """'Rua X, 541' -> ('Rua X', '541'); a Shopify junta rua e número, e
+    complemento e bairro, separados pela última vírgula."""
+    texto = (texto or "").strip()
+    if "," not in texto:
+        return ("", texto) if not ultimo else (texto, "")
+    a, b = texto.rsplit(",", 1)
+    return a.strip(), b.strip()
+
+
+def _vl_puxar_carrinho():
+    """Preenche o formulário com o carrinho escolhido."""
+    import json as _json
+    escolha = st.session_state.get("vl_carrinho")
+    for campo in _VL_CAMPOS:
+        st.session_state[f"vl_{campo}"] = ""
+    st.session_state["vl_itens"] = []
+    if not escolha or escolha not in st.session_state.get("vl_carrinhos", {}):
+        return
+    a = st.session_state["vl_carrinhos"][escolha]
+    try:
+        raw = _json.loads(a.get("raw_json") or "{}")
+    except ValueError:
+        raw = {}
+    end = raw.get("shippingAddress") or {}
+    rua, numero = _vl_partes(end.get("address1"))
+    complemento, bairro = _vl_partes(end.get("address2"), ultimo=False)
+    st.session_state.update({
+        "vl_nome": end.get("firstName") or (a.get("cliente") or "").split(" ")[0],
+        "vl_sobrenome": end.get("lastName") or "",
+        "vl_email": a.get("email") or "", "vl_telefone": a.get("telefone") or "",
+        "vl_cep": end.get("zip") or "", "vl_rua": rua, "vl_numero": numero,
+        "vl_complemento": complemento, "vl_bairro": bairro,
+        "vl_cidade": end.get("city") or a.get("cidade") or "",
+        "vl_uf": end.get("provinceCode") or a.get("uf") or "",
+    })
+    st.session_state["vl_itens"] = [
+        {"id": (li.get("variant") or {}).get("id"), "qtd": int(li.get("quantity") or 1)}
+        for li in ((raw.get("lineItems") or {}).get("nodes") or []) if (li.get("variant") or {}).get("id")
+    ]
+
+
+def _vl_pecas(itens: list) -> str:
+    return ", ".join(f"{i['quantity']}x {i['title']}" + (f" ({i['variantTitle']})" if i.get("variantTitle") else "")
+                     for i in itens)
+
+
+if "Venda por link" in abas:
+  with abas["Venda por link"]:
+    st.header("Venda por link")
+    st.caption(
+        "Para quando a cliente pagou no link da Stone porque o site não deixou. Lance o pedido, "
+        "marque como pago quando o link passar, e a nota, a etiqueta e os e-mails seguem como num "
+        "pedido do site. No dia seguinte a Stone confirma o dinheiro aqui embaixo. A venda conta "
+        "uma vez só, pela Stone."
+    )
+    if not shopify_client.configurado():
+        st.info("Shopify não configurada.")
+    else:
+        if st.toggle("Lançar uma venda", key="vl_abrir"):
+            _ab = [a for a in db.abandonados_classificados(dias=14) if a.get("situacao") != "Já comprou"]
+            _carr = {}
+            for a in _ab:
+                quando = _hora_br(a["criado_em"]) if a.get("criado_em") else ""
+                rot = f"{quando} · {a.get('cliente') or 'sem nome'} · {a.get('itens') or ''} · {fmt_brl(a.get('valor') or 0)}"
+                _carr[rot] = a
+            st.session_state["vl_carrinhos"] = _carr
+            st.selectbox("Puxar os dados de um carrinho abandonado", list(_carr), index=None,
+                         placeholder="Escolha o carrinho da cliente (ou preencha à mão)",
+                         help="Carrinho de agora há pouco não aparece? Clique em Atualizar dados na barra lateral.",
+                         key="vl_carrinho", on_change=_vl_puxar_carrinho)
+
+            _vars = _vl_variantes()
+            _rot_var = {v["id"]: f"{v['produto']} · {v['tamanho']} · R$ {v['preco']:.0f} · estoque {v['estoque']}"
+                        for v in _vars}
+            _id_por_rot = {r: i for i, r in _rot_var.items()}
+            _itens_ini = pd.DataFrame(
+                [{"Peça": _rot_var.get(i["id"]), "Qtd": i["qtd"]} for i in st.session_state.get("vl_itens", [])
+                 if i["id"] in _rot_var] or [{"Peça": None, "Qtd": 1}])
+
+            st.caption("Confira o endereço: no carrinho ele às vezes vem com rua, número e complemento misturados.")
+            with st.form("vl_form", clear_on_submit=False):
+                c1, c2 = st.columns(2)
+                c1.text_input("Nome", key="vl_nome")
+                c2.text_input("Sobrenome", key="vl_sobrenome")
+                c1, c2, c3 = st.columns(3)
+                c1.text_input("E-mail", key="vl_email")
+                c2.text_input("Telefone", key="vl_telefone")
+                c3.text_input("CPF", key="vl_cpf", help="Vai para a nota fiscal. O carrinho não traz o CPF.")
+                c1, c2, c3 = st.columns([1, 3, 1])
+                c1.text_input("CEP", key="vl_cep")
+                c2.text_input("Rua", key="vl_rua")
+                c3.text_input("Número", key="vl_numero")
+                c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+                c1.text_input("Complemento", key="vl_complemento")
+                c2.text_input("Bairro", key="vl_bairro")
+                c3.text_input("Cidade", key="vl_cidade")
+                c4.text_input("UF", key="vl_uf", max_chars=2)
+                st.markdown("**Peças**")
+                _itens = st.data_editor(
+                    _itens_ini, num_rows="dynamic", use_container_width=True, hide_index=True,
+                    key=f"vl_editor_{st.session_state.get('vl_carrinho') or 'mao'}",
+                    column_config={
+                        "Peça": st.column_config.SelectboxColumn("Peça", options=list(_id_por_rot), required=True,
+                                                                 width="large"),
+                        "Qtd": st.column_config.NumberColumn("Qtd", min_value=1, max_value=10, step=1, default=1),
+                    })
+                c1, c2 = st.columns(2)
+                _frete = c1.radio("Frete", ["Sedex", "PAC"], horizontal=True, key="vl_frete")
+                _valor_frete = c2.number_input("Valor do frete cobrado (R$)", min_value=0.0, step=1.0, key="vl_vfrete")
+                _enviar = st.form_submit_button("Lançar pedido", type="primary")
+
+            if _enviar:
+                g = {c: (st.session_state.get(f"vl_{c}") or "").strip() for c in _VL_CAMPOS}
+                linhas = [r for r in _itens.to_dict("records") if r.get("Peça")]
+                erros = [f"falta {c}" for c in ("nome", "sobrenome", "email", "cpf", "cep", "rua", "numero",
+                                                 "bairro", "cidade", "uf") if not g[c]]
+                if g["email"] and "@" not in g["email"]:
+                    erros.append("e-mail inválido")
+                if g["cpf"] and not shopify_client.cpf_valido(g["cpf"]):
+                    erros.append("CPF não confere")
+                if not linhas:
+                    erros.append("escolha ao menos uma peça")
+                if erros:
+                    st.error("Não lancei: " + "; ".join(erros) + ".")
+                else:
+                    tel = "".join(ch for ch in g["telefone"] if ch.isdigit())
+                    if tel and not tel.startswith("55"):
+                        tel = "55" + tel
+                    venda = {
+                        "nome": g["nome"], "sobrenome": g["sobrenome"], "email": g["email"],
+                        "telefone": f"+{tel}" if tel else "", "cpf": g["cpf"],
+                        "endereco": {"rua": g["rua"], "numero": g["numero"], "complemento": g["complemento"],
+                                     "bairro": g["bairro"], "cidade": g["cidade"], "uf": g["uf"].upper(),
+                                     "cep": g["cep"]},
+                        "itens": [{"variant_id": _id_por_rot[r["Peça"]], "quantidade": int(r.get("Qtd") or 1)}
+                                  for r in linhas],
+                        "frete": _frete, "valor_frete": _valor_frete,
+                        "quando": date.today().strftime("%d/%m/%Y"),
+                    }
+                    try:
+                        r = shopify_client.criar_rascunho_link(venda)
+                        _vl_rascunhos.limpar()
+                        st.success(f"Pedido {r.get('name') or ''} lançado, aguardando pagamento. "
+                                   "Quando o link passar, marque como pago aqui embaixo.")
+                    except Exception as e:
+                        st.error(f"A Shopify recusou: {str(e)[:300]}")
+
+        st.subheader("Aguardando pagamento")
+        try:
+            _rasc = _vl_rascunhos()
+        except Exception as e:
+            _rasc = []
+            st.error(f"Não consegui ler os pedidos lançados: {str(e)[:200]}")
+        if not _rasc:
+            st.caption("Nenhuma venda lançada esperando pagamento.")
+        for r in _rasc:
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([5, 1, 1])
+                c1.markdown(md(f"**{(r.get('shippingAddress') or {}).get('name') or r.get('email')}** · "
+                               f"{fmt_brl(round(float(r['totalPriceSet']['shopMoney']['amount']) * 100))}"))
+                c1.caption(f"{_vl_pecas(r['lineItems']['nodes'])} · lançado {_hora_br(r['createdAt'])}")
+                if c2.button("Pago", key=f"vl_pago_{r['id']}", type="primary",
+                             help="O pedido nasce na Shopify já pago; nota, etiqueta e régua começam."):
+                    try:
+                        o = shopify_client.marcar_link_pago(r["id"])
+                        _vl_rascunhos.limpar()
+                        _vl_pedidos.limpar()
+                        st.success(f"Pedido {o['name']} criado. A nota, a etiqueta e os e-mails seguem sozinhos.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"A Shopify recusou: {str(e)[:300]}")
+                if c3.button("Descartar", key=f"vl_desc_{r['id']}",
+                             help="Apaga o lançamento, para quando o link não passou."):
+                    try:
+                        shopify_client.descartar_rascunho_link(r["id"])
+                        _vl_rascunhos.limpar()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"A Shopify recusou: {str(e)[:300]}")
+
+        st.subheader("Pagas e a confirmação da Stone")
+        try:
+            _peds = _vl_pedidos()
+        except Exception as e:
+            _peds = []
+            st.error(f"Não consegui ler os pedidos: {str(e)[:200]}")
+        if not _peds:
+            st.caption("Nenhuma venda por link nos últimos 45 dias.")
+        else:
+            _conf = omni.conferir_links(_peds)
+            _icone = {"ok": "Confirmada", "espera": "Aguardando", "falta": "Conferir"}
+            tabela(pd.DataFrame([{
+                "Pedido": o["name"], "Pago em": _hora_br(o["createdAt"]),
+                "Cliente": (o.get("shippingAddress") or {}).get("name") or "",
+                "Peças": _vl_pecas(o["lineItems"]["nodes"]),
+                "Valor": fmt_brl(round(float(o["totalPriceSet"]["shopMoney"]["amount"]) * 100)),
+                "Stone": _conf.get(o["name"], ("", ""))[1],
+            } for o in _peds]), num=("Valor",), titulo="Vendas por link")
+            if any(v[0] == "falta" for v in _conf.values()):
+                st.warning("Tem venda por link que não apareceu na Stone. Confira no app da Stone se o link foi "
+                           "pago antes de postar.")
 
 
 if "Pós-compra" in abas:

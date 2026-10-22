@@ -120,6 +120,16 @@ def sincronizar(desde: dt.date = None, ate: dt.date = None) -> dict:
     if gravadas or cancelados:
         import nuvem
         nuvem.marcar_dado_novo("rotina stone")  # o portal recalcula no próximo clique
+    if not falhas:
+        # Até onde a conciliação está completa: sem isto, "nenhuma venda da
+        # Stone" não distingue dia sem venda de dia ainda não baixado, e a
+        # conferência das vendas pelo link (omni.conferir_links) precisa saber.
+        import nuvem
+        from sqlalchemy import text
+        with nuvem._conectar().begin() as con:
+            con.execute(text("insert into avisos.estado (chave, valor, em) values ('stone_ate', :v, now()) "
+                             "on conflict (chave) do update set valor = excluded.valor, em = now()"),
+                        {"v": ate.isoformat()})
     return {"vendas": gravadas, "cancelamentos": len(cancelados), "falhas": falhas,
             "de": desde, "ate": ate}
 

@@ -265,3 +265,62 @@ def extrato_stone(ini=None, fim=None, so_fisico: bool = False) -> pd.DataFrame:
     if so_fisico:
         df = df[df.natureza == "venda_fisica"]
     return _janela(df.sort_values("quando"), ini, fim).reset_index(drop=True)
+
+
+from memo import memo as _memo_omni
+
+
+@_memo_omni()
+def stone_conciliada_ate():
+    """Último dia com a conciliação da Stone completa (gravado por stone_api)."""
+    import datetime as dt
+    import nuvem
+    from sqlalchemy import text
+    try:
+        with nuvem._conectar().connect() as con:
+            v = con.execute(text("select valor from avisos.estado where chave = 'stone_ate'")).scalar()
+        return dt.date.fromisoformat(v) if v else None
+    except Exception:
+        return None
+
+
+def conferir_links(pedidos: list) -> dict:
+    """{pedido: (situação, texto)} para as vendas pelo link lançadas no portal.
+
+    O pedido nasce quando alguém marca como pago; o dinheiro só aparece na
+    Stone no dia seguinte, pela conciliação. O casamento é com venda
+    "E-commerce" aprovada de até dois dias antes a um dia depois, com bruto
+    igual ou maior que o pedido: no link parcelado com juros a cobrança passa
+    do preço. Cada venda da Stone casa com um pedido só.
+    """
+    import datetime as dt
+    import dados_fin
+    try:
+        vs = dados_fin.ler_vendas_stone()
+    except Exception:
+        vs = pd.DataFrame()
+    links = vs[(vs.status == "Aprovada") & (vs.captura == "E-commerce")].copy() if not vs.empty else vs
+    ate = stone_conciliada_ate()
+    usados, saida = set(), {}
+    for o in sorted(pedidos, key=lambda o: o["createdAt"]):
+        dia = (pd.Timestamp(o["createdAt"]).tz_convert("America/Sao_Paulo")).date()
+        total = float(o["totalPriceSet"]["shopMoney"]["amount"])
+        achou = None
+        if not links.empty:
+            cand = links[(~links.stone_id.isin(usados))
+                         & (links.data.dt.date >= dia - dt.timedelta(days=2))
+                         & (links.data.dt.date <= dia + dt.timedelta(days=1))
+                         & (links.bruto >= total - 0.01) & (links.bruto <= total * 1.4)]
+            if not cand.empty:
+                achou = cand.assign(dif=(cand.bruto - total).abs()).sort_values("dif").iloc[0]
+        if achou is not None:
+            usados.add(achou.stone_id)
+            parc = int(achou.parcelas or 1)
+            saida[o["name"]] = ("ok", f"Confirmada na Stone: R$ {achou.bruto:,.2f} em {achou.data:%d/%m}"
+                                      .replace(",", "X").replace(".", ",").replace("X", ".")
+                                      + (f", {parc}x" if parc > 1 else ""))
+        elif ate is None or ate < dia:
+            saida[o["name"]] = ("espera", "Aguardando a Stone: a venda aparece no dia seguinte")
+        else:
+            saida[o["name"]] = ("falta", f"Não apareceu na Stone (conferida até {ate:%d/%m}): conferir o link")
+    return saida
