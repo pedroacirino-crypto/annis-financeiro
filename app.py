@@ -225,8 +225,9 @@ h3 {{ font-size: 1.35rem !important; }}
 [class*="st-key-aba_"] {{ border-bottom: 1px solid rgba(104,56,10,0.15); margin-bottom: 0.4rem; }}
 [class*="st-key-aba_"] button {{ background: transparent !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; padding: 0.2rem 0 0.6rem 0 !important; margin-right: 1.8rem !important; min-height: 0 !important; }}
 [class*="st-key-aba_"] button p {{ font-family: 'Poppins', sans-serif !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.14em; color: {MARROM_CLARO} !important; }}
-[class*="st-key-aba_"] button[kind="segmented_controlActive"] {{ border-bottom: 2px solid {MARROM} !important; }}
-[class*="st-key-aba_"] button[kind="segmented_controlActive"] p {{ color: {MARROM} !important; }}
+/* Aba marcada: kind=... no Streamlit 1.50 (local), aria-checked no 1.66 (Cloud). */
+[class*="st-key-aba_"] button[kind="segmented_controlActive"], [class*="st-key-aba_"] button[aria-checked="true"] {{ border-bottom: 2px solid {MARROM} !important; }}
+[class*="st-key-aba_"] button[kind="segmented_controlActive"] p, [class*="st-key-aba_"] button[aria-checked="true"] p {{ color: {MARROM} !important; }}
 section[data-testid="stSidebar"] {{ background: #FFFFFF; border-right: 1px solid rgba(104,56,10,0.12); }}
 .stButton button {{ border-radius: 2px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.72rem; }}
 [data-testid="stCaptionContainer"] p {{ color: {MARROM_CLARO}; font-size: 0.78rem; }}
