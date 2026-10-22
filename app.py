@@ -220,6 +220,13 @@ h3 {{ font-size: 1.35rem !important; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 1.8rem; border-bottom: 1px solid rgba(104,56,10,0.15); }}
 .stTabs [data-baseweb="tab"] {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.14em; color: {MARROM_CLARO}; padding: 0 0 0.6rem 0; }}
 .stTabs [aria-selected="true"] {{ color: {MARROM} !important; }}
+/* Barra de abas do portal: é um seletor (só a aba aberta roda, 21/10/2026)
+   desenhado igual às abas de antes. */
+[class*="st-key-aba_"] {{ border-bottom: 1px solid rgba(104,56,10,0.15); margin-bottom: 0.4rem; }}
+[class*="st-key-aba_"] button {{ background: transparent !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; padding: 0.2rem 0 0.6rem 0 !important; margin-right: 1.8rem !important; min-height: 0 !important; }}
+[class*="st-key-aba_"] button p {{ font-family: 'Poppins', sans-serif !important; font-size: 0.75rem !important; text-transform: uppercase; letter-spacing: 0.14em; color: {MARROM_CLARO} !important; }}
+[class*="st-key-aba_"] button[kind="segmented_controlActive"] {{ border-bottom: 2px solid {MARROM} !important; }}
+[class*="st-key-aba_"] button[kind="segmented_controlActive"] p {{ color: {MARROM} !important; }}
 section[data-testid="stSidebar"] {{ background: #FFFFFF; border-right: 1px solid rgba(104,56,10,0.12); }}
 .stButton button {{ border-radius: 2px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.72rem; }}
 [data-testid="stCaptionContainer"] p {{ color: {MARROM_CLARO}; font-size: 0.78rem; }}
@@ -1768,7 +1775,39 @@ if secao == "Financeiro":
             ) or omni.CONSOLIDADO
 
 nomes = FINANCEIRO if secao == "Financeiro" else TRABALHO
-abas = dict(zip(nomes, st.tabs(nomes)))
+# Só a aba aberta roda (21/10/2026). Com st.tabs o Streamlit executava as
+# nove abas do Trabalho a cada clique, mesmo escondidas: 2,1 s por clique na
+# máquina local, mais no Cloud. O dicionário `abas` continua com o mesmo
+# formato, só que com uma entrada, e cada bloco "if X in abas" segue igual.
+# A barra é um seletor com cara de abas (CSS .st-key-aba_*).
+_chave_aba = f"aba_{secao}"
+
+
+def _manter_aba(chave=_chave_aba):
+    # Clicar na aba já aberta desmarcaria o seletor e a barra ficaria sem aba.
+    if st.session_state.get(chave) is None:
+        st.session_state[chave] = st.session_state.get(f"_{chave}_ant")
+
+
+# A aba inicial vem do estado da sessão, não de default=: com os dois o
+# Streamlit põe um aviso amarelo na tela quando _manter_aba reescreve a chave.
+if st.session_state.get(_chave_aba) not in nomes:
+    st.session_state[_chave_aba] = st.session_state.get(f"_{_chave_aba}_ant") or nomes[0]
+_aba = st.segmented_control("Aba", nomes, key=_chave_aba,
+                            label_visibility="collapsed", on_change=_manter_aba)
+if _aba not in nomes:
+    _aba = st.session_state.get(f"_{_chave_aba}_ant") or nomes[0]
+st.session_state[f"_{_chave_aba}_ant"] = _aba
+# Busca e filtro de uma aba que sai da tela seriam esquecidos pelo Streamlit
+# (widget que não é desenhado perde o estado). Estes voltam como estavam.
+# Ficam de fora os que têm valor inicial próprio (value=/index=/default=),
+# porque reatribuir faz o Streamlit mostrar um aviso amarelo na tela.
+for _k in ("cli_busca", "cli_cidade", "cli_peca", "cli_ordem", "cli_ordem_fila", "cli_detalhe",
+           "cli_ver_todas", "conc_sit", "conc_tipo", "disp_campanha", "disp_devolveu", "disp_pdf",
+           "disp_ver_enviadas", "ext_busca", "rast_busca", "ar_data"):
+    if _k in st.session_state:
+        st.session_state[_k] = st.session_state[_k]
+abas = {_aba: st.container()}
 
 date_from_str = str(data_ini)
 date_to_str = str(data_fim)
@@ -2678,7 +2717,8 @@ if "Disparos" in abas:
         # página da campanha (nuvem.ler_cliques). O link só leva o primeiro
         # nome, então o cruzamento com quem recebeu é por primeiro nome: nome
         # repetido aparece com todas as candidatas.
-        _cliques = nuvem.ler_cliques(_camp_id)
+        # Guardado até Atualizar dados, como o resto do portal: era 0,33 s por clique.
+        _cliques = _memo.memo()(nuvem.ler_cliques)(_camp_id)
         with st.expander(f"Quem abriu o link · {len({c['nome'] for c in _cliques if c['evento'] == 'visita'})} nomes",
                          expanded=False):
             if not _cliques:

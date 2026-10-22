@@ -1,4 +1,6 @@
-streamlit>=1.40,<2
+# Versão travada em 21/10/2026: o Cloud instalava uma mais nova que a da
+# máquina de teste, com HTML diferente, e o que passava aqui quebrava lá.
+streamlit==1.50.0
 requests>=2.32,<3
 pandas>=2.2,<3
 altair>=5.4,<6
@@ -10,4 +12,4 @@ psycopg2-binary>=2.9,<3
 # Sem isso ela puxa o commit novo para o disco e continua servindo o codigo
 # velho: aconteceu em 01/10 e de novo em 02/10/2026. A linha abaixo existe
 # so para ser trocada a cada publicacao que precisa valer de verdade.
-# reinicio: 2026-10-14T13:05 aba Rastreio no Trabalho
+# reinicio: 2026-10-21T22:10 só a aba aberta roda; Streamlit 1.50.0
