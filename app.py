@@ -224,6 +224,10 @@ section[data-testid="stSidebar"] {{ background: #FFFFFF; border-right: 1px solid
 [data-testid="stCaptionContainer"] p {{ color: {MARROM_CLARO}; font-size: 0.78rem; }}
 hr {{ border-color: rgba(104,56,10,0.15); }}
 [data-testid="stDataFrame"] {{ border: 1px solid rgba(104,56,10,0.12); border-radius: 2px; }}
+/* Campo de texto é branco como o fundo do formulário (secondaryBackgroundColor):
+   dentro de st.form ele sumia e só o rótulo aparecia (Venda por link, 21/10/2026). */
+[data-testid="stForm"] [data-baseweb="input"], [data-testid="stForm"] [data-baseweb="base-input"] {{ background: #FFF6F0 !important; }}
+[data-testid="stForm"] [data-baseweb="input"] {{ border: 1px solid rgba(104,56,10,0.28) !important; border-radius: 2px; }}
 .tbl-box {{ position:relative; }}
 .tbl-wrap {{ background:#FFFFFF; border:1px solid rgba(104,56,10,0.12); border-radius:2px; overflow:auto; }}
 /* O diálogo de tela cheia ocupa quase a janela inteira, senão não vale a pena. */
@@ -3845,7 +3849,8 @@ if "Venda por link" in abas:
             _id_por_rot = {r: i for i, r in _rot_var.items()}
             _itens_ini = pd.DataFrame(
                 [{"Peça": _rot_var.get(i["id"]), "Qtd": i["qtd"]} for i in st.session_state.get("vl_itens", [])
-                 if i["id"] in _rot_var] or [{"Peça": None, "Qtd": 1}])
+                 if i["id"] in _rot_var],
+                columns=["Peça", "Qtd"]).astype({"Peça": "object", "Qtd": "Int64"})
 
             st.caption("Confira o endereço: no carrinho ele às vezes vem com rua, número e complemento misturados.")
             with st.form("vl_form", clear_on_submit=False):
@@ -3866,11 +3871,12 @@ if "Venda por link" in abas:
                 c3.text_input("Cidade", key="vl_cidade")
                 c4.text_input("UF", key="vl_uf", max_chars=2)
                 st.markdown("**Peças**")
+                st.caption("Clique na linha vazia da tabela para pôr uma peça; para tirar, marque a linha e apague.")
                 _itens = st.data_editor(
                     _itens_ini, num_rows="dynamic", use_container_width=True, hide_index=True,
                     key=f"vl_editor_{st.session_state.get('vl_carrinho') or 'mao'}",
                     column_config={
-                        "Peça": st.column_config.SelectboxColumn("Peça", options=list(_id_por_rot), required=True,
+                        "Peça": st.column_config.SelectboxColumn("Peça (clique para escolher)", options=list(_id_por_rot),
                                                                  width="large"),
                         "Qtd": st.column_config.NumberColumn("Qtd", min_value=1, max_value=10, step=1, default=1),
                     })
@@ -3915,7 +3921,7 @@ if "Venda por link" in abas:
                     except Exception as e:
                         st.error(f"A Shopify recusou: {str(e)[:300]}")
 
-        st.subheader("Aguardando pagamento")
+        st.subheader("Lançadas, esperando o link ser pago")
         try:
             _rasc = _vl_rascunhos()
         except Exception as e:
@@ -3948,7 +3954,7 @@ if "Venda por link" in abas:
                     except Exception as e:
                         st.error(f"A Shopify recusou: {str(e)[:300]}")
 
-        st.subheader("Pagas e a confirmação da Stone")
+        st.subheader("Vendas por link já pagas: o dinheiro apareceu na Stone?")
         try:
             _peds = _vl_pedidos()
         except Exception as e:
@@ -3958,13 +3964,12 @@ if "Venda por link" in abas:
             st.caption("Nenhuma venda por link nos últimos 45 dias.")
         else:
             _conf = omni.conferir_links(_peds)
-            _icone = {"ok": "Confirmada", "espera": "Aguardando", "falta": "Conferir"}
             tabela(pd.DataFrame([{
-                "Pedido": o["name"], "Pago em": _hora_br(o["createdAt"]),
-                "Cliente": (o.get("shippingAddress") or {}).get("name") or "",
-                "Peças": _vl_pecas(o["lineItems"]["nodes"]),
+                "Pedido": o["name"], "Cliente": (o.get("shippingAddress") or {}).get("name") or "",
                 "Valor": fmt_brl(round(float(o["totalPriceSet"]["shopMoney"]["amount"]) * 100)),
-                "Stone": _conf.get(o["name"], ("", ""))[1],
+                "Apareceu na Stone?": _conf.get(o["name"], ("", ""))[1],
+                "Marcada paga em": _hora_br(o["createdAt"]),
+                "Peças": _vl_pecas(o["lineItems"]["nodes"]),
             } for o in _peds]), num=("Valor",), titulo="Vendas por link")
             if any(v[0] == "falta" for v in _conf.values()):
                 st.warning("Tem venda por link que não apareceu na Stone. Confira no app da Stone se o link foi "
