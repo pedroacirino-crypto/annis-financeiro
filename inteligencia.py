@@ -320,40 +320,75 @@ def casar_pedidos(v: pd.DataFrame, pedidos: list) -> pd.DataFrame:
     return v
 
 
-# Referências qualificadas para a Annis (moda no Brasil, celular, ticket ~R$ 790,
-# tráfego de anúncio em rede social), levantadas em 21/10/2026. Faixas de
-# ordem de grandeza, não números exatos: as fontes são relatórios de mercado e
-# blogs de plataformas (Triple Whale, Baymard, Neotrust via terceiros).
-REFERENCIAS = [
-    ("Visita → carrinho", "product_added_to_cart", None, 0.03, 0.05),
-    ("Carrinho → compra", "checkout_completed", "product_added_to_cart", 0.25, 0.35),
-    ("Visita → compra", "checkout_completed", None, 0.008, 0.015),
+# Régua da leitura, revista em 26/10/2026 a pedido do Pedro ("qual a base
+# dessas referências?"): a comparação que vale é a Annis com ela mesma, o
+# período anterior do mesmo tamanho e a visita que vem do Instagram, que é o
+# tráfego mais quente da loja. As faixas de mercado ficam só como nota, com a
+# fonte: são secundárias, de outros países, e o ajuste para ticket e celular
+# foi julgamento, não conta. A Shopify não oferece comparação com lojas
+# parecidas no plano da Annis (conferido no painel de Análises em 26/10).
+ETAPAS_LEITURA = [
+    ("Visita → carrinho", "product_added_to_cart", None),
+    ("Carrinho → compra", "checkout_completed", "product_added_to_cart"),
+    ("Visita → compra", "checkout_completed", None),
 ]
+MERCADO = {
+    "Visita → carrinho": "6% a 7% em vestuário (Triple Whale, lojas Shopify, maioria EUA)",
+    "Carrinho → compra": "~30% (Baymard, média global de abandono de carrinho de ~70%)",
+    "Visita → compra": "1,5% a 1,9% no e-commerce brasileiro (Neotrust, citada por terceiros)",
+}
 
 
-def leitura(v: pd.DataFrame) -> pd.DataFrame:
-    """Cada etapa que importa contra a faixa de referência, com a situação."""
+def _taxa(v: pd.DataFrame, etapa: str, base) -> tuple:
+    n = int(v[etapa].sum()) if len(v) else 0
+    d = len(v) if base is None else (int(v[base].sum()) if len(v) else 0)
+    return n, d
+
+
+def _fmt(n: int, d: int) -> str:
+    if d == 0:
+        return "—"
+    t = n / d
+    casas = 2 if t < 0.01 else 1
+    return f"{t:.{casas}%} ({n} de {d})".replace(".", ",")
+
+
+def _diferente(n1, d1, n2, d2) -> bool:
+    """Diferença entre duas taxas que dificilmente é acaso (teste z de duas
+    proporções, ~95%). Com pouco dado, nunca é."""
+    if min(d1, d2) < 30 or (n1 + n2) < 5:
+        return False
+    p1, p2, p = n1 / d1, n2 / d2, (n1 + n2) / (d1 + d2)
+    if p in (0, 1):
+        return False
+    z = abs(p1 - p2) / (p * (1 - p) * (1 / d1 + 1 / d2)) ** 0.5
+    return z >= 1.96
+
+
+def leitura(v: pd.DataFrame, anterior: pd.DataFrame = None) -> pd.DataFrame:
+    """Cada etapa no período, no período anterior e só no Instagram, com o
+    que muda de verdade (diferença que dificilmente é acaso)."""
+    anterior = anterior if anterior is not None else pd.DataFrame(columns=v.columns)
+    ig = v[v.origem == "Instagram"]
+    resto = v[v.origem != "Instagram"]
     linhas = []
-    for nome, etapa, base, minimo, maximo in REFERENCIAS:
-        n = int(v[etapa].sum())
-        d = len(v) if base is None else int(v[base].sum())
+    for nome, etapa, base in ETAPAS_LEITURA:
+        n, d = _taxa(v, etapa, base)
         if d == 0:
             continue
-        taxa = n / d
-        if d < 30 or (base is None and n < 3):
-            situacao = "pouco dado"
-        elif taxa < minimo * 0.7:
-            situacao = "abaixo"
-        elif taxa < minimo:
-            situacao = "um pouco abaixo"
-        elif taxa > maximo:
-            situacao = "acima"
-        else:
-            situacao = "dentro"
-        casas = 1 if maximo >= 0.03 else 2
-        linhas.append({"Etapa": nome, "Annis": f"{taxa:.{casas}%} ({n} de {d})".replace(".", ","),
-                       "Referência": f"{minimo:.{casas}%} a {maximo:.{casas}%}".replace(".", ","),
-                       "Situação": situacao})
+        na, da = _taxa(anterior, etapa, base)
+        ni, di = _taxa(ig, etapa, base)
+        nr, dr = _taxa(resto, etapa, base)
+        notas = []
+        if da and _diferente(n, d, na, da):
+            notas.append(("melhorou" if n / d > na / da else "piorou") + " frente ao período anterior")
+        if di and dr and _diferente(nr, dr, ni, di):
+            notas.append(f"fora do Instagram ({_fmt(nr, dr).split(' (')[0]}) fica "
+                         + ("acima" if nr / dr > ni / di else "abaixo") + " do Instagram")
+        if not notas:
+            notas.append("sem diferença clara" if (da or di) else "pouco dado")
+        linhas.append({"Etapa": nome, "Período": _fmt(n, d), "Período anterior": _fmt(na, da),
+                       "Só Instagram": _fmt(ni, di), "O que muda": "; ".join(notas)})
     return pd.DataFrame(linhas)
 
 

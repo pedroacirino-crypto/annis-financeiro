@@ -559,7 +559,8 @@ if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasa
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
 if not hasattr(inteligencia, "clarity_paginas") or not hasattr(inteligencia, "_marca_visitas") \
-        or not hasattr(inteligencia, "leitura") or not hasattr(inteligencia, "casar_pedidos"):
+        or not hasattr(inteligencia, "leitura") or not hasattr(inteligencia, "casar_pedidos") \
+        or not hasattr(inteligencia, "MERCADO"):
     import importlib
     inteligencia = importlib.reload(inteligencia)
 if not hasattr(shopify_client, "pedidos_do_site"):
@@ -4115,14 +4116,21 @@ if "Inteligência" in abas:
     _dias = st.segmented_control("Período", [1, 7, 14, 30], default=7, key="intel_dias",
                                  format_func=lambda d: "24 horas" if d == 1 else f"{d} dias",
                                  label_visibility="collapsed") or 7
-    _ev = nuvem.ler_eventos(int(_dias))
+    # Lê o dobro do período: a segunda metade é o período anterior, a régua da leitura.
+    _ev_tudo = nuvem.ler_eventos(2 * int(_dias))
+    _corte = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=int(_dias))
+    _ev = _ev_tudo[_ev_tudo.em >= _corte] if not _ev_tudo.empty else _ev_tudo
+    _ev_ant = _ev_tudo[_ev_tudo.em < _corte] if not _ev_tudo.empty else _ev_tudo
     if _ev.empty:
         st.info("Ainda não há visitas gravadas nesse período.")
     else:
         _v = inteligencia.visitas(_ev)
+        _v_ant = inteligencia.visitas(_ev_ant)
         # Compra por Pix não dispara o evento de compra no pixel: casa com o pedido real.
         try:
-            _v = inteligencia.casar_pedidos(_v, shopify_client.pedidos_do_site(int(_dias)))
+            _peds = shopify_client.pedidos_do_site(2 * int(_dias))
+            _v = inteligencia.casar_pedidos(_v, _peds)
+            _v_ant = inteligencia.casar_pedidos(_v_ant, _peds)
         except Exception:
             pass
         _compras = int(_v.checkout_completed.sum())
@@ -4137,12 +4145,17 @@ if "Inteligência" in abas:
         k5.metric("Compraram", _compras, help=f"Conversão {_compras / len(_v):.2%} das visitas.".replace(".", ","))
 
         st.subheader("Leitura")
-        _lt = inteligencia.leitura(_v)
+        _lt = inteligencia.leitura(_v, _v_ant)
         if not _lt.empty:
-            tabela(_lt, num=("Annis", "Referência"), titulo="Leitura")
-        st.caption("Referência: moda no Brasil, no celular, ticket alto e tráfego de anúncio "
-                   "(faixas de mercado, ordem de grandeza). Carrinho por origem: "
-                   + inteligencia.carrinho_por_origem(_v) + ".")
+            tabela(_lt, num=("Período", "Período anterior", "Só Instagram"), titulo="Leitura")
+        st.caption("A régua é a própria Annis: o período anterior do mesmo tamanho e as visitas do Instagram, "
+                   "o tráfego mais quente da loja. \"O que muda\" só aponta diferença que dificilmente é acaso. "
+                   "Carrinho por origem: " + inteligencia.carrinho_por_origem(_v) + ".")
+        with st.expander("Faixas de mercado (só para ordem de grandeza)"):
+            st.markdown("\n".join(f"- **{k}:** {v}" for k, v in inteligencia.MERCADO.items()) +
+                        "\n\nSão médias de outros mercados (EUA, global) ou números brasileiros citados por "
+                        "terceiros, sem separar celular nem ticket alto. Servem para ordem de grandeza, não como meta. "
+                        "A Shopify não oferece comparação com lojas parecidas no plano da Annis.")
 
         st.subheader("Funil")
         tabela(inteligencia.funil(_v), num=("Visitas", "Da etapa anterior", "Do total"), titulo="Funil")
