@@ -451,3 +451,28 @@ def variantes_ativas() -> list:
         if not d["pageInfo"]["hasNextPage"]:
             return sorted(itens, key=lambda x: (x["produto"], x["tamanho"]))
         cursor = d["pageInfo"]["endCursor"]
+
+
+def pedidos_do_site(dias: int = 30) -> list:
+    """Pedidos feitos pelo checkout do site (canal web) nos últimos dias, com
+    id, número, hora e total. A aba Inteligência usa para casar a compra por
+    Pix, que o pixel não registra."""
+    import datetime as _dt
+    import pandas as _pd
+    desde = (_dt.datetime.utcnow() - _dt.timedelta(days=int(dias) + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    saida, cursor = [], None
+    while True:
+        d = _graphql("""query($q: String!, $c: String) { orders(first: 100, after: $c, query: $q) {
+            pageInfo { hasNextPage endCursor }
+            nodes { legacyResourceId name createdAt sourceName cancelledAt test
+                    totalPriceSet { shopMoney { amount } } } } }""",
+                     {"q": f"created_at:>={desde}", "c": cursor})["orders"]
+        for n in d["nodes"]:
+            if n["sourceName"] != "web" or n["cancelledAt"] or n["test"]:
+                continue
+            saida.append({"id": n["legacyResourceId"], "nome": n["name"],
+                          "criado": _pd.Timestamp(n["createdAt"]),
+                          "total": float(n["totalPriceSet"]["shopMoney"]["amount"])})
+        if not d["pageInfo"]["hasNextPage"]:
+            return saida
+        cursor = d["pageInfo"]["endCursor"]

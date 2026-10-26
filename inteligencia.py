@@ -290,3 +290,75 @@ def clarity_paginas(coletas: list, minimo: int = 3) -> pd.DataFrame:
         "Clique morto": [pct(x) for x in saida.morto],
         "Mapa de calor": [link_mapa_de_calor(p) for p in saida.index],
     })
+
+
+def casar_pedidos(v: pd.DataFrame, pedidos: list) -> pd.DataFrame:
+    """Marca como compra a visita que parou no checkout e virou pedido.
+
+    Pagamento por Pix sai do checkout para a página da Pagar.me e a Shopify
+    não dispara o evento de compra: em 26/10, 3 das 4 compras por Pix
+    apareciam como "parou no pagamento". Casa pelo pedido do site (canal web)
+    criado entre o início da visita e 90 minutos depois do último passo (a
+    página do Pix fica aberta e a visita segue depois do pedido), com valor entre 80%
+    e 105% do total que o checkout mostrava (o Pix tem 5% de desconto e o frete
+    pode mudar). Cada pedido casa com uma visita só.
+    """
+    if v.empty or not pedidos:
+        return v
+    v = v.copy()
+    ja = set(v.pedido.dropna().astype(str))
+    livres = [p for p in pedidos if str(p["id"]) not in ja]
+    candidatas = v[v.checkout_started & ~v.checkout_completed & v.valor.notna()].sort_values("fim")
+    for i, r in candidatas.iterrows():
+        for p in livres:
+            na_janela = r.inicio <= p["criado"] <= r.fim + pd.Timedelta(minutes=90)
+            if na_janela and 0.80 * r.valor <= p["total"] <= 1.05 * r.valor:
+                v.at[i, "checkout_completed"] = True
+                v.at[i, "pedido"] = str(p["id"])
+                livres.remove(p)
+                break
+    return v
+
+
+# Referências qualificadas para a Annis (moda no Brasil, celular, ticket ~R$ 790,
+# tráfego de anúncio em rede social), levantadas em 21/10/2026. Faixas de
+# ordem de grandeza, não números exatos: as fontes são relatórios de mercado e
+# blogs de plataformas (Triple Whale, Baymard, Neotrust via terceiros).
+REFERENCIAS = [
+    ("Visita → carrinho", "product_added_to_cart", None, 0.03, 0.05),
+    ("Carrinho → compra", "checkout_completed", "product_added_to_cart", 0.25, 0.35),
+    ("Visita → compra", "checkout_completed", None, 0.008, 0.015),
+]
+
+
+def leitura(v: pd.DataFrame) -> pd.DataFrame:
+    """Cada etapa que importa contra a faixa de referência, com a situação."""
+    linhas = []
+    for nome, etapa, base, minimo, maximo in REFERENCIAS:
+        n = int(v[etapa].sum())
+        d = len(v) if base is None else int(v[base].sum())
+        if d == 0:
+            continue
+        taxa = n / d
+        if d < 30 or (base is None and n < 3):
+            situacao = "pouco dado"
+        elif taxa < minimo * 0.7:
+            situacao = "abaixo"
+        elif taxa < minimo:
+            situacao = "um pouco abaixo"
+        elif taxa > maximo:
+            situacao = "acima"
+        else:
+            situacao = "dentro"
+        casas = 1 if maximo >= 0.03 else 2
+        linhas.append({"Etapa": nome, "Annis": f"{taxa:.{casas}%} ({n} de {d})".replace(".", ","),
+                       "Referência": f"{minimo:.{casas}%} a {maximo:.{casas}%}".replace(".", ","),
+                       "Situação": situacao})
+    return pd.DataFrame(linhas)
+
+
+def carrinho_por_origem(v: pd.DataFrame, minimo: int = 30) -> str:
+    """Frase curta com a taxa de carrinho de cada origem com volume."""
+    g = v.groupby("origem").agg(n=("visita", "size"), c=("product_added_to_cart", "sum"))
+    g = g[g.n >= minimo].sort_values("n", ascending=False)
+    return " · ".join(f"{o}: {r.c / r.n:.1%} de {int(r.n)} visitas".replace(".", ",") for o, r in g.iterrows())

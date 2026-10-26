@@ -558,9 +558,13 @@ if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasa
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
-if not hasattr(inteligencia, "clarity_paginas") or not hasattr(inteligencia, "_marca_visitas"):
+if not hasattr(inteligencia, "clarity_paginas") or not hasattr(inteligencia, "_marca_visitas") \
+        or not hasattr(inteligencia, "leitura") or not hasattr(inteligencia, "casar_pedidos"):
     import importlib
     inteligencia = importlib.reload(inteligencia)
+if not hasattr(shopify_client, "pedidos_do_site"):
+    import importlib
+    shopify_client = importlib.reload(shopify_client)
 if not hasattr(shopify_client, "rascunhos_link") or not hasattr(shopify_client, "carrinho_abandonado") \
         or not hasattr(omni, "conferir_links"):
     import importlib
@@ -4116,6 +4120,11 @@ if "Inteligência" in abas:
         st.info("Ainda não há visitas gravadas nesse período.")
     else:
         _v = inteligencia.visitas(_ev)
+        # Compra por Pix não dispara o evento de compra no pixel: casa com o pedido real.
+        try:
+            _v = inteligencia.casar_pedidos(_v, shopify_client.pedidos_do_site(int(_dias)))
+        except Exception:
+            pass
         _compras = int(_v.checkout_completed.sum())
         _t = _v.tempo_s.dropna()
         k1, k2, k3, k4, k5 = st.columns(5)
@@ -4126,6 +4135,14 @@ if "Inteligência" in abas:
                   help="Mediana, só das visitas com mais de uma página: na última página o fim não é conhecido.")
         k4.metric("Puseram no carrinho", f"{_v.product_added_to_cart.mean():.1%}".replace(".", ","))
         k5.metric("Compraram", _compras, help=f"Conversão {_compras / len(_v):.2%} das visitas.".replace(".", ","))
+
+        st.subheader("Leitura")
+        _lt = inteligencia.leitura(_v)
+        if not _lt.empty:
+            tabela(_lt, num=("Annis", "Referência"), titulo="Leitura")
+        st.caption("Referência: moda no Brasil, no celular, ticket alto e tráfego de anúncio "
+                   "(faixas de mercado, ordem de grandeza). Carrinho por origem: "
+                   + inteligencia.carrinho_por_origem(_v) + ".")
 
         st.subheader("Funil")
         tabela(inteligencia.funil(_v), num=("Visitas", "Da etapa anterior", "Do total"), titulo="Funil")
