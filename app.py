@@ -4164,6 +4164,31 @@ if "Inteligência" in abas:
         tabela(inteligencia.por_origem(_v), num=("Visitas", "Carrinho", "Checkout", "Compras", "Conversão",
                                                  "Páginas por visita"), titulo="Origem")
 
+        st.subheader("Combinações")
+        try:
+            _tit = _memo.memo()(shopify_client.titulos_com_combinacao)()
+            _vend = shopify_client.pecas_por_combinacao(int(_dias))
+        except Exception:
+            _tit, _vend = {}, []
+        _cb, _cb_add = inteligencia.combinacoes(_ev, _tit, _vend)
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Abriram peça com o bloco", _cb["viram_bloco"],
+                  help="Pessoas (navegadores) que abriram uma peça com \"Para completar o look\".")
+        k2.metric("Puseram na sacola pelo bloco", _cb["add_bloco"],
+                  help=f"De {_cb['add_total']} peças postas na sacola no período, em qualquer lugar do site.")
+        k3.metric("Página Combinações", f"{_cb['viram_pagina']} · {_cb['add_pagina']}",
+                  help="Pessoas que abriram a página · peças postas na sacola por ela.")
+        k4.metric("Vendidas por combinação", _cb["vendidas"], help=_reais(_cb["receita"]) + " em peças.")
+        st.caption("O bloco está nas peças desde 18/10 e a página no menu desde 26/10. Peça vendida conta "
+                   "pela etiqueta que o site põe na linha do pedido desde 26/10; antes disso só há a "
+                   "adição à sacola.")
+        if not _cb_add.empty:
+            tabela(_cb_add, titulo="Peças postas na sacola por combinação")
+        if _vend:
+            tabela(pd.DataFrame([{"Pedido": v["pedido"], "Peça": v["peca"], "Origem": v["origem"],
+                                  "Valor": _reais(v["valor"])} for v in _vend]),
+                   num=("Valor",), titulo="Vendidas por combinação")
+
         _parados = inteligencia.checkouts_parados(_v)
         st.subheader("Checkouts que pararam")
         if _parados.empty:

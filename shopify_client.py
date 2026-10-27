@@ -439,6 +439,43 @@ def carrinho_abandonado(id_checkout: str) -> dict:
     return d.get("node") or {}
 
 
+def pecas_por_combinacao(dias: int = 30) -> list:
+    """Peças vendidas que entraram na sacola pelo bloco "Para completar o look"
+    ou pela página de Combinações: o tema grava a etiqueta escondida _origem
+    na linha do pedido desde 26/10/2026 (tema/combinacoes/*.liquid)."""
+    import datetime as _dt
+    import pandas as _pd
+    desde = (_dt.datetime.utcnow() - _dt.timedelta(days=int(dias) + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    saida, cursor = [], None
+    while True:
+        d = _graphql("""query($q: String!, $c: String) { orders(first: 100, after: $c, query: $q) {
+            pageInfo { hasNextPage endCursor }
+            nodes { name createdAt cancelledAt test
+                    lineItems(first: 30) { nodes { title quantity customAttributes { key value }
+                        discountedTotalSet { shopMoney { amount } } } } } } }""",
+                     {"q": f"created_at:>={desde}", "c": cursor})["orders"]
+        for n in d["nodes"]:
+            if n["cancelledAt"] or n["test"]:
+                continue
+            for li in n["lineItems"]["nodes"]:
+                origem = next((a["value"] for a in li["customAttributes"] if a["key"] == "_origem"), None)
+                if origem:
+                    saida.append({"pedido": n["name"], "criado": _pd.Timestamp(n["createdAt"]),
+                                  "peca": li["title"], "qtd": li["quantity"], "origem": origem,
+                                  "valor": float(li["discountedTotalSet"]["shopMoney"]["amount"])})
+        if not d["pageInfo"]["hasNextPage"]:
+            return saida
+        cursor = d["pageInfo"]["endCursor"]
+
+
+def titulos_com_combinacao() -> dict:
+    """{handle: (título, tem bloco)} de todas as peças. Tem bloco = o campo
+    custom.combina_com está preenchido (tema/combinacoes/gravar.py)."""
+    d = _graphql('{ products(first: 250) { nodes { handle title '
+                 'metafield(namespace: "custom", key: "combina_com") { value } } } }')
+    return {p["handle"]: (p["title"], bool(p["metafield"])) for p in d["products"]["nodes"]}
+
+
 def variantes_ativas() -> list:
     """Peças à venda, uma linha por tamanho, para escolher no lançamento."""
     itens, cursor = [], None

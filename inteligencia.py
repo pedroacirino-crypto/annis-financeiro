@@ -8,6 +8,7 @@ mesma visita; a última página de cada visita não tem fim conhecido e fica de
 fora da média.
 """
 
+import re
 from urllib.parse import parse_qs
 
 import pandas as pd
@@ -397,3 +398,47 @@ def carrinho_por_origem(v: pd.DataFrame, minimo: int = 30) -> str:
     g = v.groupby("origem").agg(n=("visita", "size"), c=("product_added_to_cart", "sum"))
     g = g[g.n >= minimo].sort_values("n", ascending=False)
     return " · ".join(f"{o}: {r.c / r.n:.1%} de {int(r.n)} visitas".replace(".", ",") for o, r in g.iterrows())
+
+
+# Combinações (26/10/2026): o bloco "Para completar o look" na página de cada
+# peça (desde 18/10) e a página /pages/combinacoes (desde 26/10). O pixel grava
+# a página onde a cliente estava ao pôr na sacola: peça diferente da peça da
+# página só pode ter vindo do bloco. A venda vem da etiqueta _origem do pedido.
+PAGINA_COMBINACOES = "/pages/combinacoes"
+
+
+def _handle(pagina) -> str:
+    m = re.match(r"^/products/([^/?#]+)", pagina or "")
+    return m.group(1) if m else ""
+
+
+def combinacoes(ev: pd.DataFrame, titulos: dict, vendidas: list) -> tuple:
+    """(números, adições): números para os cartões, adições uma por linha."""
+    vazio = {"viram_bloco": 0, "add_bloco": 0, "viram_pagina": 0, "add_pagina": 0,
+             "vendidas": 0, "receita": 0.0, "add_total": 0}
+    if ev.empty:
+        return vazio, pd.DataFrame()
+    e = ev.copy()
+    e["handle"] = e.pagina.map(_handle)
+    com_bloco = {h for h, (_, b) in titulos.items() if b}
+    vistas = e[(e.evento == "product_viewed") & e.handle.isin(com_bloco)]
+    pag = e[(e.evento == "page_viewed") & e.pagina.fillna("").str.startswith(PAGINA_COMBINACOES)]
+    add = e[e.evento == "product_added_to_cart"].copy()
+    add["da_pagina"] = add.handle.map(lambda h: titulos.get(h, ("", False))[0])
+    pelo_bloco = add[add.handle.isin(com_bloco) & (add.produto != add.da_pagina)]
+    pela_pagina = add[add.pagina.fillna("").str.startswith(PAGINA_COMBINACOES)]
+    n = dict(vazio, viram_bloco=vistas.visitante.nunique(), add_bloco=len(pelo_bloco),
+             viram_pagina=pag.visitante.nunique(), add_pagina=len(pela_pagina), add_total=len(add),
+             vendidas=sum(v["qtd"] for v in vendidas), receita=sum(v["valor"] for v in vendidas))
+    linhas = pd.concat([pelo_bloco.assign(Onde="Bloco na página de " + pelo_bloco.da_pagina),
+                        pela_pagina.assign(Onde="Página Combinações")])
+    if linhas.empty:
+        return n, pd.DataFrame()
+    linhas = linhas.sort_values("em", ascending=False)
+    return n, pd.DataFrame({
+        "Quando": linhas.em.dt.tz_convert("America/Sao_Paulo").dt.strftime("%d/%m %H:%M").values,
+        "Onde": linhas.Onde.values,
+        "Pôs na sacola": (linhas.produto.fillna("") + " " + linhas.variante.fillna("")).str.strip().values,
+        "Aparelho": linhas.aparelho.values,
+    })
+

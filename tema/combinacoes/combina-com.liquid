@@ -75,6 +75,7 @@
   </div>
 </section>
 <script>
+  var ORIGEM = {{ product.title | prepend: 'Bloco: ' | json }};
   document.querySelectorAll('[data-annis-combina]').forEach(function (f) {
     if (f.dataset.ligado) return;
     f.dataset.ligado = '1';
@@ -87,7 +88,10 @@
       botao.disabled = true; botao.textContent = 'Adicionando…';
       fetch('/cart/add.js', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ items: [{ id: Number(campo.value), quantity: 1 }] })
+        // Etiqueta escondida (o _ some da sacola e do checkout): no pedido, mostra
+        // que a peça entrou pelo bloco e em qual página (Pedro, 26/10).
+        body: JSON.stringify({ items: [{ id: Number(campo.value), quantity: 1,
+                                         properties: { _origem: ORIGEM } }] })
       }).then(function (r) { if (!r.ok) throw r; return r.json(); }).then(function () {
         botao.disabled = false;
         botao.outerHTML = '<a class="annis-combina__botao is-ok" href="/cart">Na sacola ✓</a>';
