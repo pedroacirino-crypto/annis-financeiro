@@ -577,6 +577,46 @@ try:
 except Exception:
     pass  # a conferência de dado novo nunca pode derrubar o portal
 
+
+# Aquecimento (28/10/2026). Com o cache vazio, o primeiro clique do dia, o de
+# depois de um "dado novo" e o de depois de uma publicação levavam 3 a 9 s no
+# Cloud só para recalcular. Quando o cache não tem nada de hoje, uma linha de
+# execução em segundo plano recalcula o que as telas de abertura usam (Vendas,
+# Histórico, Resultado, Inteligência em 7 dias), com as mesmas chamadas e os
+# mesmos argumentos das abas, para cair na mesma chave do memo. Roda já na
+# tela de senha e na visita automática de cada 2 horas (acordar.yml), então
+# quem entra encontra pronto. Só chama funções sem st.*.
+def _aquecer():
+    import financeiro as _fin
+    import dados_fin as _df
+    import extrato as _ex
+    passos = [_ex.carregar, _df.ler_vendas_stone, nuvem.ler_pedidos, _fin.pedidos_pagos,
+              _fin.pnl_competencia, _fin.fluxo_de_caixa, omni.vendas_fisicas,
+              lambda: _memo.memo()(nuvem.ler_eventos)(14),
+              lambda: _memo.memo()(shopify_client.pedidos_do_site)(14),
+              lambda: _memo.memo()(shopify_client.pecas_por_combinacao)(7),
+              lambda: _memo.memo()(nuvem.ler_clarity)(7)]
+    try:
+        for passo in passos:
+            try:
+                passo()
+            except Exception:
+                pass  # aquecer é bônus: o que falhar aqui a aba calcula na hora
+    finally:
+        _memo._AQUECENDO["ativo"] = False
+
+
+try:
+    if not hasattr(_memo, "_AQUECENDO"):
+        _memo._AQUECENDO = {"ativo": False}
+    _hoje_memo = _memo._hoje()
+    if not _memo._AQUECENDO["ativo"] and not any(k[-1] == _hoje_memo for k in list(_memo._GUARDADO)):
+        _memo._AQUECENDO["ativo"] = True
+        import threading
+        threading.Thread(target=_aquecer, daemon=True).start()
+except Exception:
+    pass
+
 exigir_senha()
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -4097,7 +4137,13 @@ if "Pós-compra" in abas:
 # INTELIGÊNCIA: navegação no site, do anúncio ao pagamento (20/10/2026)
 # ════════════════════════════════════════════════════════════════════════════
 # Dados do pixel próprio (site/pixel.js), no ar desde 20/10/2026: loja e
-# checkout, sem dado pessoal. Lê ao vivo.
+# checkout, sem dado pessoal. Desde 28/10/2026 as leituras ficam guardadas
+# até "Atualizar dados", como o resto do portal: eram 3 s por clique só de
+# leitura (eventos, pedidos, Clarity), 4 a 9 s no Cloud.
+_intel_eventos = _memo.memo()(nuvem.ler_eventos)
+_intel_pedidos = _memo.memo()(shopify_client.pedidos_do_site)
+_intel_vendidas = _memo.memo()(shopify_client.pecas_por_combinacao)
+_intel_clarity = _memo.memo()(nuvem.ler_clarity)
 def _reais(v) -> str:
     try:
         return "" if pd.isna(v) else "R$ " + f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -4111,13 +4157,14 @@ if "Inteligência" in abas:
     st.caption(
         "Cada visita ao site, do primeiro clique ao pagamento, gravada pelo nosso pixel "
         "desde 20/10/2026 (loja e checkout, sem nome, e-mail ou CPF). Visita é o mesmo "
-        "navegador sem pausa de mais de 30 minutos."
+        "navegador sem pausa de mais de 30 minutos. Os números são de quando os dados foram "
+        "atualizados pela última vez (Atualizar dados, na barra lateral)."
     )
     _dias = st.segmented_control("Período", [1, 7, 14, 30], default=7, key="intel_dias",
                                  format_func=lambda d: "24 horas" if d == 1 else f"{d} dias",
                                  label_visibility="collapsed") or 7
     # Lê o dobro do período: a segunda metade é o período anterior, a régua da leitura.
-    _ev_tudo = nuvem.ler_eventos(2 * int(_dias))
+    _ev_tudo = _intel_eventos(2 * int(_dias))
     _corte = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=int(_dias))
     _ev = _ev_tudo[_ev_tudo.em >= _corte] if not _ev_tudo.empty else _ev_tudo
     _ev_ant = _ev_tudo[_ev_tudo.em < _corte] if not _ev_tudo.empty else _ev_tudo
@@ -4128,7 +4175,7 @@ if "Inteligência" in abas:
         _v_ant = inteligencia.visitas(_ev_ant)
         # Compra por Pix não dispara o evento de compra no pixel: casa com o pedido real.
         try:
-            _peds = shopify_client.pedidos_do_site(2 * int(_dias))
+            _peds = _intel_pedidos(2 * int(_dias))
             _v = inteligencia.casar_pedidos(_v, _peds)
             _v_ant = inteligencia.casar_pedidos(_v_ant, _peds)
         except Exception:
@@ -4167,7 +4214,7 @@ if "Inteligência" in abas:
         st.subheader("Combinações")
         try:
             _tit = _memo.memo()(shopify_client.titulos_com_combinacao)()
-            _vend = shopify_client.pecas_por_combinacao(int(_dias))
+            _vend = _intel_vendidas(int(_dias))
         except Exception:
             _tit, _vend = {}, []
         _cb, _cb_add = inteligencia.combinacoes(_ev, _tit, _vend)
@@ -4217,7 +4264,7 @@ if "Inteligência" in abas:
                 tabela(_tp, num=("Vezes vista", "Tempo típico"), titulo="Tempo por página")
 
         st.subheader("Comportamento em cada página (Clarity)")
-        _cl = inteligencia.clarity_paginas(nuvem.ler_clarity(int(_dias)))
+        _cl = inteligencia.clarity_paginas(_intel_clarity(int(_dias)))
         if _cl.empty:
             st.caption("O Clarity entrou em 20/10; os números chegam numa coleta por dia, às 3h.")
         else:
