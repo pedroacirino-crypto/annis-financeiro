@@ -1,0 +1,41 @@
+# Toque leve para o painel não hibernar, 28/10/2026.
+#
+# A Streamlit Community hiberna o app depois de 12 horas sem visita. A rotina
+# diária (manter-acordado.yml) roda três vezes, mas o agendador do GitHub
+# atrasa a das 6h para 10h a 13h, e sobrava um buraco de 15 a 17 horas entre
+# a da noite e a seguinte: de manhã o Pedro abria o app dormindo (duas vezes
+# na semana de 21/10). Este job só abre o painel, sem baixar nada da Stone,
+# a cada 2 horas e fora da hora cheia, que é quando o agendador mais atrasa.
+# O app só sincroniza se o último download passou de 12 horas, então isto não
+# gera trabalho extra no banco. Repositório público: os minutos são grátis.
+name: Manter o painel acordado
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: acordar
+  cancel-in-progress: false
+
+jobs:
+  acordar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar o navegador
+        run: |
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Abrir o painel
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: python rotina/atualizar.py
