@@ -33,7 +33,10 @@ import shopify_client  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 TAG = "sale-novembro"
-COLECAO_SALE = "Sale Novembro Annis"
+COLECAO_SALE = "Novembro Annis"   # renomeada em 29/10 (era "Sale Novembro Annis"); /collections/novembro-annis
+LOJA_ONLINE = "Online Store"
+MENU = "main-menu"
+ITEM_MENU_ANTIGO = "Sale"         # item do menu que vira "Novembro Annis" no período
 COLECAO_FORA = "Fora da sale"
 DESCONTO_SIMBOLICO = "Novembro Annis"
 INICIO = "2026-11-01T03:00:00Z"   # 00h de 01/11 em Brasília
@@ -179,11 +182,83 @@ def cupons_voltar(simular):
 
 # ── comandos ─────────────────────────────────────────────────────────────────
 
+def _estado(chave, valor=None):
+    """Estado guardado para reverter (campanha.estado). Sem valor, lê."""
+    with nuvem._conectar().begin() as con:
+        if valor is None:
+            r = con.execute(text("select valor from campanha.estado where chave = :c"), {"c": chave}).scalar()
+            return r if r is None or isinstance(r, (dict, list)) else json.loads(r)
+        con.execute(text("insert into campanha.estado (chave, valor) values (:c, cast(:v as jsonb))"
+                         " on conflict (chave) do update set valor = excluded.valor"), {"c": chave, "v": json.dumps(valor)})
+
+
+_MENUS = "{menus(first:5){nodes{id handle title items{id title type url resourceId tags items{id title type url resourceId tags}}}}}"
+_GRAVA_MENU = ("mutation($id:ID!,$t:String!,$h:String!,$i:[MenuItemUpdateInput!]!){"
+               "menuUpdate(id:$id,title:$t,handle:$h,items:$i){userErrors{field message}}}")
+_PUBLICA = "mutation($id:ID!,$p:[PublicationInput!]!){publishablePublish(id:$id, input:$p){userErrors{message}}}"
+_DESPUBLICA = "mutation($id:ID!,$p:[PublicationInput!]!){publishableUnpublish(id:$id, input:$p){userErrors{message}}}"
+
+
+def _menu():
+    return next(m for m in _g(_MENUS)["menus"]["nodes"] if m["handle"] == MENU)
+
+
+def _item_entrada(i):
+    d = {"id": i["id"], "title": i["title"], "type": i["type"], "tags": i.get("tags") or []}
+    if i.get("resourceId"):
+        d["resourceId"] = i["resourceId"]
+    else:
+        d["url"] = i["url"]
+    d["items"] = [_item_entrada(x) for x in i.get("items") or []]
+    return d
+
+
+def _gravar_menu(menu, itens):
+    _erros(_g(_GRAVA_MENU, {"id": menu["id"], "t": menu["title"], "h": menu["handle"], "i": itens}), "menuUpdate")
+
+
+def _publicacao():
+    return next(p["id"] for p in _g('{publications(first:10){nodes{id name}}}')["publications"]["nodes"]
+                if p["name"] == LOJA_ONLINE)
+
+
+def vitrine_ligar(simular):
+    """Publica a coleção da campanha e troca o item "Sale" do menu por ela."""
+    colecao = _colecao(COLECAO_SALE)
+    menu = _menu()
+    itens = [_item_entrada(i) for i in menu["items"]]
+    alvo = next((i for i in itens if i["title"] in (ITEM_MENU_ANTIGO, COLECAO_SALE)), None)
+    print(f"  publica {COLECAO_SALE} na loja; menu: {alvo['title'] if alvo else 'sem item'} -> {COLECAO_SALE}")
+    if simular:
+        return
+    _erros(_g(_PUBLICA, {"id": colecao, "p": [{"publicationId": _publicacao()}]}), "publishablePublish")
+    if alvo and alvo["title"] == ITEM_MENU_ANTIGO:
+        if _estado("menu_antes") is None:
+            _estado("menu_antes", menu["items"])
+        alvo.update({"title": COLECAO_SALE, "type": "COLLECTION", "resourceId": colecao})
+        alvo.pop("url", None)
+        _gravar_menu(menu, itens)
+
+
+def vitrine_desligar(simular):
+    antes = _estado("menu_antes")
+    print(f"  menu volta como era ({'guardado' if antes else 'nada guardado'}); {COLECAO_SALE} sai da loja")
+    if simular:
+        return
+    if antes:
+        _gravar_menu(_menu(), [_item_entrada(i) for i in antes])
+        with nuvem._conectar().begin() as con:
+            con.execute(text("delete from campanha.estado where chave = 'menu_antes'"))
+    _erros(_g(_DESPUBLICA, {"id": _colecao(COLECAO_SALE), "p": [{"publicationId": _publicacao()}]}), "publishableUnpublish")
+
+
 def aplicar(simular):
     print("preços da sale:")
     _atualizar_precos(_precos(), "preco_sale", "riscado_sale", simular)
     print("cupons:")
     cupons_fora_da_sale(simular)
+    print("vitrine:")
+    vitrine_ligar(simular)
 
 
 def reverter(simular):
@@ -191,6 +266,8 @@ def reverter(simular):
     _atualizar_precos(_precos(), "preco_antes", "riscado_antes", simular)
     print("cupons:")
     cupons_voltar(simular)
+    print("vitrine:")
+    vitrine_desligar(simular)
 
 
 def status():

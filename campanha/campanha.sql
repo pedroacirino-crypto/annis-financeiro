@@ -54,3 +54,9 @@ select cron.schedule('annis-campanha-reverter', '59 2 1 12 *',
 -- Cashback a cada 10 minutos (minuto 3, 13, 23...), deslocado da régua (minuto 0).
 select cron.schedule('annis-cashback', '3-59/10 * * * *',
   $$select avisos.disparar_workflow('cashback.yml', null)$$);
+
+-- Estado guardado para reverter (ex.: o menu antes da troca do item Sale).
+create table if not exists campanha.estado (
+  chave text primary key,
+  valor jsonb not null
+);
