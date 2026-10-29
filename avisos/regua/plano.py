@@ -231,6 +231,11 @@ def _depois_do_pago(o, criado, pago, base, saida, ev, somas, total, pix, dp, mis
             codigo = cd
     po = sorted(corr(e["quando"]) for e in ev_rastro if e["codigo"] == "PO")
     postado = po[0] if po else None
+    # Entregue em mãos (baixa manual, avisos/regua/entregue.py): não passa pelos
+    # Correios. Conta como postado e entregue no mesmo instante; sem 6 nem 7.
+    em_maos = corr(o["em_maos"]) if o.get("em_maos") else None
+    if em_maos and (postado is None or postado > em_maos):
+        postado = em_maos
     entrega_prev = prazo_correios(frete, end.get("zip", "").replace("-", ""), prazo)
     fase = "Produção" if dp else "Separação"
     # Cartão aprova no mesmo segundo do pedido: o 2 sai logo depois do 0.
@@ -252,6 +257,10 @@ def _depois_do_pago(o, criado, pago, base, saida, ev, somas, total, pix, dp, mis
     if (postado is None or postado > meio_dia(dia5)) and meio_dia(dia5) <= agora():
         ev(meio_dia(dia5), "e5" if dp else "e5_pronta")
     if not postado:
+        return saida
+    if em_maos:
+        ev(em_maos, "e8", entrega="maos")
+        ev(meio_dia((em_maos + dt.timedelta(days=6)).date()), "e9")
         return saida
     link = f"https://rastreamento.correios.com.br/app/index.php?objetos={codigo}"
     rast = {"codigo": codigo, "link": link}

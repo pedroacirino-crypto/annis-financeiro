@@ -187,6 +187,8 @@ def montar(qual: str, dados: dict) -> dict:
               B.rastreio(dados["servico"], r["codigo"], t["rastreio_previsao"], r["link"]), *prev,
               B.botao(t["botao"], r["link"]), whats(t["frase_whats"]), fim]
     elif qual == "e8":
+        if dados.get("entrega") == "maos":  # baixa manual: não passou pelos Correios
+            t["hero_sub"], t["depois"] = t["hero_sub_maos"], t["depois_maos"]
         # Cuidados vêm da descrição de cada produto (campo Manutenção). Peças com a
         # mesma instrução dividem um bloco; a foto é da mais cara do grupo. Peça
         # sem o campo (ex.: cinto) não ganha bloco.

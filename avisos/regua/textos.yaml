@@ -192,6 +192,7 @@ e8:
   faixa: "Pedido {pedido} · entregue"
   hero_titulo: "Seu pedido chegou"
   hero_sub: "Entregue hoje pelos Correios"
+  hero_sub_maos: "Entregue em mãos"
   texto:
     - "Oi, {nome}. A gente quer que {o_seu} {peca} te acompanhe por muito tempo, então separamos alguns cuidados."
   previa_plural: "Alguns cuidados para as suas peças durarem."
@@ -204,6 +205,8 @@ e8:
   previa_sem_cuidados: "Seu pedido foi entregue."
   depois:
     - "Ainda não recebeu? Responda este e-mail ou chame a gente no WhatsApp, que a gente vai atrás com os Correios. Se algo não ficou como você esperava, é só responder também."
+  depois_maos:
+    - "Se algo não ficou como você esperava, é só responder este e-mail ou chamar a gente no WhatsApp."
 
 e9:
   assunto: "{nome}, como ficou {o_seu} {peca}?"

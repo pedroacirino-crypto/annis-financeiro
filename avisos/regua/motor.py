@@ -113,6 +113,12 @@ def etiquetas(con) -> dict:
         "select substr(id, 5), split_part(tipo, ' ', 2) from avisos.enviados where id like 'etq:%'"))}
 
 
+def em_maos(con) -> dict:
+    """Pedidos entregues em mãos (baixa manual): {"#1164": "2026-10-29T15:20:00"}, hora local."""
+    return {"#" + r[0]: r[1].astimezone(plano.TZ).replace(tzinfo=None).isoformat(timespec="seconds")
+            for r in con.execute(text("select substr(id, 9), criado from avisos.enviados where id like 'em_maos:%'"))}
+
+
 def rastro(con, codigo: str, entregue_ja: bool) -> dict:
     """Eventos dos Correios, guardados por 1 hora (para sempre depois de entregue)."""
     chave = "regua_rastro:" + codigo
@@ -224,7 +230,7 @@ def main(simular: bool = False) -> None:
     plano.link_pagina = lambda tipo, pedido: f"https://annis.store/pages/{'pix' if tipo == 'pix' else 'sua-opiniao'}?p={TOKEN}"
     eng = _con()
     with eng.connect() as con:
-        ja, etq = enviados(con), etiquetas(con)
+        ja, etq, maos = enviados(con), etiquetas(con), em_maos(con)
     erros = []
     virada = inicio()
     for o in pedidos():
@@ -236,8 +242,11 @@ def main(simular: bool = False) -> None:
                 if o["name"] in etq and etq[o["name"]] not in cods:
                     cods.append(etq[o["name"]])
                 entregue_ja = f"regua:e8:{numero}" in ja
-                o["rastro"] = {cd: rastro(con, cd, entregue_ja) for cd in cods[:1]}
-                if legado and not cods:  # sem pacote, nada do 7 em diante para mandar
+                if o["name"] in maos:
+                    o["em_maos"], o["rastro"] = maos[o["name"]], {}
+                else:
+                    o["rastro"] = {cd: rastro(con, cd, entregue_ja) for cd in cods[:1]}
+                if legado and not cods and not o.get("em_maos"):  # sem pacote, nada do 7 em diante para mandar
                     continue
                 pix_pendente = (not legado and any("PIX" in g for g in o["paymentGatewayNames"])
                                 and o["displayFinancialStatus"] == "PENDING")
