@@ -7,7 +7,7 @@ Regras (Pedro, 29/10):
   - Venda por link (etiqueta link-stone) não gera: a regra é só site.
   - O crédito vira um código pessoal na Shopify: valor fixo, uso único, só
     na coleção Fora da sale, compra mínima de crédito / 30% (o crédito cobre
-    até 30% da compra), validade de 90 dias. Soma com desconto de produto
+    até 30% da compra), vale até 31/01/2027 (data fixa, Pedro 29/10). Soma com desconto de produto
     para conviver com o R$ 0,01 da sale no carrinho misto.
   - Devolução: reembolso total cancela o código; parcial recalcula o crédito
     na proporção do que ficou. Crédito já usado só fica registrado.
@@ -34,7 +34,7 @@ INICIO = "2026-11-01T03:00:00Z"
 FIM = "2026-12-01T02:59:59Z"
 TAXA = 0.10
 COBERTURA = 0.30
-VALIDADE_DIAS = 90
+VENCE = datetime(2027, 2, 1, 2, 59, 59, tzinfo=timezone.utc)  # 31/01/2027 23h59min59s em Brasília
 DESCONTO_PIX = 0.05
 COLECAO_FORA = "Fora da sale"
 ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sem 0, O, 1, I
@@ -123,7 +123,7 @@ def gerar(simular):
         valor = credito_de(base)
         if valor < 1:
             continue
-        vence = agora + timedelta(days=VALIDADE_DIAS)
+        vence = VENCE
         print(f"{o['name']}: base R$ {base:.2f}, crédito R$ {valor}, compra mínima R$ {minimo_de(valor)}")
         if simular:
             continue
@@ -206,11 +206,74 @@ def vencimentos(simular):
                 _atualizar(c["pedido"], situacao="vencido")
 
 
+def _enviados():
+    with nuvem._conectar().connect() as con:
+        return {r[0]: r[1] for r in con.execute(text(
+            "select id, criado from avisos.enviados where id like 'cb:%' or id like 'regua:e2%'"))}
+
+
+def emails(simular):
+    """Manda o que venceu (regras em campanha/cashback_emails.py)."""
+    from avisos import gmail
+    from avisos.regua import motor
+    from campanha import cashback_emails as E
+    modo = os.environ.get("REGUA_MODO") or "no_ar"
+    cco = [x.strip() for x in (os.environ.get("REGUA_CCO") or E.CONTATO).split(",") if x.strip()]
+    agora = datetime.now(timezone.utc)
+    hora_brt = agora.astimezone(E.BRT).hour
+    ja = _enviados()
+    ultimo_lembrete = {}
+    creditos = sorted(_ja_tem().values(), key=lambda c: c["emitido_em"])
+    for c in creditos:
+        for q in E.LEMBRETES:
+            quando = ja.get(f"cb:{q}:{c['pedido'].lstrip('#')}")
+            if quando:
+                ultimo_lembrete[c["email"]] = max(ultimo_lembrete.get(c["email"], quando), quando)
+    for c in creditos:
+        num = c["pedido"].lstrip("#")
+        fila = []
+        if f"cb:cb1:{num}" not in ja and c["situacao"] in ("ativo", "usado"):
+            # Logo depois do e-mail de confirmação (régua e2); sem ele, 30 min após emitir.
+            if any(k.startswith("regua:e2") and k.endswith(f":{num}") for k in ja) or agora - c["emitido_em"] > timedelta(minutes=30):
+                fila.append("cb1")
+        if c["situacao"] == "cancelado" and f"cb:cb1:{num}" in ja and f"cb:cb6:{num}" not in ja:
+            fila.append("cb6")
+        if c["situacao"] == "ativo" and f"cb:cb1:{num}" in ja and 9 <= hora_brt < 20:
+            ultimo = ultimo_lembrete.get(c["email"])
+            if not ultimo or agora - ultimo > timedelta(days=6):
+                devidos = [q for q in E.LEMBRETES if f"cb:{q}:{num}" not in ja and E.vencido_o_prazo(q, c, agora)]
+                if devidos:
+                    fila.append(devidos[-1])  # o mais recente vencido; os anteriores ficam para trás
+                    for q in devidos[:-1]:
+                        ja[f"cb:{q}:{num}"] = agora  # atropelado: não manda mais
+                        if not simular:
+                            with nuvem._conectar().begin() as con:
+                                con.execute(text("insert into avisos.enviados (id, tipo) values (:i, 'cashback pulado') on conflict do nothing"),
+                                            {"i": f"cb:{q}:{num}"})
+        for qual in fila:
+            m = E.montar(qual, E.dados(c))
+            para, assunto, copia = c["email"], m["assunto"], cco
+            if modo == "sombra":
+                para, assunto, copia = E.CONTATO, f"[sombra {c['pedido']}] {assunto}", []
+            print(f"{c['pedido']} {qual} -> {'(simulado) ' if simular else ''}{'contato@' if para == E.CONTATO else 'cliente'}: {assunto}")
+            if simular:
+                continue
+            with nuvem._conectar().begin() as con:
+                html, texto = motor.com_cliques(con, m["html"], m["texto"], c["pedido"], qual, modo, False)
+                mid = gmail.enviar(para, assunto, html, texto, cco=copia)
+                con.execute(text("insert into avisos.enviados (id, tipo) values (:i, :t) on conflict do nothing"),
+                            {"i": f"cb:{qual}:{num}", "t": f"cashback {mid}"})
+            ja[f"cb:{qual}:{num}"] = agora
+            if qual in E.LEMBRETES:
+                ultimo_lembrete[c["email"]] = agora
+
+
 def main(simular=False):
     gerar(simular)
     devolucoes(simular)
     usos(simular)
     vencimentos(simular)
+    emails(simular)
 
 
 if __name__ == "__main__":

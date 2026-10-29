@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Preparar
-        run: pip install --quiet requests sqlalchemy psycopg2-binary
+        run: pip install --quiet requests sqlalchemy psycopg2-binary pyyaml
 
       - name: Rodar
         env:
@@ -35,6 +35,9 @@ jobs:
           SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
           SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          GMAIL_SENHA_APP: ${{ secrets.GMAIL_SENHA_APP }}
+          REGUA_MODO: ${{ vars.REGUA_MODO }}
+          REGUA_CCO: ${{ vars.REGUA_CCO }}
         run: python campanha/cashback.py ${{ inputs.simular == 'sim' && '--simular' || '' }}
 
       - name: Avisar no grupo se falhar

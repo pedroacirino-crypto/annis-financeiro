@@ -233,3 +233,79 @@ e9:
 
 # Cuidados do e-mail 8: vêm do campo Manutenção da descrição de cada produto
 # na Shopify (o texto da etiqueta). Para mudar, mudar a descrição do produto.
+
+# Cashback do Novembro Annis (29/10/2026). Variáveis: {nome}, {valor} (ex. 73),
+# {codigo}, {validade} (31/01), {minimo} (compra mínima, ex. 244).
+# Quando sai cada um: campanha/cashback.py (emails).
+cashback:
+  cb1:
+    assunto: "Você ganhou R$ {valor} para usar na Annis"
+    previa: "Seu código vale até {validade}, em compras a partir de R$ {minimo}."
+    faixa: "Novembro Annis · cashback"
+    eyebrow: "Cashback"
+    titulo: "R$ {valor} para a sua próxima compra"
+    texto:
+      - "Oi, {nome}. Pela sua compra no Novembro Annis, você ganhou R$ {valor} de cashback. É só usar o código abaixo numa próxima compra no site, até {validade}."
+    regras:
+      - "Vale em qualquer peça fora da sale, inclusive nos lançamentos."
+      - "Vale em compras a partir de R$ {minimo}."
+      - "Uso único, só no site."
+    botao: "Escolher minha próxima peça"
+  cb2:
+    assunto: "Seus R$ {valor} de cashback continuam esperando por você"
+    previa: "Vale até {validade}."
+    faixa: "Novembro Annis · cashback"
+    eyebrow: "Cashback"
+    titulo: "Seus R$ {valor} continuam aqui"
+    texto:
+      - "Oi, {nome}. Seu cashback de R$ {valor} ainda não foi usado. Ele vale até {validade}, em qualquer peça fora da sale."
+    regras:
+      - "Vale em compras a partir de R$ {minimo}."
+      - "Uso único, só no site."
+    botao: "Ver a loja"
+  cb3:
+    assunto: "Seu cashback vale para os presentes de Natal"
+    previa: "R$ {valor} para usar até {validade}."
+    faixa: "Novembro Annis · cashback"
+    eyebrow: "Natal"
+    titulo: "Um presente com R$ {valor} a menos"
+    texto:
+      - "Oi, {nome}. Se ainda falta algum presente, seu cashback de R$ {valor} vale em qualquer peça fora da sale, até {validade}."
+    regras:
+      - "Vale em compras a partir de R$ {minimo}."
+      - "Uso único, só no site."
+    botao: "Ver a loja"
+  cb4:
+    assunto: "Faltam 15 dias para usar seus R$ {valor}"
+    previa: "Seu cashback vale até {validade}."
+    faixa: "Novembro Annis · cashback"
+    eyebrow: "Cashback"
+    titulo: "Faltam 15 dias"
+    texto:
+      - "Oi, {nome}. Seu cashback de R$ {valor} vale até {validade}. Depois disso, o código deixa de funcionar."
+    regras:
+      - "Vale em qualquer peça fora da sale, em compras a partir de R$ {minimo}."
+      - "Uso único, só no site."
+    botao: "Ver a loja"
+  cb5:
+    assunto: "Seus R$ {valor} de cashback vencem em {validade}"
+    previa: "Últimos dias para usar."
+    faixa: "Novembro Annis · cashback"
+    eyebrow: "Últimos dias"
+    titulo: "Seu cashback vence em {validade}"
+    texto:
+      - "Oi, {nome}. Seus R$ {valor} de cashback vencem em {validade}. Se quiser usar, é só aplicar o código na sua compra."
+    regras:
+      - "Vale em qualquer peça fora da sale, em compras a partir de R$ {minimo}."
+    botao: "Ver a loja"
+  cb6:
+    assunto: "Seu cashback foi cancelado"
+    previa: "O pedido que gerou o crédito foi devolvido."
+    faixa: "Novembro Annis · cashback"
+    eyebrow: "Cashback"
+    titulo: "Seu cashback foi cancelado"
+    texto:
+      - "Oi, {nome}. Como o pedido {pedido} foi devolvido, o cashback que ele gerou foi cancelado e o código {codigo} deixou de valer."
+      - "Se tiver qualquer dúvida, é só responder este e-mail."
+  rotulo_codigo: "Seu código"
+  rotulo_regras: "Como usar"
