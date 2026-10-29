@@ -55,6 +55,10 @@ MAPA_FICHAS = [
     (r"^Cal[çc]a .*Trama", "Calça Trama"),
     (r"^Colete .*Trama", "Colete Trama"),
     (r"Heran[çc]a", "Camisa Herança"),
+    # Linha Georgia (linho cru e oliva): o Pedro confirmou em 29/10/2026 que o
+    # top é o "Top drapeado" e a calça a "Calça pala drapeada" da precificação.
+    (r"^Top de Linho .*Georgia", "Top drapeado"),
+    (r"^Cal[çc]a de Linho .*Georgia", "Calça pala drapeada"),
 ]
 
 # Investimento em Meta Ads por mês, dos relatórios mensais da agência (PROADZ,
