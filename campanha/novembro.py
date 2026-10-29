@@ -32,7 +32,7 @@ import nuvem  # noqa: E402
 import shopify_client  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
-TAG = "sale-novembro"
+TAG = "Novembro Annis"           # era "sale-novembro"; o filtro Coleção do tema mostra a etiqueta para a cliente (30/10)
 COLECAO_SALE = "Novembro Annis"   # renomeada em 29/10 (era "Sale Novembro Annis"); /collections/novembro-annis
 LOJA_ONLINE = "Online Store"
 MENU = "main-menu"
