@@ -1080,7 +1080,8 @@ def registrar_tempo(secao: str, ms: int, quem: str = "") -> None:
     O portal ficou lento no Cloud mesmo depois de rápido na máquina local, e
     sem número de lá cada melhoria era estimativa. Uma linha por clique, em
     segundo plano para não somar ao próprio tempo medido."""
-    if not configurado():
+    import sys
+    if not configurado() or sys.platform == "darwin":  # teste no Mac não é clique do Cloud
         return
     from sqlalchemy import text
     try:

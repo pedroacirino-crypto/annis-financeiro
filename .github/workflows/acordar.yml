@@ -10,6 +10,9 @@
 # gera trabalho extra no banco. Repositório público: os minutos são grátis.
 name: Manter o painel acordado
 
+# Quem dispara de verdade é o pg_cron do Supabase (job annis-acordar, em
+# avisos/avisos.sql): no primeiro dia o agendador do GitHub rodou uma vez em
+# vez de seis. O schedule abaixo fica de reserva.
 on:
   schedule:
     - cron: "17 */2 * * *"

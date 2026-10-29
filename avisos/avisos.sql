@@ -638,3 +638,6 @@ select cron.schedule('annis-fechamento', '0 2 * * *', 'select avisos.fechamento(
 select cron.schedule('annis-envios', '5 15 * * 1-5', 'select avisos.disparar_envios()');
 -- 9h, 17h e 20h de Brasília, de segunda a sábado: a postagem aparece nos Correios ao longo do dia.
 select cron.schedule('annis-baixa', '0 12,20,23 * * 1-6', 'select avisos.disparar_baixa()');
+-- Visita ao painel a cada 2 horas (acordar.yml), 29/10/2026: o agendador do
+-- GitHub pulou quase todas as execuções do primeiro dia; o pg_cron não pula.
+select cron.schedule('annis-acordar', '17 */2 * * *', 'select avisos.disparar_workflow(''acordar.yml'', null)');
