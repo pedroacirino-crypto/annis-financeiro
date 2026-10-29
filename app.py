@@ -4229,6 +4229,10 @@ if "Inteligência" in abas:
         st.caption("O bloco está nas peças desde 18/10 e a página no menu desde 26/10. Peça vendida conta "
                    "pela etiqueta que o site põe na linha do pedido desde 26/10; antes disso só há a "
                    "adição à sacola.")
+        st.caption(f"Clique nas peças (marcado desde 29/10): no bloco, {_cb.get('clicou_bloco', 0)} pessoas "
+                   f"clicaram e {_cb.get('add_clique_bloco', 0)} peças foram para a sacola na página da peça; "
+                   f"na página Combinações, {_cb.get('clicou_pagina', 0)} clicaram e "
+                   f"{_cb.get('add_clique_pagina', 0)} peças foram para a sacola.")
         if not _cb_add.empty:
             tabela(_cb_add, titulo="Peças postas na sacola por combinação")
         if _vend:

@@ -47,12 +47,12 @@
             {%- for k in (1..2) -%}
               {%- if k == 1 -%}{%- assign p = p1 -%}{%- else -%}{%- assign p = p2 -%}{%- endif -%}
               <form class="annis-look__peca" data-annis-combina>
-                <a href="{{ p.url }}" class="annis-look__peca-foto">
+                <a href="{{ p.url }}?origem=combinacoes" class="annis-look__peca-foto">
                   {%- if p.featured_image -%}
                     {{ p.featured_image | image_url: width: 500 | image_tag: loading: 'lazy', widths: '250, 400, 500', sizes: '(min-width: 750px) 14vw, 45vw', alt: p.title }}
                   {%- endif -%}
                 </a>
-                <a href="{{ p.url }}" class="annis-look__peca-nome">{{ p.title }}</a>
+                <a href="{{ p.url }}?origem=combinacoes" class="annis-look__peca-nome">{{ p.title }}</a>
                 <span class="annis-look__peca-preco">{{ p.price | money }}</span>
                 {%- assign disponiveis = p.variants | where: 'available' -%}
                 {%- if p.has_only_default_variant or disponiveis.size == 1 -%}
@@ -86,7 +86,7 @@
       {%- for p in combina -%}{%- if p.available -%}{%- assign ha = ha | plus: 1 -%}{%- endif -%}{%- endfor -%}
       {%- if principal.available and ha > 0 -%}
       <section class="annis-combinacoes__bloco" id="{{ principal.handle }}">
-        <a class="annis-combinacoes__principal" href="{{ principal.url }}">
+        <a class="annis-combinacoes__principal" href="{{ principal.url }}?origem=combinacoes">
           <span class="annis-combinacoes__foto">
             {%- if principal.featured_image -%}
               {{ principal.featured_image | image_url: width: 900 | image_tag: loading: 'lazy', widths: '450, 700, 900', sizes: '(min-width: 750px) 30vw, 90vw', alt: principal.title }}
@@ -101,12 +101,12 @@
             {%- for p in combina -%}
               {%- unless p.available -%}{%- continue -%}{%- endunless -%}
               <article class="annis-combina__card">
-                <a href="{{ p.url }}" class="annis-combina__foto">
+                <a href="{{ p.url }}?origem=combinacoes" class="annis-combina__foto">
                   {%- if p.featured_image -%}
                     {{ p.featured_image | image_url: width: 600 | image_tag: loading: 'lazy', widths: '300, 450, 600', sizes: '(min-width: 750px) 18vw, 60vw', alt: p.title }}
                   {%- endif -%}
                 </a>
-                <a href="{{ p.url }}" class="annis-combina__nome">{{ p.title }}</a>
+                <a href="{{ p.url }}?origem=combinacoes" class="annis-combina__nome">{{ p.title }}</a>
                 <p class="annis-combina__preco">{{ p.price | money }}</p>
                 <form class="annis-combina__compra" data-annis-combina>
                   {%- assign disponiveis = p.variants | where: 'available' -%}

@@ -415,7 +415,8 @@ def _handle(pagina) -> str:
 def combinacoes(ev: pd.DataFrame, titulos: dict, vendidas: list) -> tuple:
     """(números, adições): números para os cartões, adições uma por linha."""
     vazio = {"viram_bloco": 0, "add_bloco": 0, "viram_pagina": 0, "add_pagina": 0,
-             "vendidas": 0, "receita": 0.0, "add_total": 0}
+             "vendidas": 0, "receita": 0.0, "add_total": 0,
+             "clicou_bloco": 0, "add_clique_bloco": 0, "clicou_pagina": 0, "add_clique_pagina": 0}
     if ev.empty:
         return vazio, pd.DataFrame()
     e = ev.copy()
@@ -427,11 +428,27 @@ def combinacoes(ev: pd.DataFrame, titulos: dict, vendidas: list) -> tuple:
     add["da_pagina"] = add.handle.map(lambda h: titulos.get(h, ("", False))[0])
     pelo_bloco = add[add.handle.isin(com_bloco) & (add.produto != add.da_pagina)]
     pela_pagina = add[add.pagina.fillna("").str.startswith(PAGINA_COMBINACOES)]
+    # Desde 29/10 os links das peças no bloco e na página levam ?origem=bloco ou
+    # ?origem=combinacoes. Quem clicou e pôs a peça na sacola já na página dela
+    # conta aqui; o endereço perde a marca quando ela escolhe o tamanho, por
+    # isso o casamento é pela pessoa e pela peça, não pela marca na adição.
+    cliques = e[(e.evento == "page_viewed") & e.handle.ne("")
+                & e.busca.fillna("").str.contains(r"origem=(?:bloco|combinacoes)")].copy()
+    cliques["de"] = cliques.busca.str.contains("origem=bloco").map({True: "bloco", False: "pagina"})
+    primeiro = cliques.groupby(["visitante", "handle"]).agg(clique=("em", "min"), de=("de", "first"))
+    depois = add.join(primeiro, on=["visitante", "handle"], how="inner")
+    depois = depois[depois.em >= depois.clique]
     n = dict(vazio, viram_bloco=vistas.visitante.nunique(), add_bloco=len(pelo_bloco),
              viram_pagina=pag.visitante.nunique(), add_pagina=len(pela_pagina), add_total=len(add),
-             vendidas=sum(v["qtd"] for v in vendidas), receita=sum(v["valor"] for v in vendidas))
+             vendidas=sum(v["qtd"] for v in vendidas), receita=sum(v["valor"] for v in vendidas),
+             clicou_bloco=cliques[cliques.de == "bloco"].visitante.nunique(),
+             add_clique_bloco=int((depois.de == "bloco").sum()),
+             clicou_pagina=cliques[cliques.de == "pagina"].visitante.nunique(),
+             add_clique_pagina=int((depois.de == "pagina").sum()))
     linhas = pd.concat([pelo_bloco.assign(Onde="Bloco na página de " + pelo_bloco.da_pagina),
-                        pela_pagina.assign(Onde="Página Combinações")])
+                        pela_pagina.assign(Onde="Página Combinações"),
+                        depois.assign(Onde=depois.de.map({"bloco": "Clicou no bloco e pôs na página da peça",
+                                                          "pagina": "Clicou na página Combinações e pôs na página da peça"}))])
     if linhas.empty:
         return n, pd.DataFrame()
     linhas = linhas.sort_values("em", ascending=False)

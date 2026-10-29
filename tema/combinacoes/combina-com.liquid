@@ -42,12 +42,12 @@
             {%- if p.type == 'Bolsa' or p.type == 'Cinto' -%}{%- assign e_grupo = 'acessorios' -%}{%- else -%}{%- assign e_grupo = 'roupas' -%}{%- endif -%}
             {%- if e_grupo != grupo -%}{%- continue -%}{%- endif -%}
             <article class="annis-combina__card">
-              <a href="{{ p.url }}" class="annis-combina__foto">
+              <a href="{{ p.url }}?origem=bloco" class="annis-combina__foto">
                 {%- if p.featured_image -%}
                   {{ p.featured_image | image_url: width: 400 | image_tag: loading: 'lazy', widths: '200, 300, 400', sizes: '(min-width: 750px) 160px, 40vw', alt: p.title }}
                 {%- endif -%}
               </a>
-              <a href="{{ p.url }}" class="annis-combina__nome">{{ p.title }}</a>
+              <a href="{{ p.url }}?origem=bloco" class="annis-combina__nome">{{ p.title }}</a>
               <p class="annis-combina__preco">{{ p.price | money }}</p>
               <form class="annis-combina__compra" data-annis-combina>
                 {%- assign disponiveis = p.variants | where: 'available' -%}
