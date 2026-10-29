@@ -240,7 +240,7 @@ e9:
 cashback:
   cb1:
     assunto: "Você ganhou R$ {valor} para usar na Annis"
-    previa: "Seu código vale até {validade}, em compras a partir de R$ {minimo}."
+    previa: "Seu código vale até {validade}, em compras com pelo menos R$ {minimo} em peças fora da sale."
     faixa: "Novembro Annis · cashback"
     eyebrow: "Cashback"
     titulo: "R$ {valor} para a sua próxima compra"
@@ -248,7 +248,7 @@ cashback:
       - "Oi, {nome}. Pela sua compra no Novembro Annis, você ganhou R$ {valor} de cashback. É só usar o código abaixo numa próxima compra no site, até {validade}."
     regras:
       - "Vale em qualquer peça fora da sale, inclusive nos lançamentos."
-      - "Vale em compras a partir de R$ {minimo}."
+      - "Para usar, a compra precisa ter pelo menos R$ {minimo} em peças fora da sale. O cashback cobre até 30% do valor dessas peças."
       - "Só no site."
     botao: "Escolher minha próxima peça"
   cb2:
@@ -260,7 +260,7 @@ cashback:
     texto:
       - "Oi, {nome}. Seu cashback de R$ {valor} ainda não foi usado. Ele vale até {validade}, em qualquer peça fora da sale."
     regras:
-      - "Vale em compras a partir de R$ {minimo}."
+      - "Para usar, a compra precisa ter pelo menos R$ {minimo} em peças fora da sale. O cashback cobre até 30% do valor dessas peças."
       - "Só no site."
     botao: "Ver a loja"
   cb3:
@@ -272,7 +272,7 @@ cashback:
     texto:
       - "Oi, {nome}. Se ainda falta algum presente, seu cashback de R$ {valor} vale em qualquer peça fora da sale, até {validade}."
     regras:
-      - "Vale em compras a partir de R$ {minimo}."
+      - "Para usar, a compra precisa ter pelo menos R$ {minimo} em peças fora da sale. O cashback cobre até 30% do valor dessas peças."
       - "Só no site."
     botao: "Ver a loja"
   cb4:
@@ -284,7 +284,8 @@ cashback:
     texto:
       - "Oi, {nome}. Seu cashback de R$ {valor} vale até {validade}. Depois disso, o código deixa de funcionar."
     regras:
-      - "Vale em qualquer peça fora da sale, em compras a partir de R$ {minimo}."
+      - "Vale em qualquer peça fora da sale."
+      - "Para usar, a compra precisa ter pelo menos R$ {minimo} em peças fora da sale. O cashback cobre até 30% do valor dessas peças."
       - "Só no site."
     botao: "Ver a loja"
   cb5:
@@ -296,7 +297,8 @@ cashback:
     texto:
       - "Oi, {nome}. Seus R$ {valor} de cashback vencem em {validade}. Se quiser usar, é só aplicar o código na sua compra."
     regras:
-      - "Vale em qualquer peça fora da sale, em compras a partir de R$ {minimo}."
+      - "Vale em qualquer peça fora da sale."
+      - "Para usar, a compra precisa ter pelo menos R$ {minimo} em peças fora da sale. O cashback cobre até 30% do valor dessas peças."
     botao: "Ver a loja"
   cb6:
     assunto: "Seu cashback foi cancelado"
@@ -317,7 +319,7 @@ cashback:
       - "Oi, {nome}. Na sua última compra você usou parte do seu cashback. O que sobrou está neste novo código, que vale até {validade}."
     regras:
       - "Vale em qualquer peça fora da sale, inclusive nos lançamentos."
-      - "Vale em compras a partir de R$ {minimo}."
+      - "Para usar, a compra precisa ter pelo menos R$ {minimo} em peças fora da sale. O cashback cobre até 30% do valor dessas peças."
       - "Só no site."
     botao: "Ver a loja"
   rotulo_codigo: "Seu código"
