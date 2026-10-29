@@ -469,18 +469,28 @@ def _confere_desligamento(fase):
     return ativo, "Desligamento agendado para 30/11 às 23h59"
 
 
+def _respondeu(r):
+    return "" if r.status_code == 200 else f" (a loja respondeu {r.status_code})"
+
+
 def _confere_filtro(fase):
-    aparece = 'value="Novembro Annis"' in _pagina("/collections/all").text
+    r = _pagina("/collections/all")
+    aparece = 'value="Novembro Annis"' in r.text
     if fase == "aplicar":
-        return aparece, f"Filtro Coleção do site mostra {COLECAO_SALE}"
-    return not aparece, f"Filtro Coleção do site sem {COLECAO_SALE}"
+        return r.status_code == 200 and aparece, f"Filtro Coleção do site mostra {COLECAO_SALE}" + _respondeu(r)
+    return r.status_code == 200 and not aparece, f"Filtro Coleção do site sem {COLECAO_SALE}" + _respondeu(r)
 
 
 def _confere_vitrine(fase):
     import re
     r = _pagina("/collections/novembro-annis")
     if fase == "aplicar":
-        return r.status_code == 200 and bool(re.search(r"\d+% off", r.text)), "Página da coleção com o % off nas peças"
+        # algumas peças já tinham preço riscado antes da campanha e a chamada do topo diz "até 40% off":
+        # procura o maior desconto da sale no selo de um card
+        maior = max(round((1 - float(x["preco_sale"]) / float(x["riscado_sale"])) * 100) for x in _precos())
+        selo = rf'product-badges__badge[^>]*>\s*(?:at\S+ )?{maior}% off'
+        return (r.status_code == 200 and bool(re.search(selo, r.text)),
+                f"Página da coleção com o % off nas peças (até {maior}%)" + _respondeu(r))
     return r.status_code == 404, "Página da coleção fora do ar"
 
 
