@@ -1,0 +1,209 @@
+"""Novembro Annis 2026 na Shopify: liga e desliga a sale, 29/10/2026.
+
+    python campanha/novembro.py preparar [--simular]   tags, coleções e desconto simbólico agendado
+    python campanha/novembro.py aplicar  [--simular]   preços da sale e cupons só fora da sale
+    python campanha/novembro.py reverter [--simular]   preços e cupons como estavam
+    python campanha/novembro.py status
+
+O preço de cada variante vem de campanha.sale_precos, congelado por
+campanha/modelo_sale.py no Mac. Quem roda "aplicar" à meia-noite de 01/11 e
+"reverter" às 23h59 de 30/11 é o workflow campanha.yml, disparado pelo pg_cron
+do Supabase (ver campanha/campanha.sql).
+
+Frete grátis (ideia do Pedro, 29/10): as peças da sale ganham um desconto
+automático de R$ 0,01, "Novembro Annis". O FRETEGRATIS não soma com desconto
+de produto, e a Shopify dá prioridade ao desconto de produto: carrinho com peça
+da sale fica sem frete grátis, inclusive o misto.
+
+Cupons de influenciadora e pessoais valiam em todo o site e não somam com
+desconto de produto. Pela regra de melhor desconto da Shopify eles ganhariam do
+R$ 0,01, entrariam nas peças da sale e devolveriam o frete grátis. No período
+eles passam a valer só na coleção Fora da sale e a somar com desconto de
+produto; o estado anterior fica em campanha.cupons_antes para o reverter.
+"""
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import nuvem  # noqa: E402
+import shopify_client  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+
+TAG = "sale-novembro"
+COLECAO_SALE = "Sale Novembro Annis"
+COLECAO_FORA = "Fora da sale"
+DESCONTO_SIMBOLICO = "Novembro Annis"
+INICIO = "2026-11-01T03:00:00Z"   # 00h de 01/11 em Brasília
+FIM = "2026-12-01T02:59:59Z"      # 23h59min59s de 30/11 em Brasília
+NAO_MEXER = {"FRETEGRATIS"}       # cupom de frete; cashback começa com CB
+
+
+def _g(q, v=None):
+    return shopify_client._graphql(q, v or {})
+
+
+def _erros(r, chave):
+    if r[chave].get("userErrors"):
+        raise RuntimeError(f"Shopify {chave}: {r[chave]['userErrors']}")
+    return r[chave]
+
+
+def _precos():
+    with nuvem._conectar().connect() as con:
+        return [dict(r) for r in con.execute(text("select * from campanha.sale_precos order by produto, tamanho")).mappings()]
+
+
+def _colecao(titulo):
+    d = _g('query($q:String!){collections(first:5, query:$q){nodes{id title}}}', {"q": f'title:"{titulo}"'})
+    return next((c["id"] for c in d["collections"]["nodes"] if c["title"] == titulo), None)
+
+
+# ── preparar ─────────────────────────────────────────────────────────────────
+
+def preparar(simular):
+    linhas = _precos()
+    produtos = sorted({r["produto_id"] for r in linhas})
+    print(f"{len(produtos)} produtos recebem a tag {TAG}")
+    if not simular:
+        for pid in produtos:
+            _erros(_g('mutation($id:ID!,$t:[String!]!){tagsAdd(id:$id, tags:$t){userErrors{message}}}',
+                      {"id": pid, "t": [TAG]}), "tagsAdd")
+
+    regras = {COLECAO_SALE: "EQUALS", COLECAO_FORA: "NOT_EQUALS"}
+    ids = {}
+    for titulo, relacao in regras.items():
+        ids[titulo] = _colecao(titulo)
+        if ids[titulo]:
+            print(f"coleção {titulo} já existe")
+            continue
+        print(f"cria coleção {titulo} (tag {relacao} {TAG})")
+        if not simular:
+            r = _erros(_g('mutation($c:CollectionInput!){collectionCreate(input:$c){collection{id} userErrors{message}}}',
+                          {"c": {"title": titulo, "ruleSet": {"appliedDisjunctively": False, "rules": [
+                              {"column": "TAG", "relation": relacao, "condition": TAG}]}}}), "collectionCreate")
+            ids[titulo] = r["collection"]["id"]
+
+    existe = _g('query($q:String!){automaticDiscountNodes(first:5, query:$q){nodes{id automaticDiscount{... on DiscountAutomaticBasic{title}}}}}',
+                {"q": f'title:"{DESCONTO_SIMBOLICO}"'})["automaticDiscountNodes"]["nodes"]
+    if any((n["automaticDiscount"] or {}).get("title") == DESCONTO_SIMBOLICO for n in existe):
+        print(f"desconto {DESCONTO_SIMBOLICO} já existe")
+    else:
+        print(f"cria desconto automático {DESCONTO_SIMBOLICO}: R$ 0,01 por peça da sale, de {INICIO} a {FIM}")
+        if not simular:
+            _erros(_g('''mutation($d:DiscountAutomaticBasicInput!){discountAutomaticBasicCreate(automaticBasicDiscount:$d){
+                automaticDiscountNode{id} userErrors{field message}}}''', {"d": {
+                "title": DESCONTO_SIMBOLICO, "startsAt": INICIO, "endsAt": FIM,
+                "combinesWith": {"productDiscounts": True, "orderDiscounts": True, "shippingDiscounts": False},
+                "customerGets": {"value": {"discountAmount": {"amount": "0.01", "appliesOnEachItem": True}},
+                                 "items": {"collections": {"add": [ids[COLECAO_SALE]]}}}}}), "discountAutomaticBasicCreate")
+
+
+# ── preços ───────────────────────────────────────────────────────────────────
+
+def _atualizar_precos(linhas, chave_preco, chave_riscado, simular):
+    por_produto = {}
+    for r in linhas:
+        por_produto.setdefault(r["produto_id"], []).append(r)
+    for pid, rs in por_produto.items():
+        variantes = [{"id": r["variante_id"], "price": f"{float(r[chave_preco]):.2f}",
+                      "compareAtPrice": f"{float(r[chave_riscado]):.2f}" if r[chave_riscado] is not None else None}
+                     for r in rs]
+        print(f"  {rs[0]['produto']}: " + ", ".join(f"{r['tamanho']} {float(r[chave_preco]):.0f}" for r in rs))
+        if not simular:
+            _erros(_g('''mutation($p:ID!,$v:[ProductVariantsBulkInput!]!){productVariantsBulkUpdate(productId:$p, variants:$v){
+                userErrors{field message}}}''', {"p": pid, "v": variantes}), "productVariantsBulkUpdate")
+
+
+# ── cupons ───────────────────────────────────────────────────────────────────
+
+_CUPONS = '''query($c:String){codeDiscountNodes(first:100, after:$c, query:"status:active"){pageInfo{hasNextPage endCursor}
+  nodes{id codeDiscount{__typename ... on DiscountCodeBasic{title codes(first:1){nodes{code}}
+    combinesWith{productDiscounts orderDiscounts shippingDiscounts}
+    customerGets{items{__typename ... on DiscountCollections{collections(first:10){nodes{id}}}}}}}}}}'''
+
+
+def _cupons():
+    saida, c = [], None
+    while True:
+        d = _g(_CUPONS, {"c": c})["codeDiscountNodes"]
+        saida += [n for n in d["nodes"] if n["codeDiscount"]["__typename"] == "DiscountCodeBasic"]
+        if not d["pageInfo"]["hasNextPage"]:
+            return saida
+        c = d["pageInfo"]["endCursor"]
+
+
+_ATUALIZA_CUPOM = '''mutation($id:ID!,$d:DiscountCodeBasicInput!){discountCodeBasicUpdate(id:$id, basicCodeDiscount:$d){
+  codeDiscountNode{id} userErrors{field message}}}'''
+
+
+def cupons_fora_da_sale(simular):
+    fora = _colecao(COLECAO_FORA)
+    if not fora:
+        raise SystemExit("coleção Fora da sale não existe: rodar preparar")
+    for n in _cupons():
+        cd = n["codeDiscount"]
+        codigo = cd["codes"]["nodes"][0]["code"] if cd["codes"]["nodes"] else cd["title"]
+        if codigo in NAO_MEXER or codigo.startswith("CB"):
+            continue
+        print(f"  {codigo}: passa a valer só em {COLECAO_FORA} e a somar com desconto de produto")
+        if simular:
+            continue
+        with nuvem._conectar().begin() as con:
+            con.execute(text("insert into campanha.cupons_antes (cupom_id, codigo, estado) values (:i, :c, :e)"
+                             " on conflict (cupom_id) do nothing"),
+                        {"i": n["id"], "c": codigo, "e": json.dumps(cd)})
+        _erros(_g(_ATUALIZA_CUPOM, {"id": n["id"], "d": {
+            "customerGets": {"items": {"collections": {"add": [fora]}}},
+            "combinesWith": {**cd["combinesWith"], "productDiscounts": True}}}), "discountCodeBasicUpdate")
+
+
+def cupons_voltar(simular):
+    with nuvem._conectar().connect() as con:
+        antes = [dict(r) for r in con.execute(text("select * from campanha.cupons_antes")).mappings()]
+    for a in antes:
+        estado = a["estado"] if isinstance(a["estado"], dict) else json.loads(a["estado"])
+        print(f"  {a['codigo']}: volta a valer em todo o site")
+        if simular:
+            continue
+        itens = estado["customerGets"]["items"]
+        alvo = {"all": True} if itens["__typename"] == "AllDiscountItems" else \
+            {"collections": {"add": [c["id"] for c in itens["collections"]["nodes"]]}}
+        _erros(_g(_ATUALIZA_CUPOM, {"id": a["cupom_id"], "d": {
+            "customerGets": {"items": alvo}, "combinesWith": estado["combinesWith"]}}), "discountCodeBasicUpdate")
+        with nuvem._conectar().begin() as con:
+            con.execute(text("delete from campanha.cupons_antes where cupom_id = :i"), {"i": a["cupom_id"]})
+
+
+# ── comandos ─────────────────────────────────────────────────────────────────
+
+def aplicar(simular):
+    print("preços da sale:")
+    _atualizar_precos(_precos(), "preco_sale", "riscado_sale", simular)
+    print("cupons:")
+    cupons_fora_da_sale(simular)
+
+
+def reverter(simular):
+    print("preços de antes:")
+    _atualizar_precos(_precos(), "preco_antes", "riscado_antes", simular)
+    print("cupons:")
+    cupons_voltar(simular)
+
+
+def status():
+    linhas = _precos()
+    ids = [r["variante_id"] for r in linhas]
+    d = _g('query($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{id price compareAtPrice}}}', {"ids": ids})
+    atual = {n["id"]: n for n in d["nodes"] if n}
+    na_sale = sum(1 for r in linhas if float(atual[r["variante_id"]]["price"]) == float(r["preco_sale"]))
+    print(f"{na_sale} de {len(linhas)} variantes com o preço da sale")
+    print("coleções:", {t: bool(_colecao(t)) for t in (COLECAO_SALE, COLECAO_FORA)})
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    simular = "--simular" in sys.argv
+    {"preparar": preparar, "aplicar": aplicar, "reverter": reverter}.get(cmd, lambda s: status())(simular)

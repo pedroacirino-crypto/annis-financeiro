@@ -1,0 +1,75 @@
+# Novembro Annis 2026: liga a sale à 00h de 01/11 e desliga às 23h59 de 30/11.
+#
+# Sem agendamento aqui (o do GitHub atrasa horas): quem dispara é o pg_cron do
+# Supabase (campanha/campanha.sql). A trava de data abaixo impede que um
+# disparo fora de hora (o pg_cron repete o cron todo ano) mexa nos preços.
+name: Campanha Novembro Annis
+
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "aplicar, reverter ou status"
+        required: true
+        default: "status"
+      forcar:
+        description: "Rodar fora da data prevista (sim/nao)"
+        required: false
+        default: "nao"
+
+concurrency:
+  group: campanha
+  cancel-in-progress: false
+
+jobs:
+  campanha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar
+        run: pip install --quiet requests sqlalchemy psycopg2-binary
+
+      - name: Conferir a data
+        env:
+          ACAO: ${{ inputs.acao }}
+          FORCAR: ${{ inputs.forcar }}
+        run: |
+          hoje=$(TZ=America/Sao_Paulo date +%Y-%m-%d)
+          if [ "$FORCAR" != "sim" ]; then
+            if [ "$ACAO" = "aplicar" ] && [ "$hoje" != "2026-11-01" ] && [ "$hoje" != "2026-10-31" ]; then echo "fora da data ($hoje)"; exit 1; fi
+            if [ "$ACAO" = "reverter" ] && [ "$hoje" != "2026-11-30" ] && [ "$hoje" != "2026-12-01" ]; then echo "fora da data ($hoje)"; exit 1; fi
+          fi
+
+      - name: Rodar
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+        run: |
+          python campanha/novembro.py ${{ inputs.acao }}
+          python campanha/novembro.py status | tee status.txt
+
+      - name: Avisar no grupo
+        if: always() && inputs.acao != 'status'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACAO: ${{ inputs.acao }}
+          RESULTADO: ${{ job.status }}
+          LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$RESULTADO" = "success" ]; then
+            texto="Novembro Annis: ${ACAO} feito. $(head -1 status.txt 2>/dev/null)"
+          else
+            texto="Novembro Annis: ${ACAO} deu ERRO, conferir já. Detalhe: ${LINK}"
+          fi
+          curl -s -o /dev/null --retry 3 --connect-timeout 10 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=${texto}"
