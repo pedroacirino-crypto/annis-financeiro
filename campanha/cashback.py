@@ -11,6 +11,9 @@ Regras (Pedro, 29/10):
     para conviver com o R$ 0,01 da sale no carrinho misto.
   - Devolução: reembolso total cancela o código; parcial recalcula o crédito
     na proporção do que ficou. Crédito já usado só fica registrado.
+  - Saldo (Pedro, 29/10): se a compra usar menos do que o valor do código, um
+    código novo nasce com o que sobrou, mesma validade e regras, até zerar.
+    Fica como pedido "#1160-2", "#1160-3"... e a cliente recebe o e-mail cb7.
 
     python campanha/cashback.py            gera, confere devolução, uso e vencimento
     python campanha/cashback.py --simular  só mostra
@@ -181,8 +184,33 @@ def devolucoes(simular):
                     _atualizar(c["pedido"], valor=novo)
 
 
+def _descontado(pedido_id, codigo) -> float:
+    """Quanto o código descontou de fato no pedido (soma das alocações nas linhas)."""
+    d = _g("""query($id:ID!){order(id:$id){lineItems(first:50){nodes{discountAllocations{
+        allocatedAmountSet{shopMoney{amount}} discountApplication{... on DiscountCodeApplication{code}}}}}}}""",
+           {"id": pedido_id})
+    return round(sum(float(a["allocatedAmountSet"]["shopMoney"]["amount"])
+                     for li in d["order"]["lineItems"]["nodes"] for a in li["discountAllocations"]
+                     if (a["discountApplication"] or {}).get("code", "").upper() == codigo), 2)
+
+
+def _reemitir(c, sobra):
+    """Código novo com o saldo que sobrou, mesma validade."""
+    raiz = c["pedido"].split("-")[0]
+    n = 2 + sum(1 for p in _ja_tem() if p.startswith(raiz + "-"))
+    codigo, desc_id = _criar_codigo(f"{raiz}-{n}", sobra, _colecao_fora(), c["vence_em"])
+    with nuvem._conectar().begin() as con:
+        con.execute(text(
+            "insert into campanha.cashback (pedido, pedido_id, cliente, email, base, valor, codigo, desconto_id, vence_em)"
+            " values (:p, :pid, :cl, :e, :b, :v, :c, :d, :vence)"),
+            {"p": f"{raiz}-{n}", "pid": c["pedido_id"], "cl": c["cliente"], "e": c["email"], "b": c["base"],
+             "v": sobra, "c": codigo, "d": desc_id, "vence": c["vence_em"]})
+    return f"{raiz}-{n}", codigo
+
+
 def usos(simular):
-    """Código que aparece num pedido pago vira "usado", ligado ao pedido."""
+    """Código que aparece num pedido pago vira "usado", ligado ao pedido; se
+    sobrou saldo, nasce um código novo com o restante."""
     ativos = {c["codigo"]: c for c in _ja_tem().values() if c["situacao"] == "ativo"}
     if not ativos:
         return
@@ -191,10 +219,17 @@ def usos(simular):
     for o in _pedidos(f"created_at:>={INICIO}"):
         for cod in o["discountCodes"] or []:
             c = ativos.get(cod.upper())
-            if c and not o["test"] and not o["cancelledAt"]:
-                print(f"{c['codigo']} ({c['pedido']}) usado em {o['name']}")
-                if not simular:
-                    _atualizar(c["pedido"], situacao="usado", usado_em=o["createdAt"], pedido_uso=o["name"])
+            if not c or o["test"] or o["cancelledAt"]:
+                continue
+            usado = _descontado(o["id"], c["codigo"])
+            sobra = int(math.floor(float(c["valor"]) - usado + 1e-9))
+            print(f"{c['codigo']} ({c['pedido']}) usado em {o['name']}: R$ {usado:.2f}" + (f", sobra R$ {sobra}" if sobra >= 1 else ""))
+            if simular:
+                continue
+            _atualizar(c["pedido"], situacao="usado", usado_em=o["createdAt"], pedido_uso=o["name"])
+            if sobra >= 1:
+                novo, codigo = _reemitir(c, sobra)
+                print(f"  saldo de R$ {sobra} em {codigo} ({novo})")
 
 
 def vencimentos(simular):
@@ -232,13 +267,16 @@ def emails(simular):
     for c in creditos:
         num = c["pedido"].lstrip("#")
         fila = []
-        if f"cb:cb1:{num}" not in ja and c["situacao"] in ("ativo", "usado"):
+        reemitido = "-" in num
+        if reemitido and f"cb:cb7:{num}" not in ja and c["situacao"] == "ativo":
+            fila.append("cb7")  # saldo que sobrou de um uso parcial
+        elif not reemitido and f"cb:cb1:{num}" not in ja and c["situacao"] in ("ativo", "usado"):
             # Logo depois do e-mail de confirmação (régua e2); sem ele, 30 min após emitir.
             if any(k.startswith("regua:e2") and k.endswith(f":{num}") for k in ja) or agora - c["emitido_em"] > timedelta(minutes=30):
                 fila.append("cb1")
-        if c["situacao"] == "cancelado" and f"cb:cb1:{num}" in ja and f"cb:cb6:{num}" not in ja:
+        if c["situacao"] == "cancelado" and (f"cb:cb1:{num}" in ja or f"cb:cb7:{num}" in ja) and f"cb:cb6:{num}" not in ja:
             fila.append("cb6")
-        if c["situacao"] == "ativo" and f"cb:cb1:{num}" in ja and 9 <= hora_brt < 20:
+        if c["situacao"] == "ativo" and (f"cb:cb1:{num}" in ja or f"cb:cb7:{num}" in ja) and 9 <= hora_brt < 20:
             ultimo = ultimo_lembrete.get(c["email"])
             if not ultimo or agora - ultimo > timedelta(days=6):
                 devidos = [q for q in E.LEMBRETES if f"cb:{q}:{num}" not in ja and E.vencido_o_prazo(q, c, agora)]

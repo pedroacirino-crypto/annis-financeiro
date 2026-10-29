@@ -9,6 +9,7 @@ Textos em avisos/regua/textos.yaml (seção cashback). Quando sai cada um
   cb4  17/01, 15 dias antes de vencer
   cb5  29/01, 3 dias antes de vencer
   cb6  crédito cancelado por devolução (só para quem recebeu o cb1)
+  cb7  saldo que sobrou de um uso parcial, com o código novo
 
 Lembrete (cb2 a cb5) só das 9h às 20h e no máximo um por semana por e-mail.
 Enviado fica em avisos.enviados como "cb:<qual>:<número do pedido>".
@@ -87,7 +88,7 @@ def dados(c: dict) -> dict:
 
 def previa():
     exemplo = {"nome": "Michelle", "valor": "73", "codigo": "CB8YKSRS", "validade": "31/01", "minimo": 244, "pedido": "#1159"}
-    for qual in ("cb1", "cb2", "cb3", "cb4", "cb5", "cb6"):
+    for qual in ("cb1", "cb2", "cb3", "cb4", "cb5", "cb6", "cb7"):
         m = montar(qual, exemplo)
         gmail.enviar(CONTATO, f"[prévia cashback {qual}] {m['assunto']}", m["html"], m["texto"])
         print(f"{qual}: {m['assunto']}")
