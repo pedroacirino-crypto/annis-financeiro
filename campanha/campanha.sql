@@ -60,3 +60,8 @@ create table if not exists campanha.estado (
   chave text primary key,
   valor jsonb not null
 );
+
+-- Crédito usado e pedido de origem devolvido depois (Pedro, 29/10): quanto o
+-- código descontou de fato e quanto já foi avisado para sair do reembolso.
+alter table campanha.cashback add column if not exists valor_usado numeric;
+alter table campanha.cashback add column if not exists descontar numeric;

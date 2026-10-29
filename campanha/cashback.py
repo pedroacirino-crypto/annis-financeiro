@@ -10,7 +10,11 @@ Regras (Pedro, 29/10):
     até 30% da compra), vale até 31/01/2027 (data fixa, Pedro 29/10). Soma com desconto de produto
     para conviver com o R$ 0,01 da sale no carrinho misto.
   - Devolução: reembolso total cancela o código; parcial recalcula o crédito
-    na proporção do que ficou. Crédito já usado só fica registrado.
+    na proporção do que ficou. Se o crédito já foi usado (Pedro, 29/10), o
+    usado sai do reembolso do pedido de origem: em devolução total, tudo o
+    que foi usado; na parcial, só o que passar do crédito ajustado. O código
+    de saldo, se houver, cai primeiro. O aviso vai para o grupo no Telegram
+    quando o crédito é usado e de novo quando o pedido de origem é devolvido.
   - Saldo (Pedro, 29/10): se a compra usar menos do que o valor do código, um
     código novo nasce com o que sobrou, mesma validade e regras, até zerar.
     Fica como pedido "#1160-2", "#1160-3"... e a cliente recebe o e-mail cb7.
@@ -171,41 +175,84 @@ def _atualizar(pedido, **campos):
                     {**campos, "pedido": pedido})
 
 
+def _telegram(texto):
+    import requests
+    token, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        print(f"(sem Telegram aqui) {texto}")
+        return
+    requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                  data={"chat_id": chat, "text": texto}, timeout=20).raise_for_status()
+
+
+def _reais(v) -> str:
+    return f"R$ {float(v):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def acerto(devido: float, usado: float, ativo: float) -> tuple:
+    """Depois de devolução no pedido de origem: (quanto fica no código ativo,
+    quanto do que já foi usado sai do reembolso)."""
+    resta = max(0, int(math.floor(devido - usado + 1e-9)))
+    return min(resta, int(ativo)), round(max(0.0, usado - devido), 2)
+
+
 def devolucoes(simular):
-    """Reembolso total ou cancelamento derruba o código; parcial recalcula."""
-    ativos = [c for c in _ja_tem().values() if c["situacao"] == "ativo"]
-    if not ativos:
+    """Reembolso ou cancelamento do pedido de origem: o crédito cai para o que
+    ficou devido; do que já foi usado, o excesso sai do reembolso (aviso no grupo).
+    Olha a cadeia toda do pedido: o código original e os de saldo (#1160-2...)."""
+    cadeias = {}
+    for c in _ja_tem().values():
+        cadeias.setdefault(c["pedido_id"], []).append(c)
+    abertas = {pid: cs for pid, cs in cadeias.items() if any(c["situacao"] in ("ativo", "usado") for c in cs)}
+    if not abertas:
         return
     d = _g('query($ids:[ID!]!){nodes(ids:$ids){... on Order{id name cancelledAt displayFinancialStatus paymentGatewayNames currentSubtotalPriceSet{shopMoney{amount}}}}}',
-           {"ids": [c["pedido_id"] for c in ativos]})
+           {"ids": list(abertas)})
     por_id = {n["id"]: n for n in d["nodes"] if n}
-    for c in ativos:
-        o = por_id.get(c["pedido_id"])
+    for pid, cs in abertas.items():
+        o = por_id.get(pid)
         if not o:
             continue
         status = o["displayFinancialStatus"]
         if o["cancelledAt"] or status in ("REFUNDED", "VOIDED"):
-            print(f"{c['pedido']}: devolvido, cancela {c['codigo']}")
-            if not simular:
-                _g('mutation($id:ID!){discountCodeDeactivate(id:$id){userErrors{message}}}', {"id": c["desconto_id"]})
-                _atualizar(c["pedido"], situacao="cancelado", valor=0)
+            devido = 0
         elif status == "PARTIALLY_REFUNDED":
-            novo = credito_de(_base(o["currentSubtotalPriceSet"]["shopMoney"]["amount"], o["paymentGatewayNames"]))
-            if novo < float(c["valor"]):
-                print(f"{c['pedido']}: devolução parcial, crédito de R$ {float(c['valor']):.0f} para R$ {novo}")
-                if simular:
-                    continue
-                if novo < 1:
-                    _g('mutation($id:ID!){discountCodeDeactivate(id:$id){userErrors{message}}}', {"id": c["desconto_id"]})
-                    _atualizar(c["pedido"], situacao="cancelado", valor=0)
+            devido = credito_de(_base(o["currentSubtotalPriceSet"]["shopMoney"]["amount"], o["paymentGatewayNames"]))
+        else:
+            continue
+        raiz = next((c for c in cs if "-" not in c["pedido"]), cs[0])
+        devido = min(devido, credito_de(float(raiz["base"])))
+        usados = [c for c in cs if c["situacao"] == "usado"]
+        usado = sum(float(c["valor_usado"] or 0) for c in usados)
+        ativo = next((c for c in cs if c["situacao"] == "ativo"), None)
+        fica, descontar = acerto(devido, usado, float(ativo["valor"]) if ativo else 0)
+
+        if ativo and fica < float(ativo["valor"]):
+            print(f"{raiz['pedido']}: devolução, {ativo['codigo']} de R$ {float(ativo['valor']):.0f} para R$ {fica}")
+            if not simular:
+                if fica < 1:
+                    _g('mutation($id:ID!){discountCodeDeactivate(id:$id){userErrors{message}}}', {"id": ativo["desconto_id"]})
+                    _atualizar(ativo["pedido"], situacao="cancelado", valor=0)
                 else:
                     r = _g('''mutation($id:ID!,$d:DiscountCodeBasicInput!){discountCodeBasicUpdate(id:$id, basicCodeDiscount:$d){
-                        userErrors{message}}}''', {"id": c["desconto_id"], "d": {
-                        "customerGets": {"value": {"discountAmount": {"amount": f"{novo:.2f}", "appliesOnEachItem": False}}},
-                        "minimumRequirement": {"subtotal": {"greaterThanOrEqualToSubtotal": f"{minimo_de(novo):.2f}"}}}})
+                        userErrors{message}}}''', {"id": ativo["desconto_id"], "d": {
+                        "customerGets": {"value": {"discountAmount": {"amount": f"{fica:.2f}", "appliesOnEachItem": False}}},
+                        "minimumRequirement": {"subtotal": {"greaterThanOrEqualToSubtotal": f"{minimo_de(fica):.2f}"}}}})
                     if r["discountCodeBasicUpdate"]["userErrors"]:
                         raise RuntimeError(f"Shopify: {r['discountCodeBasicUpdate']['userErrors']}")
-                    _atualizar(c["pedido"], valor=novo)
+                    _atualizar(ativo["pedido"], valor=fica)
+
+        if descontar > float(raiz["descontar"] or 0) + 0.004:
+            onde = ", ".join(f"{c['pedido_uso']} ({_reais(c['valor_usado'] or 0)})" for c in usados)
+            msg = (f"Cashback: o pedido {raiz['pedido']} ({raiz['cliente'] or raiz['email']}) teve devolução, mas "
+                   f"{_reais(usado)} do cashback dele já foram usados em {onde}. "
+                   + (f"Ficou devido {_reais(devido)} de cashback. " if devido else "")
+                   + f"Pela regra, o reembolso de {raiz['pedido']} desconta {_reais(descontar)}. "
+                   "Conferir se o estorno saiu com esse desconto.")
+            print(msg)
+            if not simular:
+                _telegram(msg)
+                _atualizar(raiz["pedido"], descontar=descontar)
 
 
 def _descontado(pedido_id, codigo) -> float:
@@ -250,10 +297,16 @@ def usos(simular):
             print(f"{c['codigo']} ({c['pedido']}) usado em {o['name']}: R$ {usado:.2f}" + (f", sobra R$ {sobra}" if sobra >= 1 else ""))
             if simular:
                 continue
-            _atualizar(c["pedido"], situacao="usado", usado_em=o["createdAt"], pedido_uso=o["name"])
+            _atualizar(c["pedido"], situacao="usado", usado_em=o["createdAt"], pedido_uso=o["name"], valor_usado=usado)
+            raiz = c["pedido"].split("-")[0]
+            saldo = ""
             if sobra >= 1:
                 novo, codigo = _reemitir(c, sobra)
                 print(f"  saldo de R$ {sobra} em {codigo} ({novo})")
+                saldo = f" O saldo de R$ {sobra} virou o código {codigo}."
+            _telegram(f"Cashback: {_reais(usado)} do cashback do pedido {raiz} ({c['cliente'] or c['email']}) "
+                      f"foram usados no {o['name']}.{saldo} Se o {raiz} for devolvido, o valor usado sai do reembolso "
+                      "dele (em devolução parcial, só o que passar do cashback que ficar devido).")
 
 
 def vencimentos(simular):

@@ -314,6 +314,62 @@ def faixa_desligar(simular):
         con.execute(text("delete from campanha.estado where chave = 'faixa_antes'"))
 
 
+# ── home ─────────────────────────────────────────────────────────────────────
+# Na virada o primeiro bloco da Home (o hero em tela cheia, hoje da Monet) troca
+# para a arte do Novembro Annis e o clique leva para a coleção (Pedro, 29/10).
+# Sem HOME_ARTE a Home fica como está e o checklist acusa. Título e texto por
+# cima: None tira o bloco (a arte já traz o texto); senão, o que estiver aqui.
+
+HOME = "templates/index.json"
+HOME_HERO = "hero_iyt6zg"
+HOME_LINK = "/collections/novembro-annis"
+HOME_ARTE = None     # "shopify://shop_images/<arquivo>" quando a arte chegar
+HOME_TITULO = None   # imagem do título por cima da arte
+HOME_TEXTO = None    # texto por cima da arte (HTML do bloco de texto)
+
+
+def home_com_campanha(conteudo):
+    import re
+    import faixa
+    d = json.loads(faixa._sem_comentario(conteudo))
+    sec = d["sections"][HOME_HERO]
+    sec["settings"].update({"link": HOME_LINK, "image_1": HOME_ARTE})
+    for chave, b in list(sec.get("blocks", {}).items()):
+        novo = HOME_TITULO if b["type"] == "image" else HOME_TEXTO if b["type"] == "text" else ""
+        if novo is None:
+            del sec["blocks"][chave]
+            sec["block_order"].remove(chave)
+            continue
+        if b["type"] == "image":
+            b["settings"].update({"image": novo, "link": HOME_LINK})
+        elif b["type"] == "text":
+            b["settings"]["text"] = re.sub(r'(href|title)="[^"]*"', lambda m: f'{m.group(1)}="{HOME_LINK}"', novo)
+    return json.dumps(d, ensure_ascii=False, indent=2)
+
+
+def home_ligar(simular):
+    if not HOME_ARTE:
+        print("  home: arte ainda não chegou, fica como está")
+        return
+    print(f"  home: arte do Novembro Annis, clique para {HOME_LINK}")
+    if simular:
+        return
+    atual = _arquivo_tema(HOME)
+    if _estado("home_antes") is None:
+        _estado("home_antes", {"conteudo": atual})
+    _gravar_arquivo_tema(HOME, home_com_campanha(atual))
+
+
+def home_desligar(simular):
+    antes = _estado("home_antes")
+    print(f"  home volta como era ({'guardada' if antes else 'nada guardado'})")
+    if simular or not antes:
+        return
+    _gravar_arquivo_tema(HOME, antes["conteudo"])
+    with nuvem._conectar().begin() as con:
+        con.execute(text("delete from campanha.estado where chave = 'home_antes'"))
+
+
 def aplicar(simular):
     print("preços da sale:")
     _atualizar_precos(_precos(), "preco_sale", "riscado_sale", simular)
@@ -322,6 +378,7 @@ def aplicar(simular):
     print("vitrine:")
     vitrine_ligar(simular)
     faixa_ligar(simular)
+    home_ligar(simular)
 
 
 def reverter(simular):
@@ -332,6 +389,7 @@ def reverter(simular):
     print("vitrine:")
     vitrine_desligar(simular)
     faixa_desligar(simular)
+    home_desligar(simular)
 
 
 def status():
@@ -451,6 +509,16 @@ def _confere_faixa(fase):
     return faixa.RESSALVA not in atual and faixa.CASHBACK not in atual, "Faixa do topo como era antes"
 
 
+def _confere_home(fase):
+    import faixa
+    hero = json.loads(faixa._sem_comentario(_arquivo_tema(HOME)))["sections"][HOME_HERO]["settings"]
+    if fase == "aplicar":
+        if not HOME_ARTE:
+            return False, "Home nova: a arte ainda não chegou, ficou a Home de antes"
+        return hero.get("image_1") == HOME_ARTE and hero.get("link") == HOME_LINK, "Home nova, com o clique para a coleção"
+    return hero.get("link") != HOME_LINK, "Home como era antes"
+
+
 def _confere_cron(nome):
     with nuvem._conectar().connect() as con:
         ativo = con.execute(text("select active from cron.job where jobname = :n"), {"n": nome}).scalar()
@@ -496,10 +564,10 @@ def _confere_vitrine(fase):
 
 _ITENS = {
     "aplicar": [_confere_precos, _confere_frete_bloqueado, _confere_fretegratis, _confere_cupons, _confere_colecao,
-                _confere_menu, _confere_regulamento, _confere_faixa, _confere_vitrine, _confere_filtro,
+                _confere_menu, _confere_home, _confere_regulamento, _confere_faixa, _confere_vitrine, _confere_filtro,
                 _confere_cashback, _confere_desligamento],
     "reverter": [_confere_precos, _confere_frete_bloqueado, _confere_cupons, _confere_colecao, _confere_menu,
-                 _confere_faixa, _confere_vitrine, _confere_filtro, _confere_regulamento, _confere_cashback],
+                 _confere_home, _confere_faixa, _confere_vitrine, _confere_filtro, _confere_regulamento, _confere_cashback],
 }
 _DA_VITRINE = (_confere_vitrine, _confere_filtro)  # página pública: o cache da loja segura uns minutos
 
