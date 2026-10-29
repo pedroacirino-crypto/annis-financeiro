@@ -702,12 +702,16 @@ def ler_aparelhos() -> List[dict]:
         return []
 
 
-# ─── Plano do mês: o que foi combinado fazer, e o que já foi feito ─────────
+# ─── Plano: o que foi combinado fazer, e o que já foi feito ─────────────────
 #
 # O texto do plano mora na nuvem, não no código: o repositório é público e o
 # plano tem meta, verba e número de cliente. Entra por `carga.py plano`. A
 # marcação de feito fica na mesma linha, para o plano e o andamento nunca se
 # separarem.
+#
+# Lista contínua desde 29/10/2026 (Pedro não queria uma aba por mês, porque
+# pendência ficava para trás na virada). `mes` segue gravado só para dar ano
+# aos prazos "16/10"; a ordem da tela vem de `criado_em`.
 
 TABELA_PLANO = "plano_do_mes"
 
@@ -736,26 +740,28 @@ def garantir_plano() -> None:
                 feito_em  TIMESTAMPTZ
             )
         """))
+        con.execute(text(f"ALTER TABLE {TABELA_PLANO}"
+                         f" ADD COLUMN IF NOT EXISTS criado_em TIMESTAMPTZ NOT NULL DEFAULT now()"))
     _plano_garantido = True
 
 
-def salvar_plano(mes: str, frentes: list) -> int:
-    """Grava o plano de um mês. Recarregar o mesmo mês atualiza texto e prazo
-    e preserva o que já foi marcado como feito; item que saiu do arquivo sai
-    da tabela."""
+def salvar_plano(frentes: list) -> int:
+    """Grava o plano inteiro. O id do item é "AAAA-MM:x", com o mês em que ele
+    entrou. Recarregar atualiza texto e prazo e preserva o feito e a data de
+    entrada; item que saiu do arquivo sai da tabela."""
     from sqlalchemy import text
     garantir_plano()
     linhas, ordem = [], 0
     for f in frentes:
         for it in f["itens"]:
             ordem += 1
-            linhas.append({"id": f"{mes}:{it['id']}", "mes": mes, "ordem": ordem,
+            linhas.append({"id": it["id"], "mes": it["id"].split(":")[0], "ordem": ordem,
                            "frente": f["frente"], "alvo": f.get("alvo", ""),
                            "texto": it["texto"], "prazo": it.get("prazo", ""),
                            "feito": bool(it.get("feito"))})
     with _conectar().begin() as con:
-        con.execute(text(f"DELETE FROM {TABELA_PLANO} WHERE mes = :mes AND NOT (id = ANY(:ids))"),
-                    {"mes": mes, "ids": [l["id"] for l in linhas]})
+        con.execute(text(f"DELETE FROM {TABELA_PLANO} WHERE NOT (id = ANY(:ids))"),
+                    {"ids": [l["id"] for l in linhas]})
         for l in linhas:
             con.execute(text(
                 f"INSERT INTO {TABELA_PLANO} (id, mes, ordem, frente, alvo, texto, prazo, feito_em)"
@@ -768,8 +774,8 @@ def salvar_plano(mes: str, frentes: list) -> int:
     return len(linhas)
 
 
-def ler_plano(mes: str) -> list:
-    """Itens do plano do mês, na ordem. Vazio se o banco não estiver de pé."""
+def ler_plano() -> list:
+    """Todos os itens, na ordem do arquivo. Vazio se o banco não estiver de pé."""
     if not configurado():
         return []
     from sqlalchemy import text
@@ -777,21 +783,8 @@ def ler_plano(mes: str) -> list:
         garantir_plano()
         with _conectar().connect() as con:
             return [dict(l) for l in con.execute(text(
-                f"SELECT id, frente, alvo, texto, prazo, feito_em FROM {TABELA_PLANO}"
-                f" WHERE mes = :mes ORDER BY ordem"), {"mes": mes}).mappings().all()]
-    except Exception:
-        return []
-
-
-def meses_com_plano() -> list:
-    if not configurado():
-        return []
-    from sqlalchemy import text
-    try:
-        garantir_plano()
-        with _conectar().connect() as con:
-            return [l[0] for l in con.execute(text(
-                f"SELECT DISTINCT mes FROM {TABELA_PLANO} ORDER BY mes DESC")).all()]
+                f"SELECT id, mes, ordem, frente, alvo, texto, prazo, feito_em, criado_em"
+                f" FROM {TABELA_PLANO} ORDER BY ordem")).mappings().all()]
     except Exception:
         return []
 

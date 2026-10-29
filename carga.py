@@ -8,7 +8,7 @@
     python carga.py fatura   legado/faturas_cartao.csv linhas das faturas dos cartões das sócias
     python carga.py rateio   legado/rateios.csv        pagamento que é duas coisas (aluguel com seguro dentro)
     python carga.py stone    caminho/vendas.csv        relatório de vendas da Stone, com o cartão de cada venda
-    python carga.py plano    legado/plano_2026-10.json plano de ação do mês, que aparece em Trabalho > Plano
+    python carga.py plano    legado/plano.json         plano de ação contínuo, que aparece em Trabalho > Plano
     python carga.py orcamento 2026-10                  congela a projeção do mês, para comparar com o realizado
     python carga.py orcamento 2026-10 3000 6.82        congela com decisão de Meta e o ROAS assumido
     python carga.py pedido-link legado/link_michelle.json  pedido na Shopify de venda pelo link da Stone
@@ -203,14 +203,17 @@ def carregar_vendas_stone(caminho: str) -> None:
 
 
 def carregar_plano(caminho: str) -> None:
-    """Plano de ação do mês. Recarregar preserva o que já foi marcado."""
+    """Plano de ação, uma lista só. Recarregar preserva o que já foi marcado.
+    Item novo entra com id "AAAA-MM:x" e aparece no topo da aba."""
     import json
     import nuvem
     with open(caminho, encoding="utf-8") as f:
         plano = json.load(f)
-    n = nuvem.salvar_plano(plano["mes"], plano["frentes"])
-    feitos = sum(1 for i in nuvem.ler_plano(plano["mes"]) if i["feito_em"])
-    print(f"plano de {plano['mes']}: {n} itens, {feitos} feitos")
+    if "mes" in plano:
+        sys.exit("arquivo no formato antigo, de um mês só: o plano agora é legado/plano.json, contínuo")
+    n = nuvem.salvar_plano(plano["frentes"])
+    feitos = sum(1 for i in nuvem.ler_plano() if i["feito_em"])
+    print(f"plano: {n} itens, {feitos} feitos, {n - feitos} em aberto")
 
 
 def carregar_rateio(caminho: str) -> None:

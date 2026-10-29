@@ -554,7 +554,8 @@ import memo as _memo
 # o portal caiu com AttributeError em memo.mudou). Faltou função nova, recarrega.
 if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra") \
         or not hasattr(nuvem, "ler_eventos") or not hasattr(nuvem, "ler_clarity") \
-        or not hasattr(nuvem, "esquecer_pedidos") or not hasattr(nuvem, "registrar_tempo"):
+        or not hasattr(nuvem, "esquecer_pedidos") or not hasattr(nuvem, "registrar_tempo") \
+        or hasattr(nuvem, "meses_com_plano"):
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)
@@ -2463,7 +2464,7 @@ if "Clientes" in abas:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA: PLANO DO MÊS: o que foi combinado fazer, e o que já foi feito
+# ABA: PLANO: o que foi combinado fazer, e o que já foi feito
 # ════════════════════════════════════════════════════════════════════════════
 def _marcar_item_do_plano(id_: str):
     """Callback da caixa: grava na hora, sem botão de salvar."""
@@ -2493,10 +2494,10 @@ def _data_do_prazo(prazo: str, mes: str):
     return None
 
 
-def _painel_de_prazos(itens: list, mes: str) -> None:
+def _painel_de_prazos(itens: list) -> None:
     """Atrasadas e próximas 7 dias, no topo do plano."""
     hoje = (datetime.utcnow() - timedelta(hours=3)).date()
-    abertos = [(i, _data_do_prazo(i["prazo"], mes)) for i in itens if not i["feito_em"]]
+    abertos = [(i, _data_do_prazo(i["prazo"], i["mes"])) for i in itens if not i["feito_em"]]
     atrasadas = sorted([(i, d) for i, d in abertos if d and d < hoje], key=lambda x: x[1])
     proximas = sorted([(i, d) for i, d in abertos if d and hoje <= d <= hoje + timedelta(days=7)],
                       key=lambda x: x[1])
@@ -2534,45 +2535,52 @@ def _painel_de_prazos(itens: list, mes: str) -> None:
 # para acompanhar a caixa.
 @st.fragment
 def _aba_plano():
-    _meses = nuvem.meses_com_plano()
-    if not _meses:
-        st.header("Plano do mês")
+    # Lista contínua (Pedro, 29/10/2026): uma aba por mês deixava pendência
+    # para trás na virada. Em aberto fica em cima, agrupado por frente, com a
+    # frente do item mais novo primeiro; o que é marcado desce para Feitos.
+    _itens = nuvem.ler_plano()
+    st.header("Plano")
+    if not _itens:
         st.info("Nenhum plano carregado ainda.")
-    else:
-        _atual = (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m")
-        _mes = _atual if _atual in _meses else _meses[0]
-        if len(_meses) > 1:
-            _mes = st.selectbox("Mês", _meses, index=_meses.index(_mes), key="plano_mes")
-        _itens = nuvem.ler_plano(_mes)
-        _feitos = sum(1 for i in _itens if i["feito_em"])
-        _nome_mes = _MESES_PLANO[int(_mes[5:7]) - 1]
+        return
+    st.caption("O que foi combinado fazer. Item novo entra no topo; o que é marcado desce para Feitos, "
+               "no fim da página. Marcar ou desmarcar grava na hora, para todo mundo.")
+    _abertos = [i for i in _itens if not i["feito_em"]]
+    _feitos = sorted([i for i in _itens if i["feito_em"]], key=lambda i: i["feito_em"], reverse=True)
+    p1, p2, _ = st.columns([1, 1, 2])
+    p1.metric("Em aberto", len(_abertos))
+    p2.metric("Feitos nos últimos 7 dias", sum(1 for i in _feitos if i["feito_em"].timestamp() >= time.time() - 7 * 86400))
+    _painel_de_prazos(_itens)
 
-        st.header(f"Plano de {_nome_mes}")
-        st.caption("O que foi combinado fazer no mês. Marcar ou desmarcar grava na hora, para todo mundo.")
-        p1, p2 = st.columns([1, 3])
-        p1.metric("Feito", f"{_feitos} de {len(_itens)}")
-        with p2:
-            st.write("")
-            st.progress(_feitos / len(_itens) if _itens else 0.0)
-        _painel_de_prazos(_itens, _mes)
+    def caixa(i, nota):
+        c1, c2 = st.columns([5, 1])
+        with c1:
+            st.checkbox(md(i["texto"]), value=bool(i["feito_em"]), key=f"plano_{i['id']}",
+                        on_change=_marcar_item_do_plano, args=(i["id"],))
+        with c2:
+            if nota:
+                st.caption(nota)
 
-        _frente = None
-        for i in _itens:
-            if i["frente"] != _frente:
-                _frente = i["frente"]
-                _da_frente = [x for x in _itens if x["frente"] == _frente]
-                st.divider()
-                st.subheader(_frente)
-                st.caption(md(f"{sum(1 for x in _da_frente if x['feito_em'])} de {len(_da_frente)} · {i['alvo']}"))
-            c1, c2 = st.columns([5, 1])
-            with c1:
-                st.checkbox(md(i["texto"]), value=bool(i["feito_em"]), key=f"plano_{i['id']}",
-                            on_change=_marcar_item_do_plano, args=(i["id"],))
-            with c2:
-                if i["feito_em"]:
-                    st.caption(f"feito em {(i['feito_em'] - timedelta(hours=3)).strftime('%d/%m')}")
-                elif i["prazo"]:
-                    st.caption(i["prazo"])
+    _frentes = {}
+    for i in _abertos:
+        _frentes.setdefault(i["frente"], []).append(i)
+    _ordem = sorted(_frentes, key=lambda f: (-max(x["criado_em"].timestamp() for x in _frentes[f]),
+                                            min(x["ordem"] for x in _frentes[f])))
+    for _frente in _ordem:
+        _da_frente = sorted(_frentes[_frente], key=lambda x: (-x["criado_em"].timestamp(), x["ordem"]))
+        st.divider()
+        st.subheader(_frente)
+        _alvo = _da_frente[0]["alvo"]
+        st.caption(md(f"{len(_da_frente)} em aberto" + (f" · {_alvo}" if _alvo else "")))
+        for i in _da_frente:
+            caixa(i, i["prazo"])
+
+    st.divider()
+    with st.expander(f"Feitos · {len(_feitos)}"):
+        st.caption("Do mais recente para o mais antigo. Desmarcar devolve o item para cima.")
+        for i in _feitos:
+            caixa(i, f"feito em {(i['feito_em'] - timedelta(hours=3)).strftime('%d/%m')}")
+            st.caption(md(i["frente"]))
 
 
 if "Plano" in abas:
