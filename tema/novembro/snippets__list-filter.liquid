@@ -190,9 +190,11 @@
             name="{{ filter.label }}"
           >
             {%- for value in filter.values -%}
-              {%- comment -%} Novembro Annis: a tag só aparece no filtro a partir de 01/11/2026 00h (Brasília) {%- endcomment -%}
+              {%- comment -%} Novembro Annis: a tag só aparece no filtro de 01/11/2026 00h a 30/11 23h59 (Brasília) {%- endcomment -%}
               {%- assign agora_novembro = 'now' | date: '%s' | plus: 0 -%}
-              {%- if filter.param_name == 'filter.p.tag' and value.value == 'Novembro Annis' and agora_novembro < 1793502000 -%}
+              {%- assign fora_do_novembro = false -%}
+              {%- if agora_novembro < 1793502000 or agora_novembro > 1796093999 -%}{%- assign fora_do_novembro = true -%}{%- endif -%}
+              {%- if filter.param_name == 'filter.p.tag' and value.value == 'Novembro Annis' and fora_do_novembro -%}
                 {%- continue -%}
               {%- endif -%}
               {% liquid

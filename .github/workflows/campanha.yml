@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       acao:
-        description: "aplicar, reverter ou status"
+        description: "aplicar, reverter, status ou conferir (só mostra o checklist, sem mandar)"
         required: true
         default: "status"
       forcar:
@@ -53,11 +53,25 @@ jobs:
           SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: |
-          python campanha/novembro.py ${{ inputs.acao }}
+          [ "${{ inputs.acao }}" = "conferir" ] || python campanha/novembro.py ${{ inputs.acao }}
           python campanha/novembro.py status | tee status.txt
 
+      - name: Conferir a loja
+        if: always() && (inputs.acao == 'aplicar' || inputs.acao == 'reverter' || inputs.acao == 'conferir')
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          ACAO: ${{ inputs.acao }}
+        run: |
+          fase="$ACAO"; [ "$fase" = "conferir" ] && fase=aplicar
+          python campanha/novembro.py conferir "$fase" | tee checklist.txt
+
+      # Checklist do que deveria ter ido, com check no que a loja mostra (Pedro, 29/10).
+      # "conferir" só imprime aqui no log, não manda nada no grupo.
       - name: Avisar no grupo
-        if: always() && inputs.acao != 'status'
+        if: always() && (inputs.acao == 'aplicar' || inputs.acao == 'reverter')
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -65,11 +79,10 @@ jobs:
           RESULTADO: ${{ job.status }}
           LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ "$RESULTADO" = "success" ]; then
-            texto="Novembro Annis: ${ACAO} feito. $(head -1 status.txt 2>/dev/null)"
-          else
-            texto="Novembro Annis: ${ACAO} deu ERRO, conferir já. Detalhe: ${LINK}"
-          fi
+          {
+            if [ "$RESULTADO" != "success" ]; then printf "Novembro Annis: %s deu ERRO, conferir já.\nDetalhe: %s\n\n" "$ACAO" "$LINK"; fi
+            if [ -s checklist.txt ]; then cat checklist.txt; else printf "Sem a conferência da loja. Detalhe: %s\n" "$LINK"; fi
+          } > mensagem.txt
           curl -s -o /dev/null --retry 3 --connect-timeout 10 \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=${texto}"
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text@mensagem.txt"

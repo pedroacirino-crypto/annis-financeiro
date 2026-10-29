@@ -344,7 +344,186 @@ def status():
     print("coleções:", {t: bool(_colecao(t)) for t in (COLECAO_SALE, COLECAO_FORA)})
 
 
+# ── conferência (mensagem do Telegram) ───────────────────────────────────────
+# Depois do aplicar e do reverter, o workflow roda "conferir" e manda no grupo a
+# lista do que deveria ter ido, com check no que a loja mostra que foi (Pedro,
+# 29/10). Cada item lê o estado de verdade, não o que o script acha que fez.
+
+LOJA_URL = "https://annis.store"
+
+
+def _pagina(caminho):
+    import random
+    import requests
+    return requests.get(f"{LOJA_URL}{caminho}", params={"conferir": random.randint(1, 10**9)}, timeout=30)
+
+
+def _confere_precos(fase):
+    linhas = _precos()
+    d = _g('query($ids:[ID!]!){nodes(ids:$ids){... on ProductVariant{id price compareAtPrice}}}',
+           {"ids": [r["variante_id"] for r in linhas]})
+    atual = {n["id"]: n for n in d["nodes"] if n}
+    preco, riscado = ("preco_sale", "riscado_sale") if fase == "aplicar" else ("preco_antes", "riscado_antes")
+
+    def certo(r):
+        v = atual.get(r["variante_id"])
+        if not v or float(v["price"]) != float(r[preco]):
+            return False
+        esperado = float(r[riscado]) if r[riscado] is not None else None
+        return (float(v["compareAtPrice"]) if v["compareAtPrice"] else None) == esperado
+
+    ok = sum(1 for r in linhas if certo(r))
+    pecas = len({r["produto_id"] for r in linhas})
+    nome = "Preços da sale" if fase == "aplicar" else "Preços de antes"
+    return ok == len(linhas), f"{nome}: {ok} de {len(linhas)} tamanhos ({pecas} peças)"
+
+
+def _desconto_simbolico():
+    d = _g('query($q:String!){automaticDiscountNodes(first:5, query:$q){nodes{automaticDiscount{'
+           '... on DiscountAutomaticBasic{title status endsAt}}}}}', {"q": f'title:"{DESCONTO_SIMBOLICO}"'})
+    return next((n["automaticDiscount"] for n in d["automaticDiscountNodes"]["nodes"]
+                 if (n["automaticDiscount"] or {}).get("title") == DESCONTO_SIMBOLICO), None)
+
+
+def _confere_frete_bloqueado(fase):
+    d = _desconto_simbolico()
+    if fase == "aplicar":
+        return bool(d and d["status"] == "ACTIVE"), "Frete grátis bloqueado com peça da sale (desconto de R$ 0,01 ativo)"
+    return bool(d and d["endsAt"] == FIM), "Desconto de R$ 0,01 encerra 23h59 de hoje e o frete grátis volta para tudo"
+
+
+def _confere_fretegratis(fase):
+    d = _g('{codeDiscountNodes(first:1, query:"code:FRETEGRATIS"){nodes{codeDiscount{'
+           '... on DiscountCodeFreeShipping{status combinesWith{productDiscounts}}}}}}')["codeDiscountNodes"]["nodes"]
+    c = d[0]["codeDiscount"] if d else {}
+    return (c.get("status") == "ACTIVE" and c["combinesWith"]["productDiscounts"] is False,
+            "FRETEGRATIS ativo, sem somar com a sale")
+
+
+def _confere_cupons(fase):
+    fora = _colecao(COLECAO_FORA)
+    alvo = [n["codeDiscount"] for n in _cupons()
+            if n["codeDiscount"]["title"] not in NAO_MEXER and not n["codeDiscount"]["title"].startswith("Cashback")]
+
+    def so_fora(cd):
+        itens = cd["customerGets"]["items"]
+        return (itens["__typename"] == "DiscountCollections"
+                and fora in [c["id"] for c in itens["collections"]["nodes"]] and cd["combinesWith"]["productDiscounts"])
+
+    if fase == "aplicar":
+        ok = sum(1 for cd in alvo if so_fora(cd))
+        return ok == len(alvo), f"Cupons de influenciadora só fora da sale: {ok} de {len(alvo)}"
+    with nuvem._conectar().connect() as con:
+        pendentes = con.execute(text("select count(*) from campanha.cupons_antes")).scalar()
+    ok = sum(1 for cd in alvo if not so_fora(cd))
+    return ok == len(alvo) and not pendentes, f"Cupons de influenciadora de volta para o site todo: {ok} de {len(alvo)}"
+
+
+def _confere_colecao(fase):
+    d = _g('query($id:ID!){collection(id:$id){productsCount{count} resourcePublicationsV2(first:10){nodes{isPublished publication{name}}}}}',
+           {"id": _colecao(COLECAO_SALE)})["collection"]
+    no_ar = any(p["isPublished"] and p["publication"]["name"] == LOJA_ONLINE for p in d["resourcePublicationsV2"]["nodes"])
+    if fase == "aplicar":
+        return no_ar, f"Coleção {COLECAO_SALE} na loja, {d['productsCount']['count']} peças"
+    return not no_ar, f"Coleção {COLECAO_SALE} fora da loja"
+
+
+def _confere_menu(fase):
+    titulos = [i["title"] for i in _menu()["items"]]
+    if fase == "aplicar":
+        return COLECAO_SALE in titulos and ITEM_MENU_ANTIGO not in titulos, f"Menu: {ITEM_MENU_ANTIGO} virou {COLECAO_SALE}"
+    return ITEM_MENU_ANTIGO in titulos and COLECAO_SALE not in titulos, f"Menu: {COLECAO_SALE} voltou a ser {ITEM_MENU_ANTIGO}"
+
+
+def _confere_regulamento(fase):
+    pag = _g('query($q:String!){pages(first:1, query:$q){nodes{id isPublished}}}', {"q": f"handle:{REGULAMENTO}"})["pages"]["nodes"]
+    rod = next(m for m in _g(_MENUS)["menus"]["nodes"] if m["handle"] == RODAPE)
+    ok = bool(pag) and pag[0]["isPublished"] and any(i.get("resourceId") == pag[0]["id"] for i in rod["items"])
+    return ok, "Regulamento no ar e no rodapé" + ("" if fase == "aplicar" else " (fica até o fim do cashback, 31/01)")
+
+
+def _confere_faixa(fase):
+    import faixa
+    atual = json.dumps(json.loads(faixa._sem_comentario(_arquivo_tema(faixa.ARQUIVO))), ensure_ascii=False)
+    tem = faixa.RESSALVA in atual and faixa.CASHBACK in atual
+    if fase == "aplicar":
+        return tem, "Faixa do topo: ressalva do frete e 10% de cashback"
+    return faixa.RESSALVA not in atual and faixa.CASHBACK not in atual, "Faixa do topo como era antes"
+
+
+def _confere_cron(nome):
+    with nuvem._conectar().connect() as con:
+        ativo = con.execute(text("select active from cron.job where jobname = :n"), {"n": nome}).scalar()
+        ultima = con.execute(text("select d.status from cron.job_run_details d join cron.job j using (jobid)"
+                                  " where j.jobname = :n order by d.start_time desc limit 1"), {"n": nome}).scalar()
+    return bool(ativo), ultima
+
+
+def _confere_cashback(fase):
+    ativo, ultima = _confere_cron("annis-cashback")
+    return ativo and ultima == "succeeded", "Cashback ligado: confere os pedidos a cada 10 min, última rodada ok"
+
+
+def _confere_desligamento(fase):
+    ativo, _ = _confere_cron("annis-campanha-reverter")
+    return ativo, "Desligamento agendado para 30/11 às 23h59"
+
+
+def _confere_filtro(fase):
+    aparece = 'value="Novembro Annis"' in _pagina("/collections/all").text
+    if fase == "aplicar":
+        return aparece, f"Filtro Coleção do site mostra {COLECAO_SALE}"
+    return not aparece, f"Filtro Coleção do site sem {COLECAO_SALE}"
+
+
+def _confere_vitrine(fase):
+    import re
+    r = _pagina("/collections/novembro-annis")
+    if fase == "aplicar":
+        return r.status_code == 200 and bool(re.search(r"\d+% off", r.text)), "Página da coleção com o % off nas peças"
+    return r.status_code == 404, "Página da coleção fora do ar"
+
+
+_ITENS = {
+    "aplicar": [_confere_precos, _confere_frete_bloqueado, _confere_fretegratis, _confere_cupons, _confere_colecao,
+                _confere_menu, _confere_regulamento, _confere_faixa, _confere_vitrine, _confere_filtro,
+                _confere_cashback, _confere_desligamento],
+    "reverter": [_confere_precos, _confere_frete_bloqueado, _confere_cupons, _confere_colecao, _confere_menu,
+                 _confere_faixa, _confere_vitrine, _confere_filtro, _confere_regulamento, _confere_cashback],
+}
+_DA_VITRINE = (_confere_vitrine, _confere_filtro)  # página pública: o cache da loja segura uns minutos
+
+
+def conferir(fase, tentativas=6, espera=30):
+    """Texto do Telegram com o checklist de `fase` (aplicar ou reverter)."""
+    import time
+    resultado = {}
+    for vez in range(tentativas):
+        for f in _ITENS[fase]:
+            if resultado.get(f, (False,))[0] or (vez and f not in _DA_VITRINE):
+                continue
+            try:
+                resultado[f] = f(fase)
+            except Exception as e:  # um item que não deu para ler não derruba a lista
+                resultado[f] = (False, f"{f.__name__.replace('_confere_', '').title()}: não consegui conferir ({type(e).__name__})")
+        if all(resultado[f][0] for f in _DA_VITRINE) or vez == tentativas - 1:
+            break
+        time.sleep(espera)
+
+    linhas = [resultado[f] for f in _ITENS[fase]]
+    ok = sum(1 for certo, _ in linhas if certo)
+    if fase == "aplicar":
+        topo = "Novembro Annis no ar." if ok == len(linhas) else "Novembro Annis: virada com pendência, olhar os itens sem check."
+    else:
+        topo = "Novembro Annis encerrado." if ok == len(linhas) else "Novembro Annis: encerramento com pendência, olhar os itens sem check."
+    corpo = [f"{'✓' if certo else '✗'} {texto}" for certo, texto in linhas]
+    return "\n".join([topo, f"{ok} de {len(linhas)} conferidos", ""] + corpo)
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     simular = "--simular" in sys.argv
-    {"preparar": preparar, "aplicar": aplicar, "reverter": reverter}.get(cmd, lambda s: status())(simular)
+    if cmd == "conferir":
+        print(conferir(sys.argv[2] if len(sys.argv) > 2 else "aplicar"))
+    else:
+        {"preparar": preparar, "aplicar": aplicar, "reverter": reverter}.get(cmd, lambda s: status())(simular)
