@@ -228,7 +228,8 @@ def vitrine_ligar(simular):
     menu = _menu()
     itens = [_item_entrada(i) for i in menu["items"]]
     alvo = next((i for i in itens if i["title"] in (ITEM_MENU_ANTIGO, COLECAO_SALE)), None)
-    print(f"  publica {COLECAO_SALE} na loja; menu: {alvo['title'] if alvo else 'sem item'} -> {COLECAO_SALE}")
+    print(f"  publica {COLECAO_SALE} na loja; menu: {alvo['title'] if alvo else 'sem item'} -> {COLECAO_SALE};"
+          " publica o regulamento e põe o link no rodapé")
     if simular:
         return
     _erros(_g(_PUBLICA, {"id": colecao, "p": [{"publicationId": _publicacao()}]}), "publishablePublish")
@@ -238,6 +239,28 @@ def vitrine_ligar(simular):
         alvo.update({"title": COLECAO_SALE, "type": "COLLECTION", "resourceId": colecao})
         alvo.pop("url", None)
         _gravar_menu(menu, itens)
+    regulamento_ligar()
+
+
+REGULAMENTO = "regulamento-novembro-annis"
+RODAPE = "footer"
+
+
+def regulamento_ligar():
+    """Publica a página de regras e põe o link no rodapé. Fica no ar até o fim
+    do cashback (31/01/2027); o reverter da sale não tira (tirar à mão em fevereiro)."""
+    pag = _g('query($q:String!){pages(first:1, query:$q){nodes{id isPublished}}}', {"q": f"handle:{REGULAMENTO}"})["pages"]["nodes"]
+    if not pag:
+        print("  página de regulamento não existe")
+        return
+    if not pag[0]["isPublished"]:
+        _erros(_g('mutation($id:ID!,$p:PageUpdateInput!){pageUpdate(id:$id, page:$p){userErrors{message}}}',
+                  {"id": pag[0]["id"], "p": {"isPublished": True}}), "pageUpdate")
+    rod = next(m for m in _g(_MENUS)["menus"]["nodes"] if m["handle"] == RODAPE)
+    itens = [_item_entrada(i) for i in rod["items"]]
+    if not any(i.get("resourceId") == pag[0]["id"] for i in itens):
+        itens.append({"title": "Regulamento Novembro Annis", "type": "PAGE", "resourceId": pag[0]["id"], "tags": [], "items": []})
+        _gravar_menu(rod, itens)
 
 
 def vitrine_desligar(simular):
