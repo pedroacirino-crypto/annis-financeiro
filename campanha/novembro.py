@@ -38,7 +38,7 @@ COLECAO_FORA = "Fora da sale"
 DESCONTO_SIMBOLICO = "Novembro Annis"
 INICIO = "2026-11-01T03:00:00Z"   # 00h de 01/11 em Brasília
 FIM = "2026-12-01T02:59:59Z"      # 23h59min59s de 30/11 em Brasília
-NAO_MEXER = {"FRETEGRATIS"}       # cupom de frete; cashback começa com CB
+NAO_MEXER = {"FRETEGRATIS"}       # cupom de frete; os de cashback têm título "Cashback #pedido"
 
 
 def _g(q, v=None):
@@ -146,7 +146,7 @@ def cupons_fora_da_sale(simular):
     for n in _cupons():
         cd = n["codeDiscount"]
         codigo = cd["codes"]["nodes"][0]["code"] if cd["codes"]["nodes"] else cd["title"]
-        if codigo in NAO_MEXER or codigo.startswith("CB"):
+        if codigo in NAO_MEXER or cd["title"].startswith("Cashback"):
             continue
         print(f"  {codigo}: passa a valer só em {COLECAO_FORA} e a somar com desconto de produto")
         if simular:

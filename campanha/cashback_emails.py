@@ -87,7 +87,7 @@ def dados(c: dict) -> dict:
 
 
 def previa():
-    exemplo = {"nome": "Michelle", "valor": "73", "codigo": "CB8YKSRS", "validade": "31/01", "minimo": 244, "pedido": "#1159"}
+    exemplo = {"nome": "Michelle", "valor": "73", "codigo": "001MICHELLE73", "validade": "31/01", "minimo": 244, "pedido": "#1159"}
     for qual in ("cb1", "cb2", "cb3", "cb4", "cb5", "cb6", "cb7"):
         m = montar(qual, exemplo)
         gmail.enviar(CONTATO, f"[prévia cashback {qual}] {m['assunto']}", m["html"], m["texto"])

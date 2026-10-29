@@ -23,7 +23,6 @@ Roda a cada 10 minutos (workflow cashback.yml, disparado pelo Supabase).
 
 import math
 import os
-import secrets
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -40,7 +39,6 @@ COBERTURA = 0.30
 VENCE = datetime(2027, 2, 1, 2, 59, 59, tzinfo=timezone.utc)  # 31/01/2027 23h59min59s em Brasília
 DESCONTO_PIX = 0.05
 COLECAO_FORA = "Fora da sale"
-ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sem 0, O, 1, I
 
 _PEDIDOS = """query($c:String, $q:String!){orders(first:50, after:$c, query:$q){pageInfo{hasNextPage endCursor}
   nodes{id name createdAt test cancelledAt displayFinancialStatus tags paymentGatewayNames email
@@ -84,12 +82,38 @@ def _colecao_fora():
     return cid
 
 
-def _codigo():
-    return "CB" + "".join(secrets.choice(ALFABETO) for _ in range(6))
+def _primeiro_nome(cliente) -> str:
+    import unicodedata
+    nome = (cliente or "").strip().split(" ")[0]
+    nome = unicodedata.normalize("NFD", nome)
+    nome = "".join(ch for ch in nome if unicodedata.category(ch) != "Mn" and ch.isalpha())
+    return (nome.upper() or "ANNIS")[:12]
 
 
-def _criar_codigo(pedido, valor, colecao, vence):
-    codigo = _codigo()
+def _codigo(cliente, valor, n) -> str:
+    """Contador + nome da cliente + valor, ex. 007MICHELLE73 (Pedro, 29/10)."""
+    return f"{n:03d}{_primeiro_nome(cliente)}{int(valor)}"
+
+
+def _contador() -> int:
+    with nuvem._conectar().connect() as con:
+        return con.execute(text("select count(*) from campanha.cashback")).scalar() + 1
+
+
+def _criar_codigo(pedido, valor, colecao, vence, cliente=""):
+    n = _contador()
+    for _ in range(5):  # o contador garante código único; se a Shopify recusar, tenta o próximo
+        codigo = _codigo(cliente, valor, n)
+        try:
+            return codigo, _criar_na_shopify(pedido, codigo, valor, colecao, vence)
+        except RuntimeError as e:
+            if not any(k in str(e).lower() for k in ("unique", "already", "taken", "único")):
+                raise
+            n += 1
+    raise RuntimeError(f"não consegui um código livre para {pedido}")
+
+
+def _criar_na_shopify(pedido, codigo, valor, colecao, vence):
     d = _g('''mutation($d:DiscountCodeBasicInput!){discountCodeBasicCreate(basicCodeDiscount:$d){
         codeDiscountNode{id} userErrors{field message}}}''', {"d": {
         "title": f"Cashback {pedido}", "code": codigo,
@@ -102,7 +126,7 @@ def _criar_codigo(pedido, valor, colecao, vence):
     r = d["discountCodeBasicCreate"]
     if r["userErrors"]:
         raise RuntimeError(f"Shopify: {r['userErrors']}")
-    return codigo, r["codeDiscountNode"]["id"]
+    return r["codeDiscountNode"]["id"]
 
 
 def _ja_tem():
@@ -131,7 +155,7 @@ def gerar(simular):
         if simular:
             continue
         colecao = colecao or _colecao_fora()
-        codigo, desc_id = _criar_codigo(o["name"], valor, colecao, vence)
+        codigo, desc_id = _criar_codigo(o["name"], valor, colecao, vence, (o.get("customer") or {}).get("displayName"))
         with nuvem._conectar().begin() as con:
             con.execute(text(
                 "insert into campanha.cashback (pedido, pedido_id, cliente, email, base, valor, codigo, desconto_id, vence_em)"
@@ -198,7 +222,7 @@ def _reemitir(c, sobra):
     """Código novo com o saldo que sobrou, mesma validade."""
     raiz = c["pedido"].split("-")[0]
     n = 2 + sum(1 for p in _ja_tem() if p.startswith(raiz + "-"))
-    codigo, desc_id = _criar_codigo(f"{raiz}-{n}", sobra, _colecao_fora(), c["vence_em"])
+    codigo, desc_id = _criar_codigo(f"{raiz}-{n}", sobra, _colecao_fora(), c["vence_em"], c["cliente"])
     with nuvem._conectar().begin() as con:
         con.execute(text(
             "insert into campanha.cashback (pedido, pedido_id, cliente, email, base, valor, codigo, desconto_id, vence_em)"
