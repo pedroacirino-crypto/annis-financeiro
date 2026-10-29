@@ -275,6 +275,45 @@ def vitrine_desligar(simular):
     _erros(_g(_DESPUBLICA, {"id": _colecao(COLECAO_SALE), "p": [{"publicationId": _publicacao()}]}), "publishableUnpublish")
 
 
+TEMA = "gid://shopify/OnlineStoreTheme/161637400611"  # Atelier publicado
+_LER_ARQUIVO = ('query($t:ID!,$f:[String!]!){theme(id:$t){files(filenames:$f, first:2){nodes{'
+                'body{... on OnlineStoreThemeFileBodyText{content}}}}}}')
+_GRAVA_ARQUIVO = ('mutation($t:ID!,$f:[OnlineStoreThemeFilesUpsertFileInput!]!){themeFilesUpsert(themeId:$t, files:$f){'
+                  'userErrors{filename message}}}')
+
+
+def _arquivo_tema(nome):
+    return _g(_LER_ARQUIVO, {"t": TEMA, "f": [nome]})["theme"]["files"]["nodes"][0]["body"]["content"]
+
+
+def _gravar_arquivo_tema(nome, conteudo):
+    _erros(_g(_GRAVA_ARQUIVO, {"t": TEMA, "f": [{"filename": nome, "body": {"type": "TEXT", "value": conteudo}}]}),
+           "themeFilesUpsert")
+
+
+def faixa_ligar(simular):
+    """Ressalva pequena no FRETEGRATIS e mensagem do cashback (campanha/faixa.py)."""
+    import faixa
+    print("  faixa: ressalva do frete em letra pequena e mensagem do cashback")
+    if simular:
+        return
+    atual = _arquivo_tema(faixa.ARQUIVO)
+    if _estado("faixa_antes") is None:
+        _estado("faixa_antes", {"conteudo": atual})
+    _gravar_arquivo_tema(faixa.ARQUIVO, faixa.com_campanha(atual))
+
+
+def faixa_desligar(simular):
+    import faixa
+    antes = _estado("faixa_antes")
+    print(f"  faixa volta como era ({'guardada' if antes else 'nada guardado'})")
+    if simular or not antes:
+        return
+    _gravar_arquivo_tema(faixa.ARQUIVO, antes["conteudo"])
+    with nuvem._conectar().begin() as con:
+        con.execute(text("delete from campanha.estado where chave = 'faixa_antes'"))
+
+
 def aplicar(simular):
     print("preços da sale:")
     _atualizar_precos(_precos(), "preco_sale", "riscado_sale", simular)
@@ -282,6 +321,7 @@ def aplicar(simular):
     cupons_fora_da_sale(simular)
     print("vitrine:")
     vitrine_ligar(simular)
+    faixa_ligar(simular)
 
 
 def reverter(simular):
@@ -291,6 +331,7 @@ def reverter(simular):
     cupons_voltar(simular)
     print("vitrine:")
     vitrine_desligar(simular)
+    faixa_desligar(simular)
 
 
 def status():

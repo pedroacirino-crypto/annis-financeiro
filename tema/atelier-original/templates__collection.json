@@ -1,0 +1,380 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */
+{
+  "sections": {
+    "section": {
+      "type": "section",
+      "blocks": {
+        "text_tqQTNE": {
+          "type": "text",
+          "settings": {
+            "text": "<p>{{ closest.collection.title }}</p>",
+            "width": "100%",
+            "max_width": "normal",
+            "alignment": "center",
+            "type_preset": "h2",
+            "font": "var(--font-primary--family)",
+            "font_size": "",
+            "line_height": "normal",
+            "letter_spacing": "normal",
+            "case": "none",
+            "wrap": "pretty",
+            "color": "",
+            "background": false,
+            "background_color": "#00000026",
+            "corner_radius": 0,
+            "padding-block-start": 0,
+            "padding-block-end": 0,
+            "padding-inline-start": 0,
+            "padding-inline-end": 0
+          },
+          "blocks": {}
+        },
+        "divider_agfR7J": {
+          "type": "_divider",
+          "name": "Divider",
+          "settings": {
+            "thickness": 1,
+            "corner_radius": "square",
+            "width_percent": 100,
+            "padding-block-start": 0,
+            "padding-block-end": 11
+          },
+          "blocks": {}
+        }
+      },
+      "block_order": [
+        "text_tqQTNE",
+        "divider_agfR7J"
+      ],
+      "settings": {
+        "content_direction": "column",
+        "vertical_on_mobile": true,
+        "horizontal_alignment": "center",
+        "vertical_alignment": "center",
+        "align_baseline": false,
+        "horizontal_alignment_flex_direction_column": "flex-start",
+        "vertical_alignment_flex_direction_column": "center",
+        "gap": 84,
+        "section_width": "page-width",
+        "section_height": "",
+        "section_height_custom": 50,
+        "color_scheme": "scheme-1f4b5208-ddf0-4294-990f-8a38f0da7846",
+        "background_media": "none",
+        "video_position": "cover",
+        "background_image_position": "cover",
+        "border": "none",
+        "border_width": 1,
+        "border_opacity": 100,
+        "border_radius": 0,
+        "toggle_overlay": false,
+        "overlay_color": "#00000026",
+        "overlay_style": "solid",
+        "gradient_direction": "to top",
+        "padding-block-start": 36,
+        "padding-block-end": 0
+      }
+    },
+    "main": {
+      "type": "main-collection",
+      "blocks": {
+        "filters": {
+          "type": "filters",
+          "static": true,
+          "settings": {
+            "enable_filtering": true,
+            "filter_style": "horizontal",
+            "filter_width": "centered",
+            "text_label_case": "uppercase",
+            "show_swatch_label": true,
+            "show_filter_label": false,
+            "enable_sorting": true,
+            "enable_grid_density": true,
+            "inherit_color_scheme": true,
+            "color_scheme": "",
+            "padding-block-start": 8,
+            "padding-block-end": 8,
+            "padding-inline-start": 0,
+            "padding-inline-end": 0,
+            "facets_margin_bottom": 8,
+            "facets_margin_right": 20
+          },
+          "blocks": {}
+        },
+        "product-card": {
+          "type": "product-card",
+          "static": true,
+          "settings": {
+            "product": "{{ closest.product }}",
+            "product_card_gap": 8,
+            "inherit_color_scheme": true,
+            "color_scheme": "",
+            "border": "none",
+            "border_width": 1,
+            "border_opacity": 100,
+            "border_radius": 9,
+            "padding-block-start": 0,
+            "padding-block-end": 0,
+            "padding-inline-start": 0,
+            "padding-inline-end": 0
+          },
+          "blocks": {
+            "card-gallery": {
+              "type": "_product-card-gallery",
+              "settings": {
+                "product": "{{ closest.product }}",
+                "image_ratio": "adapt",
+                "border": "solid",
+                "border_width": 0,
+                "border_opacity": 100,
+                "border_radius": 12,
+                "padding-block-start": 0,
+                "padding-block-end": 0,
+                "padding-inline-start": 0,
+                "padding-inline-end": 0
+              },
+              "blocks": {}
+            },
+            "group": {
+              "type": "group",
+              "settings": {
+                "link": "",
+                "open_in_new_tab": false,
+                "content_direction": "row",
+                "vertical_on_mobile": true,
+                "horizontal_alignment": "space-between",
+                "vertical_alignment": "flex-start",
+                "align_baseline": false,
+                "horizontal_alignment_flex_direction_column": "flex-start",
+                "vertical_alignment_flex_direction_column": "center",
+                "gap": 12,
+                "width": "fill",
+                "custom_width": 100,
+                "width_mobile": "fill",
+                "custom_width_mobile": 100,
+                "height": "fit",
+                "custom_height": 100,
+                "inherit_color_scheme": true,
+                "color_scheme": "",
+                "background_media": "none",
+                "video_position": "cover",
+                "background_image_position": "cover",
+                "border": "none",
+                "border_width": 1,
+                "border_opacity": 100,
+                "border_radius": 0,
+                "toggle_overlay": false,
+                "overlay_color": "#00000026",
+                "overlay_style": "solid",
+                "gradient_direction": "to top",
+                "padding-block-start": 2,
+                "padding-block-end": 0,
+                "padding-inline-start": 0,
+                "padding-inline-end": 0
+              },
+              "blocks": {
+                "group_wwVYk6": {
+                  "type": "group",
+                  "name": "t:names.group",
+                  "settings": {
+                    "link": "",
+                    "open_in_new_tab": false,
+                    "content_direction": "column",
+                    "vertical_on_mobile": true,
+                    "horizontal_alignment": "flex-start",
+                    "vertical_alignment": "center",
+                    "align_baseline": false,
+                    "horizontal_alignment_flex_direction_column": "flex-start",
+                    "vertical_alignment_flex_direction_column": "flex-start",
+                    "gap": 0,
+                    "width": "custom",
+                    "custom_width": 60,
+                    "width_mobile": "fill",
+                    "custom_width_mobile": 100,
+                    "height": "fit",
+                    "custom_height": 100,
+                    "inherit_color_scheme": true,
+                    "color_scheme": "",
+                    "background_media": "none",
+                    "video_position": "cover",
+                    "background_image_position": "cover",
+                    "border": "none",
+                    "border_width": 1,
+                    "border_opacity": 100,
+                    "border_radius": 0,
+                    "toggle_overlay": false,
+                    "overlay_color": "#00000026",
+                    "overlay_style": "solid",
+                    "gradient_direction": "to top",
+                    "padding-block-start": 0,
+                    "padding-block-end": 0,
+                    "padding-inline-start": 0,
+                    "padding-inline-end": 0
+                  },
+                  "blocks": {
+                    "product_title_GDE6KA": {
+                      "type": "product-title",
+                      "name": "t:names.product_title",
+                      "settings": {
+                        "product": "{{ closest.product }}",
+                        "width": "fit-content",
+                        "max_width": "normal",
+                        "alignment": "left",
+                        "type_preset": "h5",
+                        "font": "var(--font-body--family)",
+                        "font_size": "1rem",
+                        "line_height": "normal",
+                        "letter_spacing": "normal",
+                        "case": "none",
+                        "wrap": "pretty",
+                        "color": "var(--color-foreground)",
+                        "background": false,
+                        "background_color": "#00000026",
+                        "corner_radius": 0,
+                        "padding-block-start": 0,
+                        "padding-block-end": 0,
+                        "padding-inline-start": 0,
+                        "padding-inline-end": 0
+                      },
+                      "blocks": {}
+                    },
+                    "price_prVYBm": {
+                      "type": "price",
+                      "settings": {
+                        "product": "{{ closest.product }}",
+                        "show_sale_price_first": true,
+                        "show_installments": false,
+                        "show_tax_info": false,
+                        "type_preset": "h5",
+                        "width": "100%",
+                        "alignment": "left",
+                        "font": "var(--font-body--family)",
+                        "font_size": "1rem",
+                        "line_height": "normal",
+                        "letter_spacing": "normal",
+                        "case": "none",
+                        "color": "var(--color-foreground)",
+                        "padding-block-start": 0,
+                        "padding-block-end": 0,
+                        "padding-inline-start": 0,
+                        "padding-inline-end": 0
+                      },
+                      "blocks": {}
+                    }
+                  },
+                  "block_order": [
+                    "product_title_GDE6KA",
+                    "price_prVYBm"
+                  ]
+                },
+                "group_njW3rP": {
+                  "type": "group",
+                  "name": "t:names.group",
+                  "settings": {
+                    "link": "",
+                    "open_in_new_tab": false,
+                    "content_direction": "column",
+                    "vertical_on_mobile": true,
+                    "horizontal_alignment": "flex-start",
+                    "vertical_alignment": "center",
+                    "align_baseline": false,
+                    "horizontal_alignment_flex_direction_column": "flex-start",
+                    "vertical_alignment_flex_direction_column": "flex-start",
+                    "gap": 0,
+                    "width": "fill",
+                    "custom_width": 40,
+                    "width_mobile": "fill",
+                    "custom_width_mobile": 100,
+                    "height": "fit",
+                    "custom_height": 100,
+                    "inherit_color_scheme": true,
+                    "color_scheme": "",
+                    "background_media": "none",
+                    "video_position": "cover",
+                    "background_image_position": "cover",
+                    "border": "none",
+                    "border_width": 1,
+                    "border_opacity": 100,
+                    "border_radius": 0,
+                    "toggle_overlay": false,
+                    "overlay_color": "#00000026",
+                    "overlay_style": "solid",
+                    "gradient_direction": "to top",
+                    "padding-block-start": 0,
+                    "padding-block-end": 0,
+                    "padding-inline-start": 0,
+                    "padding-inline-end": 0
+                  },
+                  "blocks": {
+                    "swatches_4LLXdb": {
+                      "type": "swatches",
+                      "settings": {
+                        "product": "{{ closest.product }}",
+                        "product_swatches_alignment": "flex-end",
+                        "product_swatches_alignment_mobile": "flex-start",
+                        "hide_padding": false,
+                        "product_swatches_padding_top": 0,
+                        "product_swatches_padding_bottom": 0,
+                        "product_swatches_padding_left": 0,
+                        "product_swatches_padding_right": 0
+                      },
+                      "blocks": {}
+                    }
+                  },
+                  "block_order": [
+                    "swatches_4LLXdb"
+                  ]
+                }
+              },
+              "block_order": [
+                "group_wwVYk6",
+                "group_njW3rP"
+              ]
+            }
+          },
+          "block_order": [
+            "card-gallery",
+            "group"
+          ]
+        }
+      },
+      "settings": {
+        "layout_type": "grid",
+        "product_card_size": "large",
+        "mobile_product_card_size": "small",
+        "product_grid_width": "centered",
+        "full_width_on_mobile": true,
+        "columns_gap_horizontal": 19,
+        "columns_gap_vertical": 16,
+        "padding-inline-start": 0,
+        "padding-inline-end": 0,
+        "color_scheme": "scheme-1f4b5208-ddf0-4294-990f-8a38f0da7846",
+        "padding-block-start": 9,
+        "padding-block-end": 66
+      }
+    },
+    "custom_liquid_pPYJ4R": {
+      "type": "custom-liquid",
+      "name": "t:names.custom_liquid",
+      "settings": {
+        "custom_liquid": "{%- comment -%}\n  Página de coleção da Annis, 04/10/2026. Vai numa seção \"Liquid personalizado\"\n  no template de coleção. Faz três coisas nos cards de produto:\n  cantos retos, parcelamento sem juros abaixo do preço e os tamanhos\n  disponíveis (no computador, ao passar o mouse na foto; no celular, numa\n  linha abaixo do preço). Clicar no tamanho abre a peça com ele marcado.\n  Tamanho esgotado não aparece. Peça de tamanho único não mostra tamanho.\n  Os números do parcelamento espelham o Hub da Stone, como no bloco da\n  página de produto: 6x sem juros, parcela mínima de R$ 50.\n{%- endcomment -%}\n<script type=\"application/json\" id=\"annis-grade\">{\n  {%- for p in collection.products -%}\n    {%- assign v0 = p.selected_or_first_available_variant -%}\n    {{ p.handle | json }}:{\"p\":{{ v0.price }},\"u\":{{ p.url | json }},\"o\":{{ p.options | json }},\"v\":[\n      {%- assign primeiro = true -%}\n      {%- for v in p.variants -%}\n        {%- if v.available -%}\n          {%- unless primeiro -%},{%- endunless -%}\n          [{{ v.id }},{{ v.options | json }}]\n          {%- assign primeiro = false -%}\n        {%- endif -%}\n      {%- endfor -%}\n    ]}{%- unless forloop.last -%},{%- endunless -%}\n  {%- endfor -%}\n}</script>\n<style>\n  /* Cantos retos, como na Aluf. */\n  product-card .product-card__content,\n  product-card .card-gallery,\n  product-card .product-media,\n  product-card slideshow-slide { border-radius: 0 !important; }\n\n  /* Filtro de Disponibilidade escondido: para a cliente não serve, mas\n     continua no formulário, porque o filtro de tamanho marca \"Em estoque\"\n     por baixo (ver o script). */\n  .facets__item:has(input[name=\"filter.v.availability\"]) { display: none !important; }\n  /* A tag antiga \"ateliê\" (minúscula) virou \"Ateliê\", mas o índice de filtros\n     da Shopify ainda lista a antiga. Ela leva às mesmas peças. */\n  .facets__inputs-list-item:has(input[name=\"filter.p.tag\"][value=\"ateliê\"]) { display: none !important; }\n  /* Tamanhos na ordem da grade, não na ordem da Shopify. */\n  .facets__inputs-list-item:has(input[name=\"filter.v.option.tamanho\"][value=\"PP\"]) { order: 1; }\n  .facets__inputs-list-item:has(input[name=\"filter.v.option.tamanho\"][value=\"P\"]) { order: 2; }\n  .facets__inputs-list-item:has(input[name=\"filter.v.option.tamanho\"][value=\"M\"]) { order: 3; }\n  .facets__inputs-list-item:has(input[name=\"filter.v.option.tamanho\"][value=\"G\"]) { order: 4; }\n  .facets__inputs-list-item:has(input[name=\"filter.v.option.tamanho\"][value=\"GG\"]) { order: 5; }\n  .facets__inputs-list-item:has(input[name=\"filter.v.option.tamanho\"][value=\"U\"]) { order: 6; }\n\n  .annis-parcela { margin-top: 2px; font-size: .85em; opacity: .75; }\n\n  .annis-tam { display: flex; flex-wrap: wrap; gap: 6px; }\n  .annis-tam a {\n    position: relative; z-index: 3;\n    display: inline-flex; align-items: center; justify-content: center;\n    min-width: 34px; height: 30px; padding: 0 6px;\n    font-size: 11px; letter-spacing: .04em; line-height: 1;\n    color: #000; background: #fff; border: 1px solid rgba(0, 0, 0, .15);\n    text-decoration: none;\n  }\n  .annis-tam a:hover { color: #fff; background: #000; border-color: #000; }\n\n  /* Computador: tamanhos sobre o rodapé da foto, só ao passar o mouse,\n     acima do botão Adicionar do tema. */\n  .annis-tam--foto {\n    position: absolute; left: 0; right: 0; bottom: var(--annis-tam-base, 60px); z-index: 3;\n    justify-content: center;\n    opacity: 0; pointer-events: none; transition: opacity .2s;\n  }\n  @media (hover: hover) and (pointer: fine) {\n    product-card:hover .annis-tam--foto { opacity: 1; pointer-events: auto; }\n    .annis-tam--linha { display: none; }\n  }\n  /* Celular: linha de tamanhos abaixo do preço, sempre visível. */\n  @media not all and (hover: hover) and (pointer: fine) {\n    .annis-tam--foto { display: none; }\n    .annis-tam--linha { margin-top: 8px; gap: 4px; }\n    .annis-tam--linha a { min-width: 26px; height: 24px; padding: 0 4px; font-size: 10px; }\n  }\n</style>\n<script>\n  (function () {\n    var SEM_JUROS = 6, PARCELA_MINIMA = 5000;\n    var ORDEM = ['PP', 'P', 'M', 'G', 'GG'];\n    var dados = {};\n    try { dados = JSON.parse(document.getElementById('annis-grade').textContent); } catch (e) {}\n\n    function brl(c) { return (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }\n\n    /* Mesma conta do checkout: parcela arredondada para cima. */\n    function parcelas(preco) {\n      var melhor = null;\n      for (var n = 2; n <= SEM_JUROS; n++) {\n        var p = Math.ceil(preco / n);\n        if (p >= PARCELA_MINIMA) melhor = [n, p];\n      }\n      return melhor;\n    }\n\n    function handleDe(card) {\n      var a = card.querySelector('a[href*=\"/products/\"]');\n      var m = a && a.getAttribute('href').match(/\\/products\\/([^/?#]+)/);\n      return m ? decodeURIComponent(m[1]) : null;\n    }\n\n    /* Peça que não veio na página (filtro trocado depois de abrir) é\n       buscada na hora. */\n    function busca(h) {\n      if (dados[h]) return Promise.resolve(dados[h]);\n      return fetch('/products/' + encodeURIComponent(h) + '.js').then(function (r) { return r.json(); }).then(function (p) {\n        var v0 = p.variants.filter(function (v) { return v.available; })[0] || p.variants[0];\n        dados[h] = {\n          p: v0.price, u: '/products/' + h,\n          o: p.options.map(function (o) { return o.name || o; }),\n          v: p.variants.filter(function (v) { return v.available; }).map(function (v) { return [v.id, v.options]; })\n        };\n        return dados[h];\n      });\n    }\n\n    function tamanhos(d) {\n      var i = d.o.indexOf('Tamanho');\n      if (i < 0) return [];\n      var vistos = {}, lista = [];\n      d.v.forEach(function (x) {\n        var t = x[1][i];\n        if (!vistos[t]) { vistos[t] = 1; lista.push([t, x[0]]); }\n      });\n      lista.sort(function (a, b) { return ORDEM.indexOf(a[0]) - ORDEM.indexOf(b[0]); });\n      if (lista.length === 1 && ORDEM.indexOf(lista[0][0]) < 0) return [];\n      return lista;\n    }\n\n    function caixa(classe, d, lista) {\n      var el = document.createElement('div');\n      el.className = 'annis-tam ' + classe;\n      lista.forEach(function (t) {\n        var a = document.createElement('a');\n        a.href = d.u + (d.u.indexOf('?') < 0 ? '?' : '&') + 'variant=' + t[1];\n        a.textContent = t[0];\n        a.setAttribute('aria-label', 'Tamanho ' + t[0]);\n        el.appendChild(a);\n      });\n      return el;\n    }\n\n    function aplica(card) {\n      if (card.hasAttribute('data-annis')) return;\n      card.setAttribute('data-annis', '');\n      var h = handleDe(card);\n      if (!h) return;\n      busca(h).then(function (d) {\n        var pc = parcelas(d.p);\n        var lista = tamanhos(d);\n        card.querySelectorAll('product-price').forEach(function (pp) {\n          var depois = pp;\n          if (pc) {\n            var s = document.createElement('div');\n            s.className = 'annis-parcela';\n            s.textContent = pc[0] + 'x de ' + brl(pc[1]) + ' sem juros';\n            depois.after(s);\n            depois = s;\n          }\n          if (lista.length) depois.after(caixa('annis-tam--linha', d, lista));\n        });\n        var galeria = card.querySelector('.card-gallery');\n        if (galeria && lista.length) galeria.appendChild(caixa('annis-tam--foto', d, lista));\n      }).catch(function () {});\n    }\n\n    /* Filtro de tamanho: a Shopify traz a peça que tem o tamanho cadastrado,\n       mesmo esgotado. Junto com \"Em estoque\" ela traz só quem tem aquele\n       tamanho disponível. Então escolher tamanho marca \"Em estoque\". */\n    var TAMANHO = 'filter.v.option.tamanho', ESTOQUE = 'filter.v.availability';\n    /* O tema dispara a busca no clique; só marcar a caixa não basta, porque\n       a busca sem \"Em estoque\" pode chegar por último. Então, logo depois,\n       a caixa é marcada avisando o tema, e a última busca vai com as duas. */\n    document.addEventListener('change', function (e) {\n      var t = e.target;\n      if (!t || t.name !== TAMANHO || !t.checked) return;\n      var lugar = t.form || t.closest('form') || document;\n      var estoque = lugar.querySelector('input[name=\"' + ESTOQUE + '\"][value=\"1\"]');\n      if (!estoque || estoque.checked) return;\n      setTimeout(function () {\n        estoque.checked = true;\n        estoque.dispatchEvent(new Event('change', { bubbles: true }));\n      }, 0);\n    }, true);\n    (function () {\n      var u = new URL(location.href);\n      if (u.searchParams.has(TAMANHO) && !u.searchParams.has(ESTOQUE)) {\n        u.searchParams.append(ESTOQUE, '1');\n        location.replace(u.toString());\n      }\n    })();\n\n    function varre() { document.querySelectorAll('product-card').forEach(aplica); }\n    var espera = null;\n    new MutationObserver(function () {\n      if (espera) return;\n      espera = setTimeout(function () { espera = null; varre(); }, 50);\n    }).observe(document.documentElement, { childList: true, subtree: true });\n    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', varre); else varre();\n  })();\n</script>",
+        "color_scheme": "",
+        "section_width": "page-width",
+        "padding-block-start": 0,
+        "padding-block-end": 0
+      }
+    }
+  },
+  "order": [
+    "section",
+    "main",
+    "custom_liquid_pPYJ4R"
+  ]
+}

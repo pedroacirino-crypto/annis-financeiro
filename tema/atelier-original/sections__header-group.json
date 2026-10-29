@@ -1,0 +1,124 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */
+{
+  "type": "header",
+  "name": "Header",
+  "sections": {
+    "header_announcements_AYRemj": {
+      "type": "header-announcements",
+      "blocks": {
+        "announcement_DBbgjx": {
+          "type": "_announcement",
+          "settings": {
+            "text": "Use o cupom FRETEGRATIS e ganhe o frete na sua primeira compra!",
+            "link": "",
+            "font": "var(--font-body--family)",
+            "font_size": "1rem",
+            "weight": "300",
+            "letter_spacing": "normal",
+            "case": "none"
+          },
+          "blocks": {}
+        }
+      },
+      "block_order": [
+        "announcement_DBbgjx"
+      ],
+      "name": "t:names.announcement_bar",
+      "settings": {
+        "speed": 5,
+        "section_width": "page-width",
+        "color_scheme": "scheme-a1f167e4-c787-43d8-8dee-964700bd8936",
+        "divider_width": 0,
+        "padding-block-start": 15,
+        "padding-block-end": 15
+      }
+    },
+    "header_section": {
+      "type": "header",
+      "blocks": {
+        "header-logo": {
+          "type": "_header-logo",
+          "static": true,
+          "settings": {
+            "hide_logo_on_home_page": false,
+            "custom_height": 32,
+            "custom_height_mobile": 20,
+            "padding-block-start": 16,
+            "padding-block-end": 16,
+            "padding-inline-start": 10,
+            "padding-inline-end": 10
+          },
+          "blocks": {}
+        },
+        "header-menu": {
+          "type": "_header-menu",
+          "static": true,
+          "settings": {
+            "menu": "main-menu",
+            "menu_style": "featured_products",
+            "featured_products_aspect_ratio": "4 / 5",
+            "featured_collections_aspect_ratio": "16 / 9",
+            "image_border_radius": 0,
+            "product_title_case": "uppercase",
+            "collection_title_case": "default",
+            "color_scheme": "",
+            "menu_font_style": "inverse",
+            "type_font_primary_link": "body",
+            "type_font_primary_size": "0.875rem",
+            "type_case_primary_link": "uppercase",
+            "type_font_secondary_link": "primary",
+            "type_case_secondary_link": "uppercase",
+            "type_font_tertiary_link": "primary",
+            "type_case_tertiary_link": "uppercase",
+            "navigation_bar": false,
+            "color_scheme_navigation_bar": "",
+            "drawer_accordion": false,
+            "drawer_accordion_expand_first": false,
+            "drawer_dividers": false
+          },
+          "blocks": {}
+        }
+      },
+      "settings": {
+        "logo_position": "center",
+        "menu_position": "left",
+        "menu_row": "top",
+        "show_search": true,
+        "search_position": "right",
+        "search_row": "top",
+        "show_country": true,
+        "country_selector_style": false,
+        "show_language": false,
+        "localization_position": "right",
+        "localization_row": "top",
+        "section_width": "full-width",
+        "section_height": "standard",
+        "enable_sticky_header": "always",
+        "divider_width": 0,
+        "divider_size": "page-width",
+        "border_width": 0,
+        "color_scheme_top": "scheme-1f4b5208-ddf0-4294-990f-8a38f0da7846",
+        "color_scheme_bottom": "",
+        "color_scheme_transparent": "scheme-6",
+        "enable_transparent_header_home": true,
+        "home_color_scheme": "inverse",
+        "enable_transparent_header_product": true,
+        "product_color_scheme": "default",
+        "enable_transparent_header_collection": false,
+        "collection_color_scheme": "default"
+      }
+    }
+  },
+  "order": [
+    "header_announcements_AYRemj",
+    "header_section"
+  ]
+}
