@@ -50,3 +50,7 @@ select cron.schedule('annis-campanha-aplicar', '0 3 1 11 *',
   $$select avisos.disparar_workflow('campanha.yml', '{"acao": "aplicar"}')$$);
 select cron.schedule('annis-campanha-reverter', '59 2 1 12 *',
   $$select avisos.disparar_workflow('campanha.yml', '{"acao": "reverter"}')$$);
+
+-- Cashback a cada 10 minutos (minuto 3, 13, 23...), deslocado da régua (minuto 0).
+select cron.schedule('annis-cashback', '3-59/10 * * * *',
+  $$select avisos.disparar_workflow('cashback.yml', null)$$);

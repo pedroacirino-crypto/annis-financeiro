@@ -1,0 +1,50 @@
+# Cashback do Novembro Annis: gera o crédito dos pedidos pagos, confere
+# devolução, uso e vencimento (campanha/cashback.py). Disparado a cada 10
+# minutos pelo pg_cron do Supabase (job annis-cashback, campanha/campanha.sql).
+name: Cashback Novembro Annis
+
+on:
+  workflow_dispatch:
+    inputs:
+      simular:
+        description: "Só mostrar (sim/nao)"
+        required: false
+        default: "nao"
+
+concurrency:
+  group: cashback
+  cancel-in-progress: false
+
+jobs:
+  cashback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar
+        run: pip install --quiet requests sqlalchemy psycopg2-binary
+
+      - name: Rodar
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+        run: python campanha/cashback.py ${{ inputs.simular == 'sim' && '--simular' || '' }}
+
+      - name: Avisar no grupo se falhar
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -o /dev/null --retry 3 --connect-timeout 10 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=Cashback do Novembro Annis deu erro. Detalhe: ${LINK}"
