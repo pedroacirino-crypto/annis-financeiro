@@ -1,0 +1,56 @@
+# E-mails de divulgação do Novembro Annis (campanha/divulgacao.py). Quem
+# dispara é o pg_cron do Supabase (campanha/divulgacao.sql); o script só manda
+# dentro da janela de cada e-mail, com o texto aprovado, e nunca repete.
+name: Divulgação Novembro Annis
+
+on:
+  workflow_dispatch:
+    inputs:
+      qual:
+        description: "d1, d2, d3 ou d4"
+        required: true
+      simular:
+        description: "Só mostrar (sim/nao)"
+        required: false
+        default: "nao"
+
+concurrency:
+  group: divulgacao
+  cancel-in-progress: false
+
+jobs:
+  divulgacao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar
+        run: pip install --quiet requests sqlalchemy psycopg2-binary pyyaml
+
+      - name: Enviar
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          GMAIL_SENHA_APP: ${{ secrets.GMAIL_SENHA_APP }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python campanha/divulgacao.py enviar "${{ inputs.qual }}" ${{ inputs.simular == 'sim' && '--simular' || '' }}
+
+      - name: Avisar no grupo se falhar
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -o /dev/null --retry 3 --connect-timeout 10 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=E-mail ${{ inputs.qual }} do Novembro Annis deu erro. Detalhe: ${LINK}"

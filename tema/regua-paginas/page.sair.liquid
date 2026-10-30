@@ -1,0 +1,53 @@
+{%- comment -%}
+  annis.store/pages/sair?p=<token>: link "Não quero mais receber" dos e-mails
+  de divulgação (campanha/divulgacao.py). Grava a saída em campanha.descadastro
+  pela função site.sair. Os e-mails dos pedidos continuam chegando.
+{%- endcomment -%}
+{%- layout none -%}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Annis</title>
+{%- raw -%}
+<style>
+:root { color-scheme: light; }
+body { margin: 0; background: #fff6f0; color: #68380a; font: 15px/1.6 Arial, sans-serif; display: grid; place-items: center; min-height: 100vh; text-align: center; padding: 0 24px; }
+h1 { font: 300 30px/1.2 Georgia, serif; margin: 0 0 12px; }
+a { color: #68380a; }
+</style>
+</head>
+<body>
+<div>
+<h1 id="titulo">Um momento...</h1>
+<p id="msg"></p>
+<p><a href="https://annis.store">Ir para a loja</a></p>
+</div>
+<script>
+(function () {
+  var p = new URLSearchParams(location.search).get("p");
+  var t = document.getElementById("titulo"), m = document.getElementById("msg");
+  function feito(ok) {
+    if (ok) {
+      t.textContent = "Pronto";
+      m.textContent = "Você não vai mais receber os e-mails de novidades da Annis. Os e-mails dos seus pedidos continuam chegando normalmente.";
+    } else {
+      t.textContent = "Não conseguimos agora";
+      m.textContent = "Responda o e-mail com a palavra sair e a gente tira você da lista.";
+    }
+  }
+  if (!p) { feito(false); return; }
+  fetch("https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/rpc/sair", {
+    method: "POST",
+    headers: { apikey: "sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW", "Content-Type": "application/json", "Content-Profile": "site" },
+    body: JSON.stringify({ p: p })
+  }).then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { feito(d && d.ok); })
+    .catch(function () { feito(false); });
+})();
+</script>
+</body>
+</html>
+{%- endraw -%}
