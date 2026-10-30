@@ -338,7 +338,7 @@ divulgacao:
   # Bloco marrom em destaque: [rótulo, número grande, linha de baixo].
   oferta:
     - ["Sale", "até 40% off", "em peças selecionadas"]
-    - ["Cashback", "10% de volta", "em todas as compras, para usar até 31/01"]
+    - ["Cashback", "10% de volta", "em todo o site, para usar até 31/01"]
   rotulo_pecas: "Os maiores descontos"
   comprar: "Comprar"
   rotulo_como: "Como funciona"

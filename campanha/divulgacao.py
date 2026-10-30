@@ -219,16 +219,17 @@ def _grade(rotulo: str, itens: list, restam: str, comprar: str) -> str:
 
 
 def _oferta(partes: list, link: str) -> str:
-    """Sale e cashback lado a lado, em destaque (como as chamadas da página da coleção)."""
+    """Sale e cashback lado a lado, como as chamadas da página da coleção:
+    sem fundo, texto marrom e uma linha fina no meio."""
     celulas = []
     for k, (rotulo, grande, pequeno) in enumerate(partes):
-        borda = f"border-left:1px solid rgba(255,246,240,0.35);" if k else ""
-        celulas.append(f'<td width="50%" valign="top" align="center" style="width:50%;padding:22px 10px;text-align:center;{borda}">'
-                       f'<p style="margin:0;font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;color:{B.CREME};">{B.esc(rotulo)}</p>'
-                       f'<p class="oferta-g" style="margin:6px 0 0 0;font-family:{B.SERIF};font-weight:300;font-size:38px;line-height:1.1;color:#ffffff;white-space:nowrap;">{B.esc(grande)}</p>'
-                       f'<p style="margin:6px 0 0 0;font-size:12px;line-height:1.4;color:{B.CREME};">{B.esc(pequeno)}</p></td>')
-    return (f'<tr><td class="px" style="padding:6px 44px 10px 44px;"><a href="{link}" style="text-decoration:none;">'
-            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{B.MARROM};">'
+        borda = f"border-left:1px solid {B.LINHA};" if k else ""
+        celulas.append(f'<td width="50%" valign="top" align="center" style="width:50%;padding:4px 10px;text-align:center;{borda}">'
+                       f'<p style="margin:0;font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;color:{B.MARROM};">{B.esc(rotulo)}</p>'
+                       f'<p class="oferta-g" style="margin:6px 0 0 0;font-family:{B.SERIF};font-weight:300;font-size:38px;line-height:1.1;color:{B.MARROM};white-space:nowrap;">{B.esc(grande)}</p>'
+                       f'<p style="margin:4px 0 0 0;font-size:12px;line-height:1.4;color:{B.MARROM};opacity:0.85;">{B.esc(pequeno)}</p></td>')
+    return (f'<tr><td class="px" style="padding:8px 44px 14px 44px;"><a href="{link}" style="text-decoration:none;">'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">'
             f'<tr>{"".join(celulas)}</tr></table></a></td></tr>')
 
 
