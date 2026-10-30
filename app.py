@@ -641,7 +641,7 @@ def fmt_curto(centavos: int) -> str:
     return f"{centavos / 100:,.0f}".replace(",", ".")
 
 
-def barras_canal(df, x, y, canal, tooltip=None, altura=250):
+def barras_canal(df, x, y, canal, tooltip=None, altura=250, dominio=("Digital", "Físico")):
     """Barras empilhadas por canal: site no marrom da marca, loja num tom claro.
     Para a visão consolidada do portal omni (12/10/2026). O total do mês vai
     escrito em cima da barra e o eixo Y sai, como em `barras`."""
@@ -656,7 +656,7 @@ def barras_canal(df, x, y, canal, tooltip=None, altura=250):
         x=eixo_x,
         y=alt.Y(f"sum({y}):Q", title=None, axis=None, scale=escala_y),
         color=alt.Color(f"{canal}:N", title=None, legend=alt.Legend(orient="top"),
-                        scale=alt.Scale(domain=["Digital", "Físico"], range=[MARROM, "#C9A27E"])),
+                        scale=alt.Scale(domain=list(dominio), range=[MARROM, "#C9A27E"])),
         order=alt.Order(f"{canal}:N", sort="ascending"),
         tooltip=tooltip or [],
     )
@@ -1791,7 +1791,7 @@ with st.sidebar:
 # Rastreio entrou em 14/10/2026: acompanhar os pacotes é trabalho do dia.
 # Venda por link entrou em 21/10/2026: venda paga no link da Stone quando o
 # site falha vira pedido na Shopify, para ter nota, etiqueta e régua.
-TRABALHO = ["Inteligência", "Recuperar", "Venda por link", "Disparos", "Clientes", "Rastreio", "Pós-compra", "Acessos", "Plano"]
+TRABALHO = ["Novembro Annis", "Inteligência", "Recuperar", "Venda por link", "Clientes", "Rastreio", "Pós-compra", "Acessos", "Plano"]
 FINANCEIRO = ["Vendas", "A receber", "Extrato", "Conciliação", "Histórico", "Resultado"]
 
 # O aviso de aparelho novo vem antes de tudo, inclusive do menu: é a única
@@ -1850,8 +1850,7 @@ st.session_state[f"_{_chave_aba}_ant"] = _aba
 # Ficam de fora os que têm valor inicial próprio (value=/index=/default=),
 # porque reatribuir faz o Streamlit mostrar um aviso amarelo na tela.
 for _k in ("cli_busca", "cli_cidade", "cli_peca", "cli_ordem", "cli_ordem_fila", "cli_detalhe",
-           "cli_ver_todas", "conc_sit", "conc_tipo", "disp_campanha", "disp_devolveu", "disp_pdf",
-           "disp_ver_enviadas", "ext_busca", "rast_busca", "ar_data"):
+           "cli_ver_todas", "conc_sit", "conc_tipo", "ext_busca", "rast_busca", "ar_data"):
     if _k in st.session_state:
         st.session_state[_k] = st.session_state[_k]
 abas = {_aba: st.container()}
@@ -2589,234 +2588,124 @@ if "Plano" in abas:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ABA: DISPAROS: campanha para a base, uma pessoa por vez, com "Já enviei"
+# ABA: NOVEMBRO ANNIS: vendas, sale, cashback e e-mails da campanha (30/10/2026)
 # ════════════════════════════════════════════════════════════════════════════
-#
-# Uma campanha é um texto com um link, mandado para quem já comprou. O cupom
-# da campanha vive na Shopify; aqui fica só o nome dele. A marcação de
-# enviada usa a mesma tabela da fila de carrinho, com id próprio por
-# campanha e pessoa, então não se mistura com a recuperação.
-CAMPANHAS = {
-    "entretempos": {
-        "titulo": "Nova coleção · Entretempos",
-        "ate": "25/10",  # cupons estendidos de 18 para 25/10 em 08/10/2026
-        # Catálogo online nominal (08/10/2026): a página lê o primeiro nome do
-        # ?n= e todos os botões dela já aplicam o ENTRETEMPOS10. Só abre por
-        # link: fora de menu, da busca e do sitemap da loja.
-        "link": "annis.store/pages/entretempos",
-        "cupom_frete": "ENTRETEMPOSFRETE",
-        "cupom": "ENTRETEMPOS10",
-        # Sem PDF a partir da segunda leva (11/10/2026): na primeira, com o
-        # catálogo inteiro dentro do WhatsApp, quase ninguém abriu o link. Agora
-        # a mensagem leva só para a página. Para voltar a anexar, descomente.
-        # "pdf": "catalogos/ANNIS_ENTRETEMPOS_2026.pdf",
-        # Quem comprou há pouco não recebe: o desconto em cima de uma compra
-        # recente soa como "paguei mais caro". Janela móvel, conta do dia do
-        # envio, então nos repiques quem comprar com o cupom também sai.
-        "pausa_dias": 15,
-    },
-}
+# Substitui a aba Disparos (campanha Entretempos pelo WhatsApp, encerrada).
+# Os números vêm de campanha/painel.py e ficam guardados por 10 minutos: a
+# campanha está correndo e cada leitura vai à Shopify.
+from campanha import painel as _nov
 
 
-def _link_campanha(c: dict, camp: dict) -> str:
-    """Link do catálogo com o primeiro nome da cliente, só letras."""
-    primeiro = (c.get("nome") or "").split()[0] if c.get("nome") else ""
-    primeiro = "".join(ch for ch in primeiro if ch.isalpha() or ch == "-").strip("-")
-    primeiro = "-".join(p.capitalize() for p in primeiro.split("-") if p)
-    return f"{camp['link']}?n={primeiro}" if len(primeiro) >= 2 else camp["link"]
+@_memo.memo(600)
+def _nov_vendas():
+    return _nov.vendas()
 
 
-def _texto_campanha(c: dict, camp: dict) -> str:
-    # O desconto é uma cortesia para celebrar o lançamento com quem já conhece
-    # a Annis, não um agradecimento (texto revisto pelo Pedro em 09/10/2026).
-    # A mensagem sai do número novo da loja, por isso o pedido para salvar o
-    # contato. O nome sai igual ao do link.
-    link = _link_campanha(c, camp)
-    primeiro = link.split("?n=", 1)[1] if "?n=" in link else ""
-    # A mensagem sai de um número que a cliente ainda não tem salvo, então a
-    # primeira frase já diz de quem é (Pedro, 09/10/2026).
-    abertura = (f"{primeiro}, chegou a nova coleção da Annis: Entretempos." if primeiro
-                else "Chegou a nova coleção da Annis: Entretempos.")
-    # Quem devolveu peça recebe a frase que reconhece isso. É a chance de
-    # recuperar quem saiu frustrada, e fingir que não aconteceu soa pior.
-    if c.get("estornos"):
-        meio = ("Sei que a última peça não ficou do jeito que você queria, e queremos muito te mostrar "
-                "o que criamos de novo. Para celebrar o lançamento com quem já faz parte da história "
-                "da Annis, preparamos uma cortesia para você: 10% OFF em toda a coleção Entretempos.")
-    else:
-        meio = ("Para celebrar o lançamento, quisemos dividir este momento com quem já faz parte da "
-                "história da Annis. Por isso, preparamos uma cortesia para você: 10% OFF em toda a "
-                "coleção Entretempos.")
-    return (
-        f"{abertura}\n\n{meio}\n\n"
-        # Primeiro disparo sem o frete grátis (decisão de 08/10/2026): o
-        # ENTRETEMPOSFRETE fica guardado para os repiques.
-        "Fizemos uma página especial para você conhecer a coleção, com os 10% já aplicados no checkout:\n"
-        # Com https:// na frente: sem ele o iPhone não reconhece o domínio
-        # .store e o link chega como texto, sem clique (teste de 09/10/2026).
-        f"https://{link}\n\n"
-        f"A cortesia vale até {camp['ate']}.\n\n"
-        # Sem o "salve o número novo" a partir de 12/10/2026: as últimas saem do
-        # WhatsApp que a Annis usava antes, que as clientes já conhecem.
-        "Qualquer dúvida de tamanho ou prazo, é só responder aqui.\n\n"
-        "Com carinho,\nAnnis"
-    )
+@_memo.memo(600)
+def _nov_sale():
+    return _nov.sale(_nov_vendas()["itens"])
 
 
-def _usos_do_cupom(codigo: str):
-    """Quantas vezes o cupom foi usado, direto da Shopify. None se não der."""
-    try:
-        d = shopify_client._graphql(
-            '{ codeDiscountNodeByCode(code: "%s") { codeDiscount { ... on DiscountCodeBasic { asyncUsageCount } '
-            '... on DiscountCodeFreeShipping { asyncUsageCount } } } }' % codigo)
-        return d["codeDiscountNodeByCode"]["codeDiscount"]["asyncUsageCount"]
-    except Exception:
-        return None
+@_memo.memo(600)
+def _nov_cashback():
+    return _nov.cashback(_nov_vendas()["pedidos"])
 
 
-def _card_disparo(c: dict, camp: dict, chave: str, enviado_em=None):
-    texto = _texto_campanha(c, camp)
-    etiqueta = []
-    if c.get("estornos"):
-        etiqueta.append("devolveu peça")
-    if c.get("compras", 0) > 1:
-        etiqueta.append(f"{c['compras']} compras")
-    etiqueta.append(f"última em {_dia_br(c['ultima'])}")
-    if c.get("cidade"):
-        etiqueta.append(f"{c['cidade']}/{c['uf']}")
-    with st.container(border=True):
-        c1, c2 = st.columns([3, 1])
-        with c1:
-            st.markdown(
-                f"<div style='font-family:Newsreader,serif;font-size:1.3rem;color:{MARROM}'>{c.get('nome') or 'Sem nome'}</div>"
-                f"<div style='font-family:Poppins;font-size:0.75rem;color:{MARROM_CLARO};padding-top:0.3rem'>"
-                + " · ".join(etiqueta) + "</div>",
-                unsafe_allow_html=True,
-            )
-        with c2:
-            st.markdown(
-                f"<div style='text-align:right;font-family:Newsreader,serif;font-size:1.5rem;color:{MARROM}'>{fmt_brl(c['total'])}</div>"
-                f"<div style='text-align:right;font-family:Poppins;font-size:0.65rem;color:{MARROM_CLARO}'>já gastou</div>",
-                unsafe_allow_html=True,
-            )
-        _outra = db.quem_recebe_diferente(c.get("email"), c.get("nome"))
-        if _outra:
-            st.warning(f"Comprou no nome de {c.get('nome')}, mas o pedido foi entregue para {_outra}. "
-                       f"O e-mail e o telefone podem ser de {_outra.split()[0]}: confira para quem vai a "
-                       "mensagem e ajuste o nome no texto se for o caso.")
-        texto_final = st.text_area("Mensagem", value=texto, height=230, key=f"disp_{chave}",
-                                   label_visibility="collapsed")
-        _botoes_acao(c, texto_final, "Abrir o catálogo", "https://" + _link_campanha(c, camp))
-        if camp.get("pdf"):
-            st.caption("Antes de enviar, anexe o PDF do catálogo na conversa.")
-        if texto_final != texto:
-            st.caption("Texto editado. Os botões acima já usam a sua versão.")
-        if enviado_em:
-            e1, e2 = st.columns([3, 1])
-            e1.caption(f"Marcada como enviada {_dias_desde(enviado_em)}.")
-            if e2.button("Desfazer", key=f"disp_desf_{chave}", use_container_width=True):
-                if nuvem.desmarcar_contato(chave):
-                    st.rerun()
-        elif st.button("Já enviei", key=f"disp_env_{chave}", use_container_width=True):
-            if nuvem.marcar_contato(chave, c.get("nome") or "", "disparo", c.get("total") or 0):
-                st.rerun()
-            else:
-                st.error("Não consegui gravar. O banco na nuvem não respondeu.")
+@_memo.memo(600)
+def _nov_emails():
+    return _nov.emails(_nov_vendas()["pedidos"])
 
 
-if "Disparos" in abas:
-  with abas["Disparos"]:
-    st.header("Disparos")
+def _rs(v: float) -> str:
+    return fmt_brl(int(round(v * 100)))
+
+
+if "Novembro Annis" in abas:
+  with abas["Novembro Annis"]:
+    st.header("Novembro Annis")
     st.caption(
-        "Campanha para quem já comprou, uma pessoa por vez: o texto já vem "
-        "pronto, o botão abre o WhatsApp, e \"Já enviei\" tira a pessoa da fila."
+        "De 01/11 a 30/11: até 40% off em peças selecionadas e 10% de cashback em todas as compras "
+        "do site. Pedidos do site, sem cancelados; devolução conta pelo que ficou. Atualiza a cada 10 minutos."
     )
-    _camp_id = st.selectbox("Campanha", list(CAMPANHAS), format_func=lambda k: CAMPANHAS[k]["titulo"],
-                            key="disp_campanha")
-    _camp = CAMPANHAS[_camp_id]
-    if _camp.get("pdf") and os.path.exists(_camp["pdf"]):
-        p1, p2 = st.columns([3, 1])
-        p1.info("Em cada conversa, anexe o catálogo em PDF depois de colar a mensagem. "
-                "O WhatsApp não deixa o link levar o arquivo junto.")
-        with open(_camp["pdf"], "rb") as _f:
-            p2.download_button("Baixar o PDF", _f.read(), file_name=os.path.basename(_camp["pdf"]),
-                               mime="application/pdf", use_container_width=True, key="disp_pdf")
-    _base = db.clientes()
-    if not _base:
-        st.info("Nenhuma cliente na base ainda. Use **Atualizar dados** na barra lateral.")
-    else:
-        _pausa = _camp.get("pausa_dias")
-        _recentes = [c for c in _base if _pausa and c.get("dias_sem_comprar") is not None
-                     and c["dias_sem_comprar"] <= _pausa]
-        _base = [c for c in _base if c not in _recentes]
-        _base = sorted(_base, key=lambda c: c["ultima"] or "", reverse=True)
-        _enviadas = nuvem.ler_contatos()
-        _chave = lambda c: f"disparo:{_camp_id}:{(c.get('email') or c.get('nome') or '').lower()}"
-        _feitas = [c for c in _base if _chave(c) in _enviadas]
-        _sem_fone = [c for c in _base if not _so_digitos(c.get("telefone", ""))]
+    try:
+        _v = _nov_vendas()
+    except Exception as _e:
+        st.error(f"Não consegui ler os pedidos da Shopify agora ({type(_e).__name__}).")
+        _v = None
+    if _v is not None:
+        _ped = _v["pedidos"]
+        _rec = sum(p["total"] for p in _ped)
+        _out = _v["outubro"]
 
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Na base", len(_base))
-        m2.metric("Enviadas", len(_feitas))
-        m3.metric("Faltam", len(_base) - len(_feitas))
-        _u1, _u2 = _usos_do_cupom(_camp["cupom"]), _usos_do_cupom(_camp["cupom_frete"])
-        m4.metric("Usos do cupom", "—" if _u1 is None else f"{_u1} · frete {_u2 if _u2 is not None else '—'}",
-                  help="Direto da Shopify: quantos pedidos usaram o cupom de 10%, e quantos o de frete.")
-        if _recentes:
-            st.caption(f"{len(_recentes)} fora da campanha por terem comprado nos últimos {_pausa} dias.")
-        if _sem_fone:
-            st.caption(f"{len(_sem_fone)} sem telefone na base; aparecem no fim, com o botão apagado.")
+        # Vendas ---------------------------------------------------------------
+        st.subheader("Vendas da campanha")
+        if datetime.now(_nov.BRT) < _nov.INICIO:
+            st.info("A campanha começa domingo, 01/11, à meia-noite. Os números aparecem a partir daí.")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Receita", _rs(_rec),
+                  delta=(f"{(_rec / _out['receita'] - 1) * 100:+.0f}% vs outubro".replace(".", ",")
+                         if _out["receita"] else None),
+                  help=f"Com frete. Mesmo período de outubro: {_rs(_out['receita'])} em {_out['pedidos']} pedidos.")
+        k2.metric("Pedidos", len(_ped),
+                  delta=(f"{len(_ped) - _out['pedidos']:+d} vs outubro" if _out["pedidos"] else None))
+        k3.metric("Ticket médio", _rs(_rec / len(_ped)) if _ped else "—")
+        _sale_rs, _fora_rs = sum(p["sale"] for p in _ped), sum(p["fora"] for p in _ped)
+        k4.metric("Peças da sale", fmt_pct(_sale_rs / (_sale_rs + _fora_rs) * 100, 0) if _sale_rs + _fora_rs else "—",
+                  help=f"Parte do valor em peças que veio da sale: {_rs(_sale_rs)} na sale, {_rs(_fora_rs)} fora.")
+        if _ped:
+            _por_dia = []
+            for p in _ped:
+                _d = p["dia"].strftime("%d/%m")
+                _por_dia += [{"Dia": _d, "Tipo": "Sale", "Valor": p["sale"]},
+                             {"Dia": _d, "Tipo": "Fora da sale", "Valor": p["fora"]}]
+            _df_dia = pd.DataFrame(_por_dia).groupby(["Dia", "Tipo"], as_index=False)["Valor"].sum()
+            st.altair_chart(barras_canal(_df_dia, "Dia", "Valor", "Tipo", dominio=["Sale", "Fora da sale"],
+                                         tooltip=["Dia", "Tipo", alt.Tooltip("Valor:Q", format=",.0f")]),
+                            use_container_width=True)
+            st.caption("Valor das peças por dia, sem frete.")
 
-        # Quem abriu o link e quem clicou em comprar, gravado pela própria
-        # página da campanha (nuvem.ler_cliques). O link só leva o primeiro
-        # nome, então o cruzamento com quem recebeu é por primeiro nome: nome
-        # repetido aparece com todas as candidatas.
-        # Guardado até Atualizar dados, como o resto do portal: era 0,33 s por clique.
-        _cliques = _memo.memo()(nuvem.ler_cliques)(_camp_id)
-        with st.expander(f"Quem abriu o link · {len({c['nome'] for c in _cliques if c['evento'] == 'visita'})} nomes",
-                         expanded=False):
-            if not _cliques:
-                st.caption("Ninguém abriu ainda, ou a página ainda não está gravando as visitas.")
-            else:
-                _por_primeiro = {}
-                for c in _base:
-                    if _chave(c) in _enviadas and c.get("nome"):
-                        _p = _link_campanha(c, _camp).split("?n=", 1)[-1]
-                        _por_primeiro.setdefault(_p, []).append(c["nome"])
-                _resumo = {}
-                for c in sorted(_cliques, key=lambda x: x["criado_em"]):
-                    r = _resumo.setdefault(c["nome"] or "(sem nome)", {"primeira": c["criado_em"], "visitas": 0,
-                                                                       "comprar": [], "aparelho": c["aparelho"]})
-                    if c["evento"] == "visita":
-                        r["visitas"] += 1
-                    elif c["evento"] == "comprar" and c["produto"] not in r["comprar"]:
-                        r["comprar"].append(c["produto"])
-                _linhas = []
-                for nome, r in sorted(_resumo.items(), key=lambda kv: kv[1]["primeira"], reverse=True):
-                    _linhas.append({
-                        "Nome no link": nome,
-                        "Quem recebeu": ", ".join(_por_primeiro.get(nome, [])) or "não está entre as enviadas",
-                        "Abriu em": pd.to_datetime(r["primeira"]).tz_convert("America/Sao_Paulo").strftime("%d/%m %H:%M"),
-                        "Visitas": r["visitas"],
-                        "Clicou em comprar": ", ".join(p.replace("-", " ") for p in r["comprar"]) or "",
-                        "Aparelho": r["aparelho"] or "",
-                    })
-                st.dataframe(pd.DataFrame(_linhas), hide_index=True, use_container_width=True)
-                _n_comprar = sum(1 for r in _resumo.values() if r["comprar"])
-                st.caption(f"{len(_resumo)} abriram, {_n_comprar} clicaram em comprar. "
-                           "Compra de fato só aparece no uso do cupom, acima.")
+        # Sale -----------------------------------------------------------------
+        st.subheader("Peças da sale")
+        _s = _nov_sale()
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Peças vendidas", sum(x["vendidas"] for x in _s))
+        s2.metric("Receita da sale", _rs(sum(x["receita"] for x in _s)))
+        s3.metric("Desconto dado", _rs(sum(x["desconto_dado"] for x in _s)),
+                  help="Diferença entre o preço de antes da campanha e o da sale, nas peças vendidas.")
+        tabela(pd.DataFrame([{
+            "Peça": x["peca"], "Desconto": fmt_pct(x["desconto"] * 100, 0), "Vendidas": x["vendidas"],
+            "Receita": _rs(x["receita"]), "Estoque": x["estoque"], "Restam": ", ".join(x["restam"]) or "esgotada",
+        } for x in _s]), num=("Desconto", "Vendidas", "Receita", "Estoque"), titulo="Peças da sale")
 
-        f1, f2 = st.columns([1, 1])
-        _so_devolveu = f1.checkbox("Só quem devolveu peça", value=False, key="disp_devolveu")
-        _ver_enviadas = f2.checkbox("Mostrar já enviadas", value=False, key="disp_ver_enviadas")
+        # Cashback ---------------------------------------------------------------
+        st.subheader("Cashback")
+        _c = _nov_cashback()
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Emitido", _rs(_c["emitido"]), help=f"{_c['emitidos']} código(s), um por pedido pago.")
+        c2.metric("Usado", _rs(_c["usado"]),
+                  help=f"{_c['usados']} uso(s), em pedidos que somaram {_rs(_c['vendas_com_cashback'])}.")
+        c3.metric("Em aberto", _rs(_c["aberto"]), help=f"{_c['abertos']} código(s) ativos, válidos até 31/01.")
+        c4.metric("Cancelado", _rs(_c["cancelado"]), help=f"{_c['cancelados']} por devolução.")
+        if _c["vencido"]:
+            st.caption(f"Vencido sem uso: {_rs(_c['vencido'])}.")
 
-        _fila = [c for c in _base if (not _so_devolveu or c.get("estornos"))]
-        _fila = sorted(_fila, key=lambda c: (0 if _so_digitos(c.get("telefone", "")) else 1))
-        if not _ver_enviadas:
-            _fila = [c for c in _fila if _chave(c) not in _enviadas]
-        st.caption(f"{len(_fila)} na fila")
-        for c in _fila:
-            _card_disparo(c, _camp, _chave(c), enviado_em=_enviadas.get(_chave(c)))
+        # E-mails --------------------------------------------------------------
+        st.subheader("E-mails de divulgação")
+        _em = _nov_emails()
+        if not _em:
+            st.caption("O primeiro sai domingo, 01/11, às 10h, para quem já comprou e para quem tem cadastro.")
+        else:
+            _pct = lambda a, b: fmt_pct(a / b * 100, 0) if b else "—"
+            tabela(pd.DataFrame([{
+                "E-mail": e["email"], "Enviados": e["enviados"],
+                "Abriram": f"{e['abriram']} · {_pct(e['abriram'], e['enviados'])}",
+                "Clicaram": f"{e['clicaram']} · {_pct(e['clicaram'], e['enviados'])}",
+                "Compraram": f"{e['compraram']} · {_pct(e['compraram'], e['enviados'])}",
+                "Receita": _rs(e["receita"]), "Saíram": e["sairam"],
+            } for e in _em]), num=("Enviados", "Abriram", "Clicaram", "Compraram", "Receita", "Saíram"),
+                titulo="E-mails de divulgação")
+            st.caption("Abertura é inflada: o Mail do iPhone baixa as imagens sozinho e conta como aberto. "
+                       "Clique e compra são os números firmes. Compra conta qualquer pedido no site depois de receber o e-mail.")
 
 
 # ════════════════════════════════════════════════════════════════════════════
