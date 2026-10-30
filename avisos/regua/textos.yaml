@@ -335,7 +335,12 @@ divulgacao:
   banner: null
   link_colecao: "https://annis.store/collections/novembro-annis"
   link_regulamento: "https://annis.store/pages/regulamento-novembro-annis"
+  # Bloco marrom em destaque: [rótulo, número grande, linha de baixo].
+  oferta:
+    - ["Sale", "até 40% off", "em peças selecionadas"]
+    - ["Cashback", "10% de volta", "em todas as compras, para usar até 31/01"]
   rotulo_pecas: "Os maiores descontos"
+  comprar: "Comprar"
   rotulo_como: "Como funciona"
   restam: "Restam: {tamanhos}"
   sair: "Não quero mais receber estes e-mails"
@@ -345,67 +350,69 @@ divulgacao:
     - "Frete grátis não vale em pedidos com peças da sale."
   d1:
     aprovado: false
-    assunto: "Começou o Novembro Annis: até 40% off e 10% de volta"
-    previa: "Peças selecionadas com até 40% off e cashback em todas as compras, até 30/11."
-    faixa: "Novembro Annis · de 01 a 30/11"
+    assunto: "Até 40% off e 10% de volta: começou o Novembro Annis"
+    previa: "Peças com até 40% off e 10% do valor de volta em cashback. Só até 30/11."
+    faixa: "Novembro Annis · até 40% off + 10% de volta"
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off e 10% de volta"
-    eyebrow: "Novembro Annis"
-    titulo: "Começou o nosso mês de sale"
+    eyebrow: "Começou hoje"
+    titulo: "Até 40% off e 10% de volta em cashback"
     texto:
-      - "Oi{virgula_nome}. Até 30/11, peças selecionadas estão com até 40% off. E toda compra no site, com ou sem sale, volta 10% em cashback para usar numa próxima peça."
-    botao: "Ver o Novembro Annis"
+      - "Oi{virgula_nome}. Até 30/11, peças selecionadas da Annis estão com até 40% off. E toda compra no site devolve 10% do valor em cashback para a sua próxima peça."
+    botao_topo: "Comprar com até 40% off"
+    botao: "Ver todas as peças da sale"
   d2a:
     aprovado: false
-    assunto: "Até 40% off na Annis, e 10% de volta em tudo"
-    previa: "O Novembro Annis vai até 30/11, mas cada peça tem poucos tamanhos."
-    faixa: "Novembro Annis · até 30/11"
+    assunto: "Você viu? Até 40% off e 10% de volta na Annis"
+    previa: "As peças com mais desconto têm poucos tamanhos. O Novembro Annis vai até 30/11."
+    faixa: "Novembro Annis · até 40% off + 10% de volta"
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off e 10% de volta"
     eyebrow: "Novembro Annis"
     titulo: "Até 40% off, enquanto tiver o seu tamanho"
     texto:
-      - "Oi{virgula_nome}. O Novembro Annis vai até 30/11, mas as peças da sale têm poucas unidades de cada tamanho. Abaixo, as que estão com mais desconto e o que ainda resta de cada uma."
-      - "E toda compra no site volta 10% em cashback."
-    botao: "Ver o Novembro Annis"
+      - "Oi{virgula_nome}. As peças da sale têm poucas unidades de cada tamanho, e quando acaba não volta. Veja abaixo o que ainda resta das que estão com mais desconto."
+    botao_topo: "Garantir meu tamanho"
+    botao: "Ver todas as peças da sale"
   d2b:
     aprovado: false
-    assunto: "O que ainda tem no seu tamanho"
-    previa: "As peças com mais desconto do Novembro Annis e os tamanhos que restam."
-    faixa: "Novembro Annis · até 30/11"
+    assunto: "Ainda tem no seu tamanho, com até 40% off"
+    previa: "Os tamanhos que restam das peças com mais desconto, e 10% de volta em cashback."
+    faixa: "Novembro Annis · até 40% off + 10% de volta"
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off e 10% de volta"
     eyebrow: "Novembro Annis"
     titulo: "Os tamanhos que ainda restam"
     texto:
-      - "Oi{virgula_nome}. Separamos as peças com mais desconto do Novembro Annis e os tamanhos que ainda têm no estoque. Quando um tamanho acaba, não volta."
-    botao: "Ver todas as peças"
+      - "Oi{virgula_nome}. Separamos as peças com mais desconto e os tamanhos que ainda têm no estoque. Quando um tamanho acaba, não volta."
+    botao_topo: "Garantir meu tamanho"
+    botao: "Ver todas as peças da sale"
   d3:
     aprovado: false
     # Junto do lançamento: falta o nome da coleção, o link e a data (13/11 a confirmar).
     link_lancamento: "https://annis.store/collections/all?sort_by=created-descending"
-    assunto: "Coleção nova na Annis, e o Novembro Annis continua"
-    previa: "As peças novas chegaram, e o cashback de 10% vale nelas."
-    faixa: "Coleção nova · Novembro Annis até 30/11"
+    assunto: "Coleção nova, com 10% de volta, e a sale com até 40% off"
+    previa: "As peças novas chegaram, o cashback vale nelas, e o Novembro Annis continua até 30/11."
+    faixa: "Coleção nova · até 40% off + 10% de volta"
     hero_titulo: "Coleção nova"
     hero_sub: "E o Novembro Annis continua"
     eyebrow: "Lançamento"
     titulo: "Chegaram as peças novas"
     texto:
-      - "Oi{virgula_nome}. A coleção nova já está no site. E o Novembro Annis continua até 30/11: peças selecionadas com até 40% off e 10% de volta em cashback em todas as compras."
-      - "O cashback vale nas peças fora da sale, e isso inclui a coleção nova."
+      - "Oi{virgula_nome}. A coleção nova já está no site, e toda compra dela devolve 10% em cashback. E a sale continua até 30/11, com até 40% off."
     botao_lancamento: "Ver a coleção nova"
-    botao: "Ver a sale"
+    botao_topo: "Comprar com até 40% off"
+    botao: "Ver todas as peças da sale"
   d4:
     aprovado: false
-    assunto: "Últimos dias do Novembro Annis"
-    previa: "Termina na segunda, 30/11. Veja o que ainda tem no seu tamanho."
+    assunto: "Últimos dias: até 40% off e 10% de volta"
+    previa: "O Novembro Annis termina na segunda, 30/11. Veja o que ainda tem no seu tamanho."
     faixa: "Semana da Black Friday · termina 30/11"
     hero_titulo: "Últimos dias"
-    hero_sub: "Novembro Annis termina 30/11"
-    eyebrow: "Novembro Annis"
-    titulo: "Termina na segunda, 30/11"
+    hero_sub: "Até 40% off e 10% de volta, até 30/11"
+    eyebrow: "Termina segunda, 30/11"
+    titulo: "Últimos dias com até 40% off"
     texto:
-      - "Oi{virgula_nome}. O Novembro Annis termina na segunda, 30/11, às 23h59. Ainda dá para garantir peças com até 40% off e 10% de volta em cashback em qualquer compra no site."
-      - "Abaixo, o que ainda resta das peças com mais desconto."
-    botao: "Ver o Novembro Annis"
+      - "Oi{virgula_nome}. O Novembro Annis termina na segunda, 30/11, às 23h59. Depois disso, os preços voltam e o cashback de 10% acaba."
+    botao_topo: "Comprar antes que acabe"
+    botao: "Ver todas as peças da sale"

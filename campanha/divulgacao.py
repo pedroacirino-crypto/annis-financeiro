@@ -201,20 +201,35 @@ def _banner(img: str, link: str) -> str:
             f'style="width:100%;max-width:600px;height:auto;display:block;"></a></td></tr>')
 
 
-def _cartao(x: dict, restam: str) -> str:
+def _cartao(x: dict, restam: str, comprar: str) -> str:
     tam = (f'<p style="margin:4px 0 0 0;font-size:11.5px;color:{B.APOIO};">{B.esc(restam.format(tamanhos=x["tamanhos"]))}</p>'
            if restam else "")
     return f"""<td width="50%" valign="top" style="width:50%;padding:0 6px 22px 6px;">
 <a href="{x['url']}" style="text-decoration:none;color:{B.TINTA};"><img src="{x['img']}" width="248" alt="{B.esc(x['nome'])}" style="width:100%;height:auto;display:block;background:#efe3d6;">
 <p style="margin:10px 0 0 0;font-family:{B.SERIF};font-size:17px;line-height:1.25;color:{B.TINTA};">{B.esc(x['nome'])}</p>
-<p style="margin:4px 0 0 0;font-size:13px;color:{B.TINTA};"><span style="text-decoration:line-through;color:{B.APOIO};">{_reais(x['de'])}</span>&nbsp; {_reais(x['por'])}&nbsp; <span style="color:{B.MARROM};font-weight:500;">{round(x['desconto'] * 100)}% off</span></p></a>
-{tam}</td>"""
+<p style="margin:6px 0 0 0;"><span style="display:inline-block;background:{B.MARROM};color:{B.CREME};font-size:11px;font-weight:500;letter-spacing:0.06em;padding:3px 8px;">{round(x['desconto'] * 100)}% OFF</span></p>
+<p style="margin:6px 0 0 0;font-size:14px;color:{B.TINTA};"><span style="text-decoration:line-through;color:{B.APOIO};font-size:12px;">{_reais(x['de'])}</span>&nbsp; <strong style="font-weight:500;">{_reais(x['por'])}</strong></p></a>
+{tam}<p style="margin:10px 0 0 0;"><a href="{x['url']}" style="display:inline-block;border:1px solid {B.MARROM};color:{B.MARROM};text-decoration:none;font-size:11px;font-weight:500;letter-spacing:0.12em;padding:8px 18px;">{B.esc(comprar.upper())}</a></p></td>"""
 
 
-def _grade(rotulo: str, itens: list, restam: str) -> str:
-    linhas = "".join("<tr>" + "".join(_cartao(x, restam) for x in itens[i:i + 2]) + "</tr>" for i in range(0, len(itens), 2))
-    return (f'<tr><td class="px" style="padding:10px 38px 6px 38px;">{B._eyebrow(rotulo)}'
+def _grade(rotulo: str, itens: list, restam: str, comprar: str) -> str:
+    linhas = "".join("<tr>" + "".join(_cartao(x, restam, comprar) for x in itens[i:i + 2]) + "</tr>" for i in range(0, len(itens), 2))
+    return (f'<tr><td class="px" style="padding:10px 38px 6px 38px;"><div style="padding:0 6px;">{B._eyebrow(rotulo)}</div>'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{linhas}</table></td></tr>')
+
+
+def _oferta(partes: list, link: str) -> str:
+    """Sale e cashback lado a lado, em destaque (como as chamadas da página da coleção)."""
+    celulas = []
+    for k, (rotulo, grande, pequeno) in enumerate(partes):
+        borda = f"border-left:1px solid rgba(255,246,240,0.35);" if k else ""
+        celulas.append(f'<td width="50%" valign="top" align="center" style="width:50%;padding:22px 10px;text-align:center;{borda}">'
+                       f'<p style="margin:0;font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;color:{B.CREME};">{B.esc(rotulo)}</p>'
+                       f'<p class="oferta-g" style="margin:6px 0 0 0;font-family:{B.SERIF};font-weight:300;font-size:38px;line-height:1.1;color:#ffffff;white-space:nowrap;">{B.esc(grande)}</p>'
+                       f'<p style="margin:6px 0 0 0;font-size:12px;line-height:1.4;color:{B.CREME};">{B.esc(pequeno)}</p></td>')
+    return (f'<tr><td class="px" style="padding:6px 44px 10px 44px;"><a href="{link}" style="text-decoration:none;">'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{B.MARROM};">'
+            f'<tr>{"".join(celulas)}</tr></table></a></td></tr>')
 
 
 def _como(rotulo: str, linhas: list, link_regulamento: str) -> str:
@@ -237,7 +252,9 @@ def montar(versao: str, nome: str, itens: list) -> dict:
     linhas.append(B.texto(t["texto"], t["eyebrow"], t["titulo"]))
     if versao == "d3":
         linhas.append(B.botao(t["botao_lancamento"], t["link_lancamento"]))
-    linhas.append(_grade(d["rotulo_pecas"], itens, d["restam"] if versao in COM_TAMANHOS else ""))
+    linhas.append(_oferta(d["oferta"], d["link_colecao"]))
+    linhas.append(B.botao(t["botao_topo"], d["link_colecao"]))
+    linhas.append(_grade(d["rotulo_pecas"], itens, d["restam"] if versao in COM_TAMANHOS else "", d["comprar"]))
     linhas.append(B.botao(t["botao"], d["link_colecao"]))
     linhas.append(_como(d["rotulo_como"], d["como"], d["link_regulamento"]))
     links = [(a, b.replace("{whatsapp}", B.link_whatsapp(g["whatsapp"], "Oi, vi o Novembro Annis"))) for a, b in g["rodape_links"]]
