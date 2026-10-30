@@ -202,14 +202,14 @@ def _banner(img: str, link: str) -> str:
 
 
 def _cartao(x: dict, restam: str, comprar: str) -> str:
-    tam = (f'<p style="margin:4px 0 0 0;font-size:11.5px;color:{B.APOIO};">{B.esc(restam.format(tamanhos=x["tamanhos"]))}</p>'
+    """Foto, nome e uma linha de preço (de, por e % off). A peça inteira é o link."""
+    tam = (f'<p style="margin:2px 0 0 0;font-size:11.5px;color:{B.APOIO};">{B.esc(restam.format(tamanhos=x["tamanhos"]))}</p>'
            if restam else "")
     return f"""<td width="50%" valign="top" style="width:50%;padding:0 6px 22px 6px;">
 <a href="{x['url']}" style="text-decoration:none;color:{B.TINTA};"><img src="{x['img']}" width="248" alt="{B.esc(x['nome'])}" style="width:100%;height:auto;display:block;background:#efe3d6;">
 <p style="margin:10px 0 0 0;font-family:{B.SERIF};font-size:17px;line-height:1.25;color:{B.TINTA};">{B.esc(x['nome'])}</p>
-<p style="margin:6px 0 0 0;"><span style="display:inline-block;background:{B.MARROM};color:{B.CREME};font-size:11px;font-weight:500;letter-spacing:0.06em;padding:3px 8px;">{round(x['desconto'] * 100)}% OFF</span></p>
-<p style="margin:6px 0 0 0;font-size:14px;color:{B.TINTA};"><span style="text-decoration:line-through;color:{B.APOIO};font-size:12px;">{_reais(x['de'])}</span>&nbsp; <strong style="font-weight:500;">{_reais(x['por'])}</strong></p></a>
-{tam}<p style="margin:10px 0 0 0;"><a href="{x['url']}" style="display:inline-block;border:1px solid {B.MARROM};color:{B.MARROM};text-decoration:none;font-size:11px;font-weight:500;letter-spacing:0.12em;padding:8px 18px;">{B.esc(comprar.upper())}</a></p></td>"""
+<p style="margin:4px 0 0 0;font-size:13px;color:{B.TINTA};"><span style="text-decoration:line-through;color:{B.APOIO};">{_reais(x['de'])}</span>&nbsp; {_reais(x['por'])}&nbsp; <span style="color:{B.MARROM};font-weight:500;">{round(x['desconto'] * 100)}% off</span></p></a>
+{tam}</td>"""
 
 
 def _grade(rotulo: str, itens: list, restam: str, comprar: str) -> str:
