@@ -42,13 +42,15 @@ from avisos.regua import modelos, motor  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 CONTATO = "contato@annis.store"
+# Apelido da contato@ só para divulgação (Pedro, 30/10); respostas caem na contato@.
+REMETENTE = "Annis <novidades@annis.store>"
 BRT = timezone(timedelta(hours=-3))
 INICIO = datetime(2026, 11, 1, 0, 0, tzinfo=BRT)
 PIXEL = ("https://mkgrmljousyvggpxmofj.supabase.co/rest/v1/rpc/abriu"
          "?apikey=sb_publishable_KMXewGoRe3rCgXEhknGzdQ_pP09F1YW&p=")
 SAIR = "https://annis.store/pages/sair?p="
 PAUSA = 2  # segundos entre um e-mail e outro
-NAO_MANDAR = {"contato@annis.store", "pedidos@annis.store"}
+NAO_MANDAR = {"contato@annis.store", "pedidos@annis.store", "novidades@annis.store"}
 
 # Janela em que cada e-mail pode sair (Brasília); fora dela o script recusa.
 JANELA = {
@@ -315,7 +317,7 @@ def enviar(qual: str, simular: bool = False) -> None:
                 cab = {"List-Unsubscribe": f"<{SAIR}{token}>, <mailto:{CONTATO}?subject=sair>"}
                 # Uma cópia de cada versão na contato@, para conferência.
                 cco = [] if versao in copia_feita else [CONTATO]
-                mid = gmail.enviar(p["email"], m["assunto"], html, texto, cco=cco, cabecalhos=cab)
+                mid = gmail.enviar(p["email"], m["assunto"], html, texto, cco=cco, cabecalhos=cab, remetente=REMETENTE)
                 copia_feita.add(versao)
                 con.execute(text("update campanha.divulgacao_envios set message_id = :m where token = :t"), {"m": mid, "t": token})
                 con.execute(text("insert into avisos.enviados (id, tipo) values (:i, :t) on conflict do nothing"),
@@ -342,7 +344,7 @@ def previa() -> None:
     for versao in ("d1", "d2a", "d2b", "d3", "d4"):
         m = montar(versao, "Michelle", itens)
         html, texto = _finalizar(m["html"], m["texto"], "previa")
-        gmail.enviar(CONTATO, f"[prévia divulgação {versao}] {m['assunto']}", html, texto)
+        gmail.enviar(CONTATO, f"[prévia divulgação {versao}] {m['assunto']}", html, texto, remetente=REMETENTE)
         print(f"{versao}: {m['assunto']}")
 
 

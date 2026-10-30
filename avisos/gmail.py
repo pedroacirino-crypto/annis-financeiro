@@ -28,7 +28,7 @@ REMETENTE = "Annis <pedidos@annis.store>"
 
 def enviar(para: str, assunto: str, html: str, texto: str, anexos: list | None = None,
            fio: str | None = None, imagens: list | None = None, cco: list | None = None,
-           cabecalhos: dict | None = None) -> str:
+           cabecalhos: dict | None = None, remetente: str = REMETENTE) -> str:
     """Manda um e-mail e devolve o Message-ID.
 
     anexos: lista de (nome, bytes, tipo/subtipo). fio: Message-ID de um e-mail
@@ -36,9 +36,10 @@ def enviar(para: str, assunto: str, html: str, texto: str, anexos: list | None =
     imagens: [(cid, bytes_png)] embutidas no HTML como src="cid:<cid>" (QR do Pix).
     cco: cópia oculta (não aparece no e-mail; vai só no envelope).
     cabecalhos: outros campos do cabeçalho (ex.: List-Unsubscribe nos e-mails de divulgação).
+    remetente: outro apelido da contato@ (a divulgação sai de novidades@).
     """
     msg = EmailMessage()
-    msg["From"] = REMETENTE
+    msg["From"] = remetente
     msg["To"] = para
     msg["Subject"] = assunto
     msg["Message-ID"] = make_msgid(domain="annis.store")
