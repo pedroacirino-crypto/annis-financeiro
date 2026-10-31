@@ -162,7 +162,7 @@ def texto(paragrafos: list[str], eyebrow: str = "", titulo: str = "") -> str:
     c = _eyebrow(eyebrow) if eyebrow else ""
     if titulo:
         c += (f'<h1 class="h1" style="margin:0 0 14px 0;font-family:{SERIF};font-weight:300;font-size:34px;'
-              f'line-height:1.1;color:{TINTA};">{esc(titulo)}</h1>')
+              f'line-height:1.1;color:{TINTA};">{esc(titulo).replace(chr(10), "<br>")}</h1>')
     c += "".join(_p(esc(p)) for p in paragrafos)
     return _sec(c, base=14)
 

@@ -359,9 +359,9 @@ divulgacao:
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off + 10% de volta"
     eyebrow: "Começou hoje"
-    titulo: "O Novembro Annis, nosso mês de sale"
+    titulo: "O Novembro Annis,\nnosso mês de sale"  # \n quebra a linha depois da vírgula
     texto:
-      - "Oi{virgula_nome}. Até 30/11, temos peças selecionadas com descontos especiais que podem chegar até 40%. Além disso, um cashback de 10% em todo site para você usar na sua próxima compra, válido até 31/01."
+      - "Oi{virgula_nome}. Até 30/11, temos peças selecionadas com descontos especiais que podem chegar até 40%. Além disso, um cashback de 10% em todo o site para você usar na sua próxima compra, válido até 31/01."
     botao_topo: "Ver as peças"
     botao: "Ver todas as peças da sale"
   d2a:
