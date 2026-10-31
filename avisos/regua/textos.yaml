@@ -359,9 +359,9 @@ divulgacao:
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off + 10% de volta"
     eyebrow: "Começou hoje"
-    titulo: "O nosso mês de sale"
+    titulo: "O Novembro Annis, nosso mês de sale"
     texto:
-      - "Oi{virgula_nome}. Até 30/11, as peças selecionadas abaixo estão com desconto. E o cashback de qualquer compra no site fica guardado para você usar numa próxima peça, até 31/01."
+      - "Oi{virgula_nome}. Até 30/11, temos peças selecionadas com descontos especiais que podem chegar até 40%. Além disso, um cashback de 10% em todo site para você usar na sua próxima compra, válido até 31/01."
     botao_topo: "Ver as peças"
     botao: "Ver todas as peças da sale"
   d2a:
@@ -374,7 +374,7 @@ divulgacao:
     eyebrow: "Novembro Annis"
     titulo: "Enquanto tiver o seu tamanho"
     texto:
-      - "Oi{virgula_nome}. As peças da sale têm poucas unidades de cada tamanho, e quando acaba não volta. Abaixo, o que ainda resta das que estão com mais desconto."
+      - "Oi{virgula_nome}. As peças da sale têm poucas unidades de cada tamanho, e quando acaba não volta mais. Abaixo, as peças que ainda temos disponíveis pra você."
     botao_topo: "Garantir meu tamanho"
     botao: "Ver todas as peças da sale"
   d2b:
