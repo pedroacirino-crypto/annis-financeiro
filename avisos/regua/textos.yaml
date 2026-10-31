@@ -332,7 +332,8 @@ cashback:
 # "banner": endereço da arte na Shopify (Conteúdo > Arquivos). Sem banner, o
 # e-mail abre com a foto da campanha e o título por cima.
 divulgacao:
-  banner: null
+  # Arte da home (YLWT5445 + título) com "Até 40% off + 10% de volta", 1200x800, 31/10.
+  banner: "https://cdn.shopify.com/s/files/1/0717/0005/4051/files/NOVEMBRO_ANNIS_EMAIL_BANNER.jpg?v=1793463789"
   link_colecao: "https://annis.store/collections/novembro-annis"
   link_regulamento: "https://annis.store/pages/regulamento-novembro-annis"
   # Bloco marrom em destaque: [rótulo, número grande, linha de baixo].
