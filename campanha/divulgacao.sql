@@ -88,6 +88,10 @@ grant execute on function site.abriu_grava(text), site.abriu(text), site.sair(te
 --   d2   qua 04/11 19h   não clicou no d1 e não comprou (d2a não abriu, d2b abriu)
 --   d3   sex 13/11 10h   não comprou (junto do lançamento; data a confirmar)
 --   d4   qui 26/11 19h   não comprou
+-- Prévia do d1 para a contato@ às 8h de 01/11, com o site já virado (Pedro quer
+-- conferir peças e links em produção antes das 10h).
+select cron.schedule('annis-divulgacao-previa-d1', '0 11 1 11 *',
+  $$select avisos.disparar_workflow('divulgacao.yml', '{"qual": "previa-d1"}')$$);
 select cron.schedule('annis-divulgacao-d1', '0 13 1 11 *',
   $$select avisos.disparar_workflow('divulgacao.yml', '{"qual": "d1"}')$$);
 select cron.schedule('annis-divulgacao-d2', '0 22 4 11 *',

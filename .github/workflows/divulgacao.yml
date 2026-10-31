@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       qual:
-        description: "d1, d2, d3 ou d4"
+        description: "d1, d2, d3 ou d4 (envia) ou previa-d1 (só a prévia para a contato@)"
         required: true
       simular:
         description: "Só mostrar (sim/nao)"
@@ -41,7 +41,12 @@ jobs:
           GMAIL_SENHA_APP: ${{ secrets.GMAIL_SENHA_APP }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python campanha/divulgacao.py enviar "${{ inputs.qual }}" ${{ inputs.simular == 'sim' && '--simular' || '' }}
+          QUAL: ${{ inputs.qual }}
+        run: |
+          case "${{ inputs.qual }}" in
+            previa-*) python campanha/divulgacao.py previa "${QUAL#previa-}" ;;
+            *) python campanha/divulgacao.py enviar "${{ inputs.qual }}" ${{ inputs.simular == 'sim' && '--simular' || '' }} ;;
+          esac
 
       - name: Avisar no grupo se falhar
         if: failure()

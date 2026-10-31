@@ -19,6 +19,7 @@ Textos em avisos/regua/textos.yaml (seção divulgacao). Cada e-mail só sai com
 pessoa (avisos.enviados, "div:<qual>:<email>").
 
     python campanha/divulgacao.py previa          manda todos para contato@annis.store
+    python campanha/divulgacao.py previa d1       só o d1 (o pg_cron manda às 8h de 01/11, com o site já virado)
     python campanha/divulgacao.py enviar d1       manda (o pg_cron chama pelo divulgacao.yml)
     python campanha/divulgacao.py enviar d1 --simular
     python campanha/divulgacao.py status          enviados, aberturas, cliques e compras
@@ -341,9 +342,9 @@ def enviar(qual: str, simular: bool = False) -> None:
             raise SystemExit(1)
 
 
-def previa() -> None:
+def previa(versoes=("d1", "d2a", "d2b", "d3", "d4")) -> None:
     itens = pecas()
-    for versao in ("d1", "d2a", "d2b", "d3", "d4"):
+    for versao in versoes:
         m = montar(versao, "Michelle", itens)
         html, texto = _finalizar(m["html"], m["texto"], "previa")
         gmail.enviar(CONTATO, f"[prévia divulgação {versao}] {m['assunto']}", html, texto, remetente=REMETENTE)
@@ -374,7 +375,7 @@ def status() -> None:
 if __name__ == "__main__":
     args = sys.argv[1:]
     if args[:1] == ["previa"]:
-        previa()
+        previa(tuple(args[1:]) or ("d1", "d2a", "d2b", "d3", "d4"))
     elif args[:1] == ["enviar"] and len(args) > 1 and args[1] in JANELA:
         enviar(args[1], "--simular" in args)
     elif args[:1] == ["status"]:

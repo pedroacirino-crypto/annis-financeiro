@@ -352,7 +352,7 @@ divulgacao:
   # Com banner, a oferta (até 40% off + 10% de volta) só aparece nele e no assunto;
   # título, texto e botões falam do resto (Pedro, 31/10: sem repetir).
   d1:
-    aprovado: false
+    aprovado: true  # Pedro, 31/10
     assunto: "Até 40% off e 10% de volta: começou o Novembro Annis"
     previa: "Começou hoje e vai até 30/11. Veja as peças com os maiores descontos."
     faixa: "Novembro Annis · de 01 a 30/11"
@@ -365,7 +365,7 @@ divulgacao:
     botao_topo: "Ver as peças"
     botao: "Ver todas as peças da sale"
   d2a:
-    aprovado: false
+    aprovado: true  # Pedro, 31/10
     assunto: "Você viu? Até 40% off e 10% de volta na Annis"
     previa: "As peças com mais desconto têm poucos tamanhos. Vai até 30/11."
     faixa: "Novembro Annis · até 30/11"
