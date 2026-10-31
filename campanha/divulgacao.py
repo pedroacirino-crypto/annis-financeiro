@@ -255,7 +255,9 @@ def montar(versao: str, nome: str, itens: list) -> dict:
     linhas.append(B.texto(t["texto"], t["eyebrow"], t["titulo"]))
     if versao == "d3":
         linhas.append(B.botao(t["botao_lancamento"], t["link_lancamento"]))
-    linhas.append(_oferta(d["oferta"], d["link_colecao"]))
+    # O banner já traz a oferta; o bloco de sale e cashback só entra sem ele (Pedro, 31/10).
+    if not (d.get("banner") and versao != "d3"):
+        linhas.append(_oferta(d["oferta"], d["link_colecao"]))
     linhas.append(B.botao(t["botao_topo"], d["link_colecao"]))
     linhas.append(_grade(d["rotulo_pecas"], itens, d["restam"] if versao in COM_TAMANHOS else "", d["comprar"]))
     linhas.append(B.botao(t["botao"], d["link_colecao"]))

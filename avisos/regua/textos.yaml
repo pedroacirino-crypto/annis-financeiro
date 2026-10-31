@@ -346,40 +346,42 @@ divulgacao:
   restam: "Restam: {tamanhos}"
   sair: "Não quero mais receber estes e-mails"
   como:
-    - "Até 40% off em peças selecionadas, enquanto durar o estoque."
+    - "Desconto em peças selecionadas, enquanto durar o estoque."
     - "10% de volta em cashback em todas as compras no site, com ou sem sale. O código chega por e-mail depois do pedido e vale até 31/01 em peças fora da sale."
     - "Frete grátis não vale em pedidos com peças da sale."
+  # Com banner, a oferta (até 40% off + 10% de volta) só aparece nele e no assunto;
+  # título, texto e botões falam do resto (Pedro, 31/10: sem repetir).
   d1:
     aprovado: false
     assunto: "Até 40% off e 10% de volta: começou o Novembro Annis"
-    previa: "Peças com até 40% off e 10% do valor de volta em cashback. Só até 30/11."
-    faixa: "Novembro Annis · até 40% off + 10% de volta"
+    previa: "Começou hoje e vai até 30/11. Veja as peças com os maiores descontos."
+    faixa: "Novembro Annis · de 01 a 30/11"
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off + 10% de volta"
     eyebrow: "Começou hoje"
-    titulo: "Até 40% off e 10% de volta em cashback"
+    titulo: "O nosso mês de sale"
     texto:
-      - "Oi{virgula_nome}. Até 30/11, peças selecionadas da Annis estão com até 40% off. E toda compra no site devolve 10% do valor em cashback para a sua próxima peça."
-    botao_topo: "Comprar com até 40% off"
+      - "Oi{virgula_nome}. Até 30/11, as peças selecionadas abaixo estão com desconto. E o cashback de qualquer compra no site fica guardado para você usar numa próxima peça, até 31/01."
+    botao_topo: "Ver as peças"
     botao: "Ver todas as peças da sale"
   d2a:
     aprovado: false
     assunto: "Você viu? Até 40% off e 10% de volta na Annis"
-    previa: "As peças com mais desconto têm poucos tamanhos. O Novembro Annis vai até 30/11."
-    faixa: "Novembro Annis · até 40% off + 10% de volta"
+    previa: "As peças com mais desconto têm poucos tamanhos. Vai até 30/11."
+    faixa: "Novembro Annis · até 30/11"
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off + 10% de volta"
     eyebrow: "Novembro Annis"
-    titulo: "Até 40% off, enquanto tiver o seu tamanho"
+    titulo: "Enquanto tiver o seu tamanho"
     texto:
-      - "Oi{virgula_nome}. As peças da sale têm poucas unidades de cada tamanho, e quando acaba não volta. Veja abaixo o que ainda resta das que estão com mais desconto."
+      - "Oi{virgula_nome}. As peças da sale têm poucas unidades de cada tamanho, e quando acaba não volta. Abaixo, o que ainda resta das que estão com mais desconto."
     botao_topo: "Garantir meu tamanho"
     botao: "Ver todas as peças da sale"
   d2b:
     aprovado: false
     assunto: "Ainda tem no seu tamanho, com até 40% off"
-    previa: "Os tamanhos que restam das peças com mais desconto, e 10% de volta em cashback."
-    faixa: "Novembro Annis · até 40% off + 10% de volta"
+    previa: "Separamos o que ainda resta das peças com mais desconto."
+    faixa: "Novembro Annis · até 30/11"
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off + 10% de volta"
     eyebrow: "Novembro Annis"
@@ -407,13 +409,13 @@ divulgacao:
   d4:
     aprovado: false
     assunto: "Últimos dias: até 40% off e 10% de volta"
-    previa: "O Novembro Annis termina na segunda, 30/11. Veja o que ainda tem no seu tamanho."
-    faixa: "Semana da Black Friday · termina 30/11"
+    previa: "Termina segunda, 30/11. Veja o que ainda tem no seu tamanho."
+    faixa: "Novembro Annis · termina 30/11"
     hero_titulo: "Últimos dias"
-    hero_sub: "Até 40% off e 10% de volta, até 30/11"
-    eyebrow: "Termina segunda, 30/11"
-    titulo: "Últimos dias com até 40% off"
+    hero_sub: "Até 40% off + 10% de volta, até 30/11"
+    eyebrow: "Últimos dias"
+    titulo: "Termina na segunda, 30/11"
     texto:
-      - "Oi{virgula_nome}. O Novembro Annis termina na segunda, 30/11, às 23h59. Depois disso, os preços voltam e o cashback de 10% acaba."
-    botao_topo: "Comprar antes que acabe"
+      - "Oi{virgula_nome}. O Novembro Annis termina na segunda, às 23h59. Depois disso, os preços voltam e o cashback das compras acaba. Abaixo, o que ainda resta das peças com mais desconto."
+    botao_topo: "Ver as peças"
     botao: "Ver todas as peças da sale"
