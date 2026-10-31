@@ -30,7 +30,7 @@
           "type": "text",
           "name": "t:names.text",
           "settings": {
-            "text": "<h3><a href=\"/collections/novembro-annis\" title=\"/collections/novembro-annis\"><em>Até 40% off e 10% de volta</em></a></h3>",
+            "text": "<h3><a href=\"/collections/novembro-annis\" title=\"/collections/novembro-annis\"><em>Até 40% off + 10% de volta</em></a></h3>",
             "width": "fit-content",
             "max_width": "normal",
             "alignment": "left",

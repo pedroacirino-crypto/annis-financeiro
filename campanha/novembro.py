@@ -326,7 +326,7 @@ HOME_LINK = "/collections/novembro-annis"
 # Artes do Pedro (31/10): foto de fundo e o título "Novembro Annis" em branco.
 HOME_ARTE = "shopify://shop_images/YLWT5445.png"
 HOME_TITULO = "shopify://shop_images/NOVEMBRO_ANNIS_TITLE_01.png"
-HOME_TEXTO = (f'<h3><a href="{HOME_LINK}" title="{HOME_LINK}"><em>Até 40% off e 10% de volta</em></a></h3>')
+HOME_TEXTO = (f'<h3><a href="{HOME_LINK}" title="{HOME_LINK}"><em>Até 40% off + 10% de volta</em></a></h3>')
 # Prévia (31/10): a mesma home numa página publicada e escondida (fora do menu e
 # da busca do Google), em annis.store/pages/home-novembro. Sai do tema depois.
 HOME_PREVIA = "templates/page.home-novembro.json"
