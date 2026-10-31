@@ -348,7 +348,14 @@ def home_com_campanha(conteudo):
             b["settings"].update({"image": novo, "link": HOME_LINK})
         elif b["type"] == "text":
             b["settings"]["text"] = re.sub(r'(href|title)="[^"]*"', lambda m: f'{m.group(1)}="{HOME_LINK}"', novo)
+    # No celular a home da Monet põe o título no pé da foto, que fica abaixo da
+    # primeira tela: aqui o título vai para o meio (Pedro, 31/10).
+    sec["custom_css"] = [HOME_CSS_CELULAR]
     return json.dumps(d, ensure_ascii=False, indent=2)
+
+
+HOME_CSS_CELULAR = ("@media screen and (max-width: 749px) {.hero__image {object-position: 70% 50% !important; } "
+                    ".hero__content-wrapper {justify-content: center !important; padding-bottom: 0 !important; }}")
 
 
 def home_ligar(simular):

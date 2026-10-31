@@ -58,7 +58,7 @@
         "text_tzGazA"
       ],
       "custom_css": [
-        "@media screen and (max-width: 749px) {.hero__image {object-position: 70% 50% !important; } .hero__content-wrapper {justify-content: flex-end !important; padding-bottom: 48px !important; }}"
+        "@media screen and (max-width: 749px) {.hero__image {object-position: 70% 50% !important; } .hero__content-wrapper {justify-content: center !important; padding-bottom: 0 !important; }}"
       ],
       "settings": {
         "link": "/collections/novembro-annis",
