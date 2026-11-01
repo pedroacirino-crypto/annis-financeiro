@@ -129,15 +129,16 @@ def simular(p: Premissas) -> dict:
 
     # Demanda com crescimento amortecido, com meses a mais porque a produção
     # de M olha para a venda de M+antecedencia.
-    # O mês seguinte cresce a partir do mês com as ações dele: a tendência é
-    # resultado das ações, então o nível que a ação alcançou é o ponto de
-    # partida do crescimento, não um degrau que some (Pedro, 01/11/2026).
+    # A tendência cresce a partir da base, não do mês com as ações: a sale
+    # liquida um estoque que acaba e não vira patamar. Crescer a partir do
+    # mês com a sale fazia a ação de um mês render juros para sempre e a
+    # projeção ficava inclinada demais (Pedro, 01/11/2026). A tendência já é
+    # resultado de ações; as camadas só explicam o mês em que acontecem.
     demanda = []
     nivel = p.receita_base
     for i in range(p.meses + p.antecedencia + 1):
         demanda.append(nivel)
-        x = sum(float(c["receita_liquida"]) for c in p.camadas.get(str(ini + i), []))
-        nivel = (nivel + x) * (1 + p.crescimento * (p.fator_reducao ** i))
+        nivel *= 1 + p.crescimento * (p.fator_reducao ** i)
 
     def fisica(i):
         return p.fisica_com_evento if str(ini + i) in p.meses_evento else p.fisica_sem_evento
