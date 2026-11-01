@@ -548,6 +548,7 @@ def render():
                            fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
                            cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxa_site=pr_taxa_site,
                            fisica_sem_evento=pr_fis_sem, fisica_com_evento=pr_fis_com, meses_evento=eventos,
+                           camadas=fin.camadas_liquidas(),
                            prazo_recebimento=med["prazo_recebimento"][0],
                            estoque_custo=estoque_custo, acumulado_historico=acumulado,
                            caixa_inicial=max(float(fx.caixa.iloc[-1]), 0.0),
@@ -663,6 +664,20 @@ def render():
         st.caption(md("Caixa acumulado é tudo que a operação gerou menos gastou desde o início, sem aportes: cruzou zero, o capital voltou. "
                       "Lucro acumulado é a soma do resultado de competência desde jun/25. A distância entre os dois é o que está em estoque mais o que foi gasto antes do lançamento."))
 
+    # Realizado e projetado na mesma série: olhando só a projeção, a tela dizia
+    # "primeiro mês no lucro: nov/26" com outubro fechado no lucro (Pedro, 01/11/2026).
+    def desde(serie):
+        """Início da sequência final de meses positivos, ou None."""
+        inicio = None
+        for mes_, v in serie:
+            inicio = (inicio or mes_) if v > 0 else None
+        return inicio
+
+    real = t[(t.mes >= "2025-06") & (t.mes <= hoje)]
+    lucro_desde = desde(list(zip(real.mes, real.resultado)) + list(zip(pt.mes, pt.resultado)))
+    fx_real = fx[(fx.mes >= "2025-06") & (fx.mes <= hoje)]
+    caixa_desde = desde(list(zip(fx_real.mes, fx_real.saldo_operacional)) + list(zip(pt.mes, pt.fluxo)))
+
     # As três respostas, uma coluna cada
     r1, r2, r3 = st.columns(3)
     with r1:
@@ -670,8 +685,8 @@ def render():
         st.metric("Aporte ainda necessário", mil(res["total_aportes"]),
                   help="Meses em que o caixa fecharia negativo. Quase tudo são as contas já contratadas de outubro caindo num caixa zerado.")
         st.metric("Último mês com aporte", mes_curto(res["ultimo_aporte"]) if res["ultimo_aporte"] else "nenhum")
-        st.metric("Caixa positivo e fica", quando(res["breakeven"]),
-                  help="Primeiro mês com fluxo positivo sem nenhum negativo depois.")
+        st.metric("Caixa positivo e fica", quando(caixa_desde),
+                  help="Primeiro mês, realizado ou projetado, com fluxo positivo sem nenhum negativo depois.")
     with r2:
         st.subheader("Quando o dinheiro volta")
         st.metric("O que for posto agora", quando(res["payback_novo"]))
@@ -680,7 +695,8 @@ def render():
     with r3:
         st.subheader("Quanto dá de lucro")
         pa = res["por_ano"]
-        st.metric("Primeiro mês no lucro", quando(res["primeiro_lucro"]))
+        st.metric("No lucro desde", quando(lucro_desde),
+                  help="Primeiro mês, realizado ou projetado, de lucro sem nenhum prejuízo depois.")
         st.metric("Resultado 2027", mil(pa.loc["2027", "resultado"]) if "2027" in pa.index else "")
         st.metric("Resultado 2028", mil(pa.loc["2028", "resultado"]) if "2028" in pa.index else "")
 

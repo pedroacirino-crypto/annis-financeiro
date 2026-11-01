@@ -100,6 +100,11 @@ class Premissas:
     fisica_sem_evento: float = 2700.0    # R$ por mês
     fisica_com_evento: float = 8200.0    # R$ por mês
     meses_evento: tuple = ()             # "AAAA-MM" dos meses com evento
+    # Ações do mês corrente que o histórico não enxerga (sale, lançamento),
+    # com receita líquida e custo próprios: {"AAAA-MM": [{"receita_liquida",
+    # "custo", "producao"}]}. Só no mês que ainda não tem tendência: a
+    # tendência dos meses seguintes já é resultado de ações (Pedro, 01/11/2026).
+    camadas: dict = field(default_factory=dict)
     fixos: float = 7600.0                # aluguel 2,8, agência 1,8, pessoas 1,3, foto 0,7, frete, contador, sistemas
     estoque_custo: float = 53700.0       # já pago, a custo
     cobertura_alvo: float = 3.0          # meses de CMV que se quer ter em estoque
@@ -123,11 +128,15 @@ def simular(p: Premissas) -> dict:
 
     # Demanda com crescimento amortecido, com meses a mais porque a produção
     # de M olha para a venda de M+antecedencia.
+    # O mês seguinte cresce a partir do mês com as ações dele: a tendência é
+    # resultado das ações, então o nível que a ação alcançou é o ponto de
+    # partida do crescimento, não um degrau que some (Pedro, 01/11/2026).
     demanda = []
     nivel = p.receita_base
     for i in range(p.meses + p.antecedencia + 1):
         demanda.append(nivel)
-        nivel *= 1 + p.crescimento * (p.fator_reducao ** i)
+        x = sum(float(c["receita_liquida"]) for c in p.camadas.get(str(ini + i), []))
+        nivel = (nivel + x) * (1 + p.crescimento * (p.fator_reducao ** i))
 
     def fisica(i):
         return p.fisica_com_evento if str(ini + i) in p.meses_evento else p.fisica_sem_evento
@@ -150,7 +159,12 @@ def simular(p: Premissas) -> dict:
     linhas, estoque, caixa, receita_anterior = [], p.estoque_custo, p.caixa_inicial, 0.0
     total_aportes = 0.0
     for i, m in enumerate(meses):
-        d_site, d_fis = demanda[i], fisica(i)
+        d_base, d_fis = demanda[i], fisica(i)
+        extra = p.camadas.get(str(m), [])
+        x_liq = sum(float(c["receita_liquida"]) for c in extra)
+        x_cmv = sum(float(c["custo"]) for c in extra)
+        x_prod = sum(float(c.get("producao", 0.0)) for c in extra)
+        d_site = d_base + x_liq
         d = d_site + d_fis
         # Física cai no mês (maquininha antecipada, Pix na hora); o site
         # atravessa o mês na parte parcelada sem antecipação.
@@ -168,8 +182,10 @@ def simular(p: Premissas) -> dict:
         # não têm nada a ver com anúncio. Em out/26 isso projetava R$ 2.862
         # contra R$ 1.667 de setembro, 72% a mais para um site que cresce 6%.
         # O Pedro apontou em 30/09/2026.
-        ads = d_site * p.ads
-        cmv_total = d * p.cmv
+        ads = d_base * p.ads      # a verba é decisão; a camada não puxa mais Meta
+        # A camada tem custo próprio: peça de sale custa bem mais que a média
+        # sobre o preço que sai.
+        cmv_total = (d_base + d_fis) * p.cmv + x_cmv
         # A venda sai do estoque; o que não tem em estoque é produção do mês.
         do_estoque = min(estoque, cmv_total)
         estoque -= do_estoque
@@ -180,7 +196,7 @@ def simular(p: Premissas) -> dict:
         # estoque sobre a cobertura alvo. Fração 1 = ritmo cheio.
         alvo = p.cobertura_alvo * total(i + 1) * p.cmv
         fracao = 1.0 if estoque <= 0 else min(1.0, alvo / estoque)
-        producao = total(i + p.antecedencia) * p.cmv * fracao + (cmv_total - do_estoque)
+        producao = total(i + p.antecedencia) * p.cmv * fracao + (cmv_total - do_estoque) + x_prod
         estoque += total(i + p.antecedencia) * p.cmv * fracao
 
         compromisso_mes = compromissos.get(str(m), 0.0)
@@ -202,7 +218,8 @@ def simular(p: Premissas) -> dict:
         resultado = d - taxas - cmv_total - ads - p.fixos - compromisso_mes
         linhas.append({
             "mes": str(m), "receita": d, "receita_site": d_site, "receita_fisica": d_fis,
-            "evento": str(m) in p.meses_evento, "recebido": recebido, "taxas": taxas, "ads": ads,
+            "evento": str(m) in p.meses_evento, "camadas": x_liq, "cmv_fisica": d_fis * p.cmv,
+            "recebido": recebido, "taxas": taxas, "ads": ads,
             "fixos": p.fixos, "producao": producao, "compromissos": compromisso_mes,
             "ads_pago": ads_pago,
             "cmv_competencia": cmv_total, "do_estoque": do_estoque, "estoque_restante": estoque,

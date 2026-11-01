@@ -266,6 +266,17 @@ def congelar_orcamento(mes: str, meta: str = None, roas: str = None, camadas: st
     corrente não tem contra o que ser comparado.
     """
     import financeiro
+    if camadas:
+        # As ações do mês ficam gravadas e entram na simulação: orçamento e
+        # gráficos da aba Resultado leem o mesmo número.
+        import json
+        with open(camadas, encoding="utf-8") as f:
+            lista = json.load(f)
+        financeiro.salvar_camadas(mes, lista)
+        import memo
+        memo.limpar_tudo()
+        for c in lista:
+            print(f"camada {c['nome']}: receita R$ {c['receita']:,.2f}, custo R$ {c['custo']:,.2f}")
     if meta:
         linhas = financeiro.orcamento_com_meta(mes, float(meta), float(roas or 0))
         print(f"decisão: Meta de R$ {float(meta):,.2f} com ROAS de {float(roas or 0):.2f}x\n")
@@ -277,14 +288,6 @@ def congelar_orcamento(mes: str, meta: str = None, roas: str = None, camadas: st
     # O caixa do mês congela junto com o PnL; sem isso ele seria recalculado a
     # cada leitura e mudaria quando entrasse extrato novo do próprio mês.
     caixa = financeiro.caixa_orcado(mes, congelado=False)
-    if camadas:
-        import json
-        with open(camadas, encoding="utf-8") as f:
-            lista = json.load(f)
-        linhas, caixa = financeiro.aplicar_camadas(linhas, caixa, lista)
-        for c in lista:
-            print(f"camada {c['nome']}: receita R$ {c['receita']:,.2f}, custo R$ {c['custo']:,.2f}")
-        print()
     linhas = {**linhas, **{financeiro.CAIXA_CONGELADO + k: v for k, v in caixa.items()}}
     n = dados_fin.salvar_orcamento(mes, linhas)
     print(f"orçamento de {mes} congelado, {n} linhas.\n")
