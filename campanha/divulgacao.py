@@ -354,7 +354,7 @@ def previa(versoes=("d1", "d2a", "d2b", "d3", "d4")) -> None:
 def status() -> None:
     with nuvem._conectar().connect() as con:
         envios = con.execute(text(
-            "select e.qual, e.grupo, count(*) as enviados,"
+            "select e.qual, e.grupo, count(distinct e.token) as enviados,"
             " count(distinct a.token) as abriram,"
             " count(distinct c.pedido) as clicaram"
             " from campanha.divulgacao_envios e"
