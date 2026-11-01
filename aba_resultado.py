@@ -270,7 +270,11 @@ def render():
         # para a linha do total, e as duas de detalhe ficam vazias no orçado.
         # O plano projeta a maquininha já líquida da taxa da Stone, então no
         # orçado a linha de taxa é zero (está dentro da maquininha), não vazia.
-        de_para = {"(-) CMV total": "(-) CMV", "Maquininha e link no cartão": "Maquininha (líquido de MDR)"}
+        # Orçamento congelado até out/26 chama a maquininha de "líquido de MDR";
+        # desde nov/26 ela vem pelo bruto, com a taxa da Stone na linha dela.
+        de_para = {"(-) CMV total": "(-) CMV"}
+        if orc and "Maquininha e link no cartão" not in orc:
+            de_para["Maquininha e link no cartão"] = "Maquininha (líquido de MDR)"
         if orc and "(-) Taxas Stone" not in orc:
             orc = {**orc, "(-) Taxas Stone": 0.0}
         campos = dict((r, c) for r, c, _ in LINHAS_PNL)

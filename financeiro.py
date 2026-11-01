@@ -804,6 +804,7 @@ def _premissas_do_painel():
         cmv_primeiro=m["cmv_primeiro"][0],
         imposto=m["imposto"][0],
         taxa_site=m["taxa_site"][0],
+        taxa_fisica=m["taxa_fisica"][0],
         ads=m["ads"][0],
         fixos=m["fixos"][0],
         fisica_sem_evento=m["fisica_sem_evento"][0],
@@ -1025,12 +1026,14 @@ def premissas_medidas() -> dict:
         "cmv": (_aparada(u.cmv / u.receita_liquida), "aparada", "CMV sobre receita líquida, do segundo mês em diante"),
         "taxa_site": (float(ult.taxas_pagarme.iloc[0] / ult.receita_site_liquida.iloc[0]), "M-1",
                       "Pagar.me sobre a receita líquida do site"),
+        "taxa_fisica": (_aparada((u.taxas_stone / u.receita_fisica.replace(0, pd.NA)).dropna()), "aparada",
+                        "taxa da Stone sobre a venda física"),
         "imposto": (IMPOSTO_PADRAO, "alíquota", "Simples sobre toda a receita"),
         "ads": (meta_por_site(), "M-1", "Meta sobre receita líquida do site"),
         "fisica_sem_evento": (fis["sem"], "aparada", f"venda física por mês sem evento ({fis['meses_sem']} meses)"),
         "fisica_com_evento": (fis["com"], "aparada", f"venda física por mês com evento ({fis['meses_com']} meses)"),
         "ticket": (prop.get("ticket", 0.0), "M-1", "ticket médio do site"),
-        "maq_na_fisica": (prop.get("maq_na_fisica", 0.0), "M-1", "maquininha dentro da venda física"),
+        "maq_na_fisica": (prop.get("maq_na_fisica", 0.0), "aparada", "maquininha dentro da venda física, desde set/25"),
         "desconto": (prop.get("desconto", 0.0), "M-1", "desconto de Pix sobre a receita do site"),
         "estornos": (prop.get("estornos", 0.0), "aparada", "estornos sobre a receita do site"),
         "cmv_site": (prop.get("cmv_site", 0.0), "aparada", "fatia do site no CMV"),
@@ -1182,7 +1185,10 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     r = linha.iloc[0]
     receita = float(r.receita)
     imposto = receita * p.imposto
-    taxas = float(r.taxas) - imposto
+    # Venda física entra pelo bruto, como no realizado, e a taxa da Stone sai
+    # na linha dela. Antes o orçado deixava a linha em zero (01/11/2026).
+    stone = float(r.receita_fisica) * p.taxa_fisica
+    taxas = float(r.taxas) - imposto - stone
     cmv = float(r.cmv_competencia)
     agencia = 1800.0
     marketing = float(r.ads) + agencia
@@ -1190,12 +1196,13 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
     linhas = {
         "Receita líquida": receita,
         "(-) Taxas Pagar.me": taxas,
+        "(-) Taxas Stone": stone,
         "(-) Imposto": imposto,
         "(-) CMV": cmv,
-        "Margem bruta": receita - taxas - imposto - cmv,
+        "Margem bruta": receita - taxas - stone - imposto - cmv,
         "(-) Meta e agência": marketing,
         "(-) Demais despesas": outras,
-        "Resultado": receita - taxas - imposto - cmv - marketing - outras,
+        "Resultado": receita - taxas - stone - imposto - cmv - marketing - outras,
     }
     linhas.update(_abrir_receita(float(r.receita_site), float(r.receita_fisica), cmv, float(r.cmv_fisica)))
     return linhas
@@ -1287,7 +1294,7 @@ def _abrir_receita(site_liq: float, fisica: float, cmv: float, cmv_fisica: float
     return {
         "Receita bruta": site_bruta + maq + pix,
         "Receita do site (Shopify)": site_bruta,
-        "Maquininha (líquido de MDR)": maq,
+        "Maquininha e link no cartão": maq,
         "Pix direto e link": pix,
         "(-) Desconto Pix": site_bruta * p["desconto"],
         "(-) Estornos": site_bruta * p["estornos"],
@@ -1943,11 +1950,12 @@ def orcado_por_canal(orc: dict, canal: str, imposto: float = IMPOSTO_PADRAO) -> 
                   "(-) Desconto Pix": g("(-) Desconto Pix"), "(-) Estornos": g("(-) Estornos"),
                   "(-) Taxas Pagar.me": taxas, "(-) CMV do site": cmv}
     else:
-        maq, pix = g("Maquininha (líquido de MDR)"), g("Pix direto e link")
+        maq = g("Maquininha e link no cartão") or g("Maquininha (líquido de MDR)")
+        pix = g("Pix direto e link")
         bruta = liquida = maq + pix
-        taxas, cmv = 0.0, g("(-) CMV fora do site (estimado)")
-        linhas = {"Maquininha (líquido de MDR)": maq, "Pix direto e link": pix,
-                  "(-) Taxas Stone": 0.0, "(-) CMV fora do site (estimado)": cmv}
+        taxas, cmv = g("(-) Taxas Stone"), g("(-) CMV fora do site (estimado)")
+        linhas = {"Maquininha e link no cartão": maq, "Maquininha (líquido de MDR)": maq, "Pix direto e link": pix,
+                  "(-) Taxas Stone": taxas, "(-) CMV fora do site (estimado)": cmv}
     imp = liquida * imposto
     margem = liquida - taxas - imp - cmv
     meta = g("(-) Meta e agência") if canal == "Digital" else 0.0

@@ -93,6 +93,7 @@ class Premissas:
     cmv_primeiro: float = None           # CMV do primeiro mês, que repete o mês fechado (None = cmv)
     imposto: float = 0.0264              # Simples, sobre toda a receita
     taxa_site: float = 0.0694            # Pagar.me, só sobre a receita líquida do site
+    taxa_fisica: float = 0.0             # Stone (MDR da maquininha e do link) sobre a venda física
     ads: float = 0.094                   # Meta, % da receita DO SITE, do último mês fechado
     # Venda física (maquininha, Pix direto e link) em dois níveis, com e sem
     # evento, em vez de uma fatia fixa da receita: em out/26 a fatia de 31%
@@ -178,7 +179,7 @@ def simular(p: Premissas) -> dict:
         # receita inteira inflava a taxa quando a venda física crescia, e
         # some com ela quando o site cresce. O Simples, esse sim, é sobre
         # tudo. Escolha do Pedro em 30/09/2026: média aparada na base certa.
-        taxas = d * p.imposto + d_site * p.taxa_site
+        taxas = d * p.imposto + d_site * p.taxa_site + d_fis * p.taxa_fisica
         # Meta puxa venda de site, não venda física: indexar à receita total
         # fazia o investimento crescer junto com maquininha e Pix direto, que
         # não têm nada a ver com anúncio. Em out/26 isso projetava R$ 2.862
