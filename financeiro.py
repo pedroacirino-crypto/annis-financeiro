@@ -855,10 +855,11 @@ def caixa_orcado(mes: str, congelado: bool = True) -> dict:
         return {}
     r = linha.iloc[0]
     fisica = float(r.receita_fisica)
+    stone = fisica * p.taxa_fisica      # a maquininha liquida já sem a taxa
     imposto = float(r.receita) * IMPOSTO_PADRAO
     return {
-        "Site": float(r.recebido) - fisica - (float(r.taxas) - imposto),
-        "Fora do site": fisica,
+        "Site": float(r.recebido) - fisica - (float(r.taxas) - imposto - stone),
+        "Fora do site": fisica - stone,
         "Estoque": -float(r.producao),
         "Despesas": -(float(r.ads_pago) + float(r.fixos) + float(r.compromissos)),
         "Imposto": -imposto,
