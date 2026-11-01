@@ -89,7 +89,8 @@ class Premissas:
     receita_base: float = 20000.0        # receita líquida DO SITE no 1º mês; a física vem à parte
     crescimento: float = 0.105           # ao mês, ajuste log-linear abr a set/26
     fator_reducao: float = 0.8           # g_t = crescimento · fator^t
-    cmv: float = 0.414                   # CMV médio sobre receita líquida
+    cmv: float = 0.414                   # CMV médio sobre receita líquida, do segundo mês em diante
+    cmv_primeiro: float = None           # CMV do primeiro mês, que repete o mês fechado (None = cmv)
     imposto: float = 0.0264              # Simples, sobre toda a receita
     taxa_site: float = 0.0694            # Pagar.me, só sobre a receita líquida do site
     ads: float = 0.094                   # Meta, % da receita DO SITE, do último mês fechado
@@ -185,7 +186,10 @@ def simular(p: Premissas) -> dict:
         ads = d_base * p.ads      # a verba é decisão; a camada não puxa mais Meta
         # A camada tem custo próprio: peça de sale custa bem mais que a média
         # sobre o preço que sai.
-        cmv_total = (d_base + d_fis) * p.cmv + x_cmv
+        # O primeiro mês repete o mix do mês fechado; dali em diante, a média
+        # de seis meses (Pedro, 01/11/2026: outubro teve mix barato).
+        cmv_mes = p.cmv_primeiro if (i == 0 and p.cmv_primeiro is not None) else p.cmv
+        cmv_total = (d_base + d_fis) * cmv_mes + x_cmv
         # A venda sai do estoque; o que não tem em estoque é produção do mês.
         do_estoque = min(estoque, cmv_total)
         estoque -= do_estoque
@@ -218,7 +222,7 @@ def simular(p: Premissas) -> dict:
         resultado = d - taxas - cmv_total - ads - p.fixos - compromisso_mes
         linhas.append({
             "mes": str(m), "receita": d, "receita_site": d_site, "receita_fisica": d_fis,
-            "evento": str(m) in p.meses_evento, "camadas": x_liq, "cmv_fisica": d_fis * p.cmv,
+            "evento": str(m) in p.meses_evento, "camadas": x_liq, "cmv_fisica": d_fis * cmv_mes,
             "recebido": recebido, "taxas": taxas, "ads": ads,
             "fixos": p.fixos, "producao": producao, "compromissos": compromisso_mes,
             "ads_pago": ads_pago,

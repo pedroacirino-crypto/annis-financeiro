@@ -490,7 +490,8 @@ def render():
         pr_cmv = q5.number_input(
             "CMV médio (% da receita)", min_value=0.0, max_value=100.0,
             value=float(med["cmv"][0] * 100), step=0.5, format="%.2f",
-            help="Média aparada dos 6 meses fechados, sem o maior e o menor.") / 100
+            help=f"Média aparada dos 6 meses fechados, sem o maior e o menor, do segundo mês projetado em diante. "
+                 f"O primeiro mês repete o mês fechado e usa o CMV dele ({med['cmv_primeiro'][0] * 100:.1f}%).") / 100
         meta_site = med["ads"][0] * 100
         pr_ads = q6.number_input(
             "Meta (% da receita líquida do site)", min_value=0.0, max_value=100.0,
@@ -546,7 +547,7 @@ def render():
 
     prem = plano.Premissas(inicio=str(pd.Period(hoje, "M") + 1), receita_base=pr_receita, crescimento=pr_g,
                            fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
-                           cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxa_site=pr_taxa_site,
+                           cmv=pr_cmv, cmv_primeiro=med["cmv_primeiro"][0], ads=pr_ads, fixos=pr_fixos, taxa_site=pr_taxa_site,
                            fisica_sem_evento=pr_fis_sem, fisica_com_evento=pr_fis_com, meses_evento=eventos,
                            camadas=fin.camadas_liquidas(),
                            prazo_recebimento=med["prazo_recebimento"][0],

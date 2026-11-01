@@ -801,6 +801,7 @@ def _premissas_do_painel():
         receita_base=m["receita_base"][0],
         crescimento=m["crescimento"][0],
         cmv=m["cmv"][0],
+        cmv_primeiro=m["cmv_primeiro"][0],
         imposto=m["imposto"][0],
         taxa_site=m["taxa_site"][0],
         ads=m["ads"][0],
@@ -1015,10 +1016,13 @@ def premissas_medidas() -> dict:
     return {
         "receita_base": (receita_partida(), "M-1", "receita do site no primeiro mês projetado, sem crescimento"),
         "crescimento": (crescimento, "ajuste 6m", "crescimento log-linear da receita líquida"),
-        # CMV e taxa pelo mês fechado, a mesma régua da receita: com receita
-        # de outubro e custo da média de seis meses, a receita subia e a
-        # margem não acompanhava (Pedro, 01/11/2026).
-        "cmv": (float(ult.cmv.iloc[0] / ult.receita_liquida.iloc[0]), "M-1", "CMV sobre receita líquida"),
+        # CMV do primeiro mês e taxa pelo mês fechado, a mesma régua da
+        # receita, que repete o mês fechado; do segundo mês em diante o CMV é
+        # a média aparada, porque o mix de um mês só não se sustenta
+        # (outubro, 33,6%, com muita Relíquia). Pedro, 01/11/2026.
+        "cmv_primeiro": (float(ult.cmv.iloc[0] / ult.receita_liquida.iloc[0]), "M-1",
+                         "CMV sobre receita líquida no primeiro mês projetado"),
+        "cmv": (_aparada(u.cmv / u.receita_liquida), "aparada", "CMV sobre receita líquida, do segundo mês em diante"),
         "taxa_site": (float(ult.taxas_pagarme.iloc[0] / ult.receita_site_liquida.iloc[0]), "M-1",
                       "Pagar.me sobre a receita líquida do site"),
         "imposto": (IMPOSTO_PADRAO, "alíquota", "Simples sobre toda a receita"),
