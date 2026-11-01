@@ -44,6 +44,8 @@ MAPA_FICHAS = [
     (r"Monet", "Vestido"),
     (r"^Bolsa de Jacquard Rel", "Bolsa Jacquard"),
     (r"Loulou", "Vestido Jacquard Loulou"),
+    # Custo de R$ 73,60 na ficha está certo, confirmado pelo Pedro (não
+    # perguntar de novo, já foi duas vezes; cobrou em 01/11/2026).
     (r"^Vestido .*Relic[aá]rio", "Vestido Jacquard Relicário"),
     (r"^Corset .*Joan", "Top estruturado"),
     (r"^Cal[çc]a .*Joan", "Calça marrom"),
