@@ -72,6 +72,12 @@ META_ADS = {
     "2026-05": 1617.17, "2026-06": 1836.82, "2026-07": 1626.43, "2026-08": 2339.92,
     "2026-09": 2500.00 * 20 / 30,
 }
+# A agência e a V60 informam o investimento sem os impostos que a Meta cobra
+# no Brasil; no cartão sai com eles (V60, outubro/2026: R$ 3.505 e R$ 3.931 com
+# impostos). Enquanto o reembolso às sócias era a despesa, o imposto ia junto
+# em "Outras no cartão"; desde que a fatura transcrita substituiu o reembolso
+# (julho/2026) ele tinha sumido do resultado. O Pedro conferiu em 01/11/2026.
+IMPOSTO_META = 0.1215
 CATEGORIA_CARTAO = "Pagas no cartão das sócias (anúncios, aluguel, outras)"
 CATEGORIA_FATURA = "Fatura do cartão de anúncios"
 
@@ -726,7 +732,7 @@ def _premissas_do_painel():
         fixos=m["fixos"][0],
         share_fisica=m["share_fisica"][0],
         prazo_recebimento=m["prazo_recebimento"][0],
-        ads_a_pagar=float(meta_ads().get(mes_fechado(), 0.0)),
+        ads_a_pagar=float(meta_ads().get(mes_fechado(), 0.0)) * (1 + IMPOSTO_META),
         estoque_custo=estoque_a_custo(),
         a_receber_inicial=a_receber_futuro(),
         acumulado_historico=_acumulado_operacional(),
@@ -1000,6 +1006,7 @@ def meta_por_site() -> float:
     linha = t[t.mes == mes_fechado()]
     if meta is None or linha.empty:
         return 0.125
+    meta = float(meta) * (1 + IMPOSTO_META)  # custo, que é o que a projeção desconta
     # Sobre a receita do site já líquida de desconto e estorno, que é como o
     # plano trabalha. Medir sobre a bruta e aplicar sobre a líquida, como eu
     # fiz na primeira tentativa, encolhe o investimento sem querer.
@@ -1043,10 +1050,12 @@ def orcamento_com_meta(mes: str, meta: float, roas: float) -> dict:
     p.receita_base = m["receita_base"][0]
     p.ads = m["ads"][0]
     prop = _proporcoes()
-    meta_hoje = p.ads * p.receita_base * (1 - p.share_fisica)
+    # `meta` é o investimento da plataforma, o número que se decide e que o
+    # ROAS mede; `p.ads` é custo, com o imposto da Meta.
+    meta_hoje = p.ads * p.receita_base * (1 - p.share_fisica) / (1 + IMPOSTO_META)
     fator = 1 - prop.get("desconto", 0.0) - prop.get("estornos", 0.0)
     p.receita_base = p.receita_base + (meta - meta_hoje) * roas * fator
-    p.ads = meta / (p.receita_base * (1 - p.share_fisica))
+    p.ads = meta * (1 + IMPOSTO_META) / (p.receita_base * (1 - p.share_fisica))
     linhas = orcamento_do_mes(mes, premissas=p)
     linhas["_receita_base"] = p.receita_base
     linhas["_ads"] = p.ads
@@ -1516,6 +1525,14 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     fatura = desp_cat.pop(CATEGORIA_FATURA) if CATEGORIA_FATURA in desp_cat else 0.0
     cartao = (desp_cat[CATEGORIA_CARTAO] if CATEGORIA_CARTAO in desp_cat else pd.Series(0.0, index=desp_cat.index)) + fatura
     meta = meta.reindex(desp_cat.index).fillna(0.0)
+    # Meta com o imposto. Onde a fatura não foi transcrita, o reembolso às
+    # sócias já trazia o imposto e segue mandando no total do mês: o imposto
+    # só passa de "Outras no cartão" para "Meta Ads", sem contar duas vezes.
+    com_fatura = set().union(*meses_com_fatura().values()) if meses_com_fatura() else set()
+    meta_custo = meta * (1 + IMPOSTO_META)
+    sem_fatura = ~meta.index.isin(list(com_fatura))
+    meta_custo[sem_fatura] = meta_custo[sem_fatura].clip(upper=pd.concat([cartao, meta], axis=1).max(axis=1)[sem_fatura])
+    meta = meta_custo
     desp_cat["Meta Ads"] = meta
     desp_cat[CATEGORIA_CARTAO] = (cartao - meta).clip(lower=0.0)
     desp_cat = desp_cat.rename(columns={CATEGORIA_CARTAO: "Outras no cartão das sócias"})
