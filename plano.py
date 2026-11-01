@@ -86,20 +86,26 @@ def contas_a_pagar_total() -> float:
 class Premissas:
     inicio: str = "2026-10"
     meses: int = 27
-    receita_base: float = 20000.0        # receita líquida do 1º mês (out/26), escolha do Pedro
+    receita_base: float = 20000.0        # receita líquida DO SITE no 1º mês; a física vem à parte
     crescimento: float = 0.105           # ao mês, ajuste log-linear abr a set/26
     fator_reducao: float = 0.8           # g_t = crescimento · fator^t
     cmv: float = 0.414                   # CMV médio sobre receita líquida
     imposto: float = 0.0264              # Simples, sobre toda a receita
     taxa_site: float = 0.0694            # Pagar.me, só sobre a receita líquida do site
     ads: float = 0.094                   # Meta, % da receita DO SITE, do último mês fechado
-    share_fisica: float = 0.331          # fatia da receita que vem de maquininha e Pix direto
+    # Venda física (maquininha, Pix direto e link) em dois níveis, com e sem
+    # evento, em vez de uma fatia fixa da receita: em out/26 a fatia de 31%
+    # projetava R$ 10 mil de física num mês sem evento, que vendeu R$ 2,7 mil.
+    # Ela existe fora de evento, mas não cresce com o site. Pedro, 01/11/2026.
+    fisica_sem_evento: float = 2700.0    # R$ por mês
+    fisica_com_evento: float = 8200.0    # R$ por mês
+    meses_evento: tuple = ()             # "AAAA-MM" dos meses com evento
     fixos: float = 7600.0                # aluguel 2,8, agência 1,8, pessoas 1,3, foto 0,7, frete, contador, sistemas
     estoque_custo: float = 53700.0       # já pago, a custo
     cobertura_alvo: float = 3.0          # meses de CMV que se quer ter em estoque
     envelhecimento: float = 0.02         # fração do estoque que deixa de ser vendável por mês
     antecedencia: int = 2                # produz em M para vender em M+antecedencia
-    prazo_recebimento: float = 0.3       # fração da receita que só cai no mês seguinte (cartão)
+    prazo_recebimento: float = 0.3       # fração da receita do site que só cai no mês seguinte (cartão)
     ads_a_pagar: float = 0.0             # Meta do mês anterior ao início, que é pago no primeiro mês
     a_receber_inicial: float = 0.0       # recebíveis da Pagar.me ainda por cair
     caixa_inicial: float = 0.0           # saldo da conta no início do plano
@@ -123,6 +129,12 @@ def simular(p: Premissas) -> dict:
         demanda.append(nivel)
         nivel *= 1 + p.crescimento * (p.fator_reducao ** i)
 
+    def fisica(i):
+        return p.fisica_com_evento if str(ini + i) in p.meses_evento else p.fisica_sem_evento
+
+    def total(i):
+        return demanda[i] + fisica(i)
+
     # Conta vencida antes do primeiro mês do plano (a sobra de setembro, por
     # exemplo) não some: cai no primeiro mês.
     compromissos = dict(p.compromissos)
@@ -138,8 +150,11 @@ def simular(p: Premissas) -> dict:
     linhas, estoque, caixa, receita_anterior = [], p.estoque_custo, p.caixa_inicial, 0.0
     total_aportes = 0.0
     for i, m in enumerate(meses):
-        d = demanda[i]
-        recebido = d * (1 - p.prazo_recebimento) + receita_anterior * p.prazo_recebimento
+        d_site, d_fis = demanda[i], fisica(i)
+        d = d_site + d_fis
+        # Física cai no mês (maquininha antecipada, Pix na hora); o site
+        # atravessa o mês na parte parcelada sem antecipação.
+        recebido = d_fis + d_site * (1 - p.prazo_recebimento) + receita_anterior * p.prazo_recebimento
         if i == 0:
             recebido += p.a_receber_inicial
         # A Pagar.me só cobra o que passa por ela: maquininha já entra
@@ -147,13 +162,13 @@ def simular(p: Premissas) -> dict:
         # receita inteira inflava a taxa quando a venda física crescia, e
         # some com ela quando o site cresce. O Simples, esse sim, é sobre
         # tudo. Escolha do Pedro em 30/09/2026: média aparada na base certa.
-        taxas = d * p.imposto + d * (1 - p.share_fisica) * p.taxa_site
+        taxas = d * p.imposto + d_site * p.taxa_site
         # Meta puxa venda de site, não venda física: indexar à receita total
         # fazia o investimento crescer junto com maquininha e Pix direto, que
         # não têm nada a ver com anúncio. Em out/26 isso projetava R$ 2.862
         # contra R$ 1.667 de setembro, 72% a mais para um site que cresce 6%.
         # O Pedro apontou em 30/09/2026.
-        ads = d * (1 - p.share_fisica) * p.ads
+        ads = d_site * p.ads
         cmv_total = d * p.cmv
         # A venda sai do estoque; o que não tem em estoque é produção do mês.
         do_estoque = min(estoque, cmv_total)
@@ -163,10 +178,10 @@ def simular(p: Premissas) -> dict:
 
         # Produção para M+antecedencia, reduzida na proporção do excesso de
         # estoque sobre a cobertura alvo. Fração 1 = ritmo cheio.
-        alvo = p.cobertura_alvo * demanda[i + 1] * p.cmv
+        alvo = p.cobertura_alvo * total(i + 1) * p.cmv
         fracao = 1.0 if estoque <= 0 else min(1.0, alvo / estoque)
-        producao = demanda[i + p.antecedencia] * p.cmv * fracao + (cmv_total - do_estoque)
-        estoque += demanda[i + p.antecedencia] * p.cmv * fracao
+        producao = total(i + p.antecedencia) * p.cmv * fracao + (cmv_total - do_estoque)
+        estoque += total(i + p.antecedencia) * p.cmv * fracao
 
         compromisso_mes = compromissos.get(str(m), 0.0)
         fluxo = recebido - taxas - ads_a_pagar - p.fixos - producao - compromisso_mes
@@ -186,14 +201,15 @@ def simular(p: Premissas) -> dict:
         # os números batiam entre si; não batiam.
         resultado = d - taxas - cmv_total - ads - p.fixos - compromisso_mes
         linhas.append({
-            "mes": str(m), "receita": d, "recebido": recebido, "taxas": taxas, "ads": ads,
+            "mes": str(m), "receita": d, "receita_site": d_site, "receita_fisica": d_fis,
+            "evento": str(m) in p.meses_evento, "recebido": recebido, "taxas": taxas, "ads": ads,
             "fixos": p.fixos, "producao": producao, "compromissos": compromisso_mes,
             "ads_pago": ads_pago,
             "cmv_competencia": cmv_total, "do_estoque": do_estoque, "estoque_restante": estoque,
             "envelhecido": envelhecido, "fracao_producao": fracao,
             "fluxo": fluxo, "aporte": aporte, "caixa": caixa, "resultado": resultado,
         })
-        receita_anterior = d
+        receita_anterior = d_site
 
     t = pd.DataFrame(linhas)
     t["fluxo_acumulado"] = t.fluxo.cumsum()

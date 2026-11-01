@@ -12,7 +12,9 @@
     python carga.py plano    legado/plano.json         plano de ação contínuo, que aparece em Trabalho > Plano
     python carga.py orcamento 2026-10                  congela a projeção do mês, para comparar com o realizado
     python carga.py orcamento 2026-10 3000 6.82        congela com decisão de Meta e o ROAS assumido
+    python carga.py orcamento 2026-11 3600 7.86 legado/camadas_2026-11.json   idem, mais ações do mês (sale, lançamento)
     python carga.py pedido-link legado/link_michelle.json  pedido na Shopify de venda pelo link da Stone
+    python carga.py eventos  2026-09 2026-12           meses com evento presencial (passados e planejados), lista inteira
     python carga.py resumo                             o que tem lá e até quando
 
 Roda na máquina do Pedro, com o .env apontando para o banco. Nada disso vai
@@ -224,6 +226,27 @@ def carregar_plano(caminho: str) -> None:
     print(f"plano: {n} itens, {feitos} feitos, {n - feitos} em aberto")
 
 
+def gravar_eventos(meses: list) -> None:
+    """Meses com evento presencial. A lista é a inteira, não acrescenta: a
+    projeção usa a venda física com evento nesses meses e sem evento nos
+    outros (financeiro.fisica_por_evento)."""
+    import re
+    import nuvem
+    from sqlalchemy import text
+    meses = sorted(set(meses))
+    ruins = [m for m in meses if not re.fullmatch(r"\d{4}-\d{2}", m)]
+    if ruins:
+        sys.exit(f"mês fora do formato AAAA-MM: {', '.join(ruins)}")
+    with nuvem._conectar().begin() as con:
+        con.execute(text("insert into avisos.estado (chave, valor, em) values ('meses_evento', :v, now()) "
+                         "on conflict (chave) do update set valor = excluded.valor, em = now()"),
+                    {"v": ",".join(meses)})
+    f = financeiro.fisica_por_evento()
+    print(f"meses com evento: {', '.join(meses) or 'nenhum'}")
+    print(f"  venda física por mês: sem evento R$ {f['sem']:,.2f} ({f['meses_sem']} meses),"
+          f" com evento R$ {f['com']:,.2f} ({f['meses_com']} meses)")
+
+
 def carregar_rateio(caminho: str) -> None:
     """Um pagamento que é duas coisas. Sem isso o seguro incêndio dentro do
     boleto do aluguel de setembro fazia parecer que o aluguel tinha subido
@@ -235,7 +258,7 @@ def carregar_rateio(caminho: str) -> None:
               f"R$ {r.valor_parte:,.2f} para {r.categoria_parte}")
 
 
-def congelar_orcamento(mes: str, meta: str = None, roas: str = None) -> None:
+def congelar_orcamento(mes: str, meta: str = None, roas: str = None, camadas: str = None) -> None:
     """Congela a projeção do mês. Com `meta`, congela uma decisão: o
     investimento escolhido e a receita que o ROAS assumido devolve.
 
@@ -254,6 +277,14 @@ def congelar_orcamento(mes: str, meta: str = None, roas: str = None) -> None:
     # O caixa do mês congela junto com o PnL; sem isso ele seria recalculado a
     # cada leitura e mudaria quando entrasse extrato novo do próprio mês.
     caixa = financeiro.caixa_orcado(mes, congelado=False)
+    if camadas:
+        import json
+        with open(camadas, encoding="utf-8") as f:
+            lista = json.load(f)
+        linhas, caixa = financeiro.aplicar_camadas(linhas, caixa, lista)
+        for c in lista:
+            print(f"camada {c['nome']}: receita R$ {c['receita']:,.2f}, custo R$ {c['custo']:,.2f}")
+        print()
     linhas = {**linhas, **{financeiro.CAIXA_CONGELADO + k: v for k, v in caixa.items()}}
     n = dados_fin.salvar_orcamento(mes, linhas)
     print(f"orçamento de {mes} congelado, {n} linhas.\n")
@@ -353,12 +384,14 @@ def main(argv):
         carregar_rateio(argv[2])
     elif cmd == "stone":
         carregar_vendas_stone(argv[2])
+    elif cmd == "eventos":
+        gravar_eventos(argv[2:])
     elif cmd == "plano":
         carregar_plano(argv[2])
     elif cmd == "pedido-link":
         pedido_link(argv[2])
     elif cmd == "orcamento":
-        congelar_orcamento(*argv[2:5])
+        congelar_orcamento(*argv[2:6])
     else:
         r = dados_fin.resumo()
         print(f"extrato: {r['extrato_linhas']} linhas, até {r['extrato_ate']}")

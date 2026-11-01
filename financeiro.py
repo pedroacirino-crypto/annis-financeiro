@@ -558,10 +558,44 @@ def mes_corrente() -> str:
 
 @memo()
 def receita_base() -> float:
-    """Receita líquida do último mês fechado: a âncora da projeção."""
+    """Receita líquida do site no último mês fechado: a âncora da projeção.
+    A física vem à parte, em dois níveis (fisica_por_evento)."""
     t = pnl_competencia()["tabela"]
     linha = t[t.mes == mes_fechado()]
-    return float(linha.receita_liquida.iloc[0]) if not linha.empty else 20000.0
+    return float(linha.receita_site_liquida.iloc[0]) if not linha.empty else 20000.0
+
+
+def meses_evento() -> tuple:
+    """Meses com evento presencial, passados e planejados, em avisos.estado
+    ('meses_evento'), gravados por `carga.py eventos`."""
+    import nuvem
+    from sqlalchemy import text
+    try:
+        with nuvem._conectar().connect() as con:
+            v = con.execute(text("select valor from avisos.estado where chave = 'meses_evento'")).scalar()
+        return tuple(sorted(m.strip() for m in (v or "").split(",") if m.strip()))
+    except Exception:
+        return ()
+
+
+@memo()
+def fisica_por_evento() -> dict:
+    """Venda física por mês (maquininha, Pix direto e link), com e sem evento.
+
+    Fatia fixa da receita não serve: a física não cresce com o site e salta
+    em mês de evento (set/26 R$ 8,2 mil; out/26, sem evento, R$ 2,7 mil). Sem
+    evento é a média aparada dos 12 meses fechados sem evento; com evento,
+    a média aparada de todos os meses de evento desde a loja online (set/25).
+    Pedro, 01/11/2026: dois níveis, porque existe venda fora de evento.
+    """
+    t = pnl_competencia()["tabela"]
+    fim = mes_fechado()
+    ev = set(meses_evento())
+    u = t[(t.mes >= "2025-09") & (t.mes <= fim)]
+    com = u[u.mes.isin(ev)].receita_fisica
+    sem = u[~u.mes.isin(ev) & (u.mes >= str(pd.Period(fim, "M") - 11))].receita_fisica
+    return {"sem": _aparada(sem) if len(sem) else 0.0, "com": _aparada(com) if len(com) else 0.0,
+            "meses_sem": len(sem), "meses_com": len(com)}
 
 
 # Toda premissa que sai de dado vive aqui e é medida a cada leitura. Antes
@@ -610,7 +644,7 @@ def despesas_projetadas() -> dict:
     t = pnl_competencia()["tabela"]
     ult = t[t.mes == fim]
     ped_ult = float(ult.pedidos.iloc[0]) if not ult.empty else 0.0
-    ped_proj = (_abrir_receita(receita_partida(), 0.0) or {}).get("Pedidos no site", ped_ult)
+    ped_proj = (_abrir_receita(receita_partida(), 0.0, 0.0) or {}).get("Pedidos no site", ped_ult)
 
     saida = {}
     for c in u.columns:
@@ -730,7 +764,9 @@ def _premissas_do_painel():
         taxa_site=m["taxa_site"][0],
         ads=m["ads"][0],
         fixos=m["fixos"][0],
-        share_fisica=m["share_fisica"][0],
+        fisica_sem_evento=m["fisica_sem_evento"][0],
+        fisica_com_evento=m["fisica_com_evento"][0],
+        meses_evento=meses_evento(),
         prazo_recebimento=m["prazo_recebimento"][0],
         ads_a_pagar=float(meta_ads().get(mes_fechado(), 0.0)) * (1 + IMPOSTO_META),
         estoque_custo=estoque_a_custo(),
@@ -774,7 +810,7 @@ def caixa_orcado(mes: str, congelado: bool = True) -> dict:
     if linha.empty:
         return {}
     r = linha.iloc[0]
-    fisica = float(r.receita) * p.share_fisica
+    fisica = float(r.receita_fisica)
     imposto = float(r.receita) * IMPOSTO_PADRAO
     return {
         "Site": float(r.recebido) - fisica - (float(r.taxas) - imposto),
@@ -927,16 +963,22 @@ def premissas_medidas() -> dict:
     prop = _proporcoes()
     if u.empty:
         return {}
+    fis = fisica_por_evento()
+    # Crescimento medido na receita total e aplicado ao site: no site sozinho
+    # o ajuste dá uns 19% ao mês (outubro pesa muito), e trocar a régua do
+    # crescimento junto com a da física mudaria a projeção por dois motivos
+    # ao mesmo tempo.
     crescimento = float(np.polyfit(range(len(u)), np.log(u.receita_liquida.replace(0, pd.NA).ffill().values), 1)[0])
     return {
-        "receita_base": (receita_partida(), "M-1 crescido", "receita do primeiro mês projetado"),
+        "receita_base": (receita_partida(), "M-1 crescido", "receita do site no primeiro mês projetado"),
         "crescimento": (crescimento, "ajuste 6m", "crescimento log-linear da receita líquida"),
         "cmv": (_aparada(u.cmv / u.receita_liquida), "aparada", "CMV sobre receita líquida"),
         "taxa_site": (_aparada(u.taxas / u.receita_site_liquida.replace(0, pd.NA)), "aparada",
                       "Pagar.me sobre a receita líquida do site"),
         "imposto": (IMPOSTO_PADRAO, "alíquota", "Simples sobre toda a receita"),
         "ads": (meta_por_site(), "M-1", "Meta sobre receita líquida do site"),
-        "share_fisica": (prop.get("fisica", 0.0), "aparada", "maquininha e Pix direto na receita"),
+        "fisica_sem_evento": (fis["sem"], "aparada", f"venda física por mês sem evento ({fis['meses_sem']} meses)"),
+        "fisica_com_evento": (fis["com"], "aparada", f"venda física por mês com evento ({fis['meses_com']} meses)"),
         "ticket": (prop.get("ticket", 0.0), "M-1", "ticket médio do site"),
         "maq_na_fisica": (prop.get("maq_na_fisica", 0.0), "M-1", "maquininha dentro da venda física"),
         "desconto": (prop.get("desconto", 0.0), "M-1", "desconto de Pix sobre a receita do site"),
@@ -945,7 +987,7 @@ def premissas_medidas() -> dict:
         "roas": (_roas(), "M-1", "receita do site por real de Meta"),
         "fixos": (sum(despesas_projetadas().values()), "por categoria",
                   "despesas fora Meta, somadas da projeção por categoria"),
-        "prazo_recebimento": (_prazo_recebimento() * (1 - prop.get("fisica", 0.0)), "aparada",
+        "prazo_recebimento": (_prazo_recebimento(), "aparada",
                               "fatia da receita que só cai no mês seguinte"),
     }
 
@@ -1052,10 +1094,10 @@ def orcamento_com_meta(mes: str, meta: float, roas: float) -> dict:
     prop = _proporcoes()
     # `meta` é o investimento da plataforma, o número que se decide e que o
     # ROAS mede; `p.ads` é custo, com o imposto da Meta.
-    meta_hoje = p.ads * p.receita_base * (1 - p.share_fisica) / (1 + IMPOSTO_META)
+    meta_hoje = p.ads * p.receita_base / (1 + IMPOSTO_META)
     fator = 1 - prop.get("desconto", 0.0) - prop.get("estornos", 0.0)
     p.receita_base = p.receita_base + (meta - meta_hoje) * roas * fator
-    p.ads = meta * (1 + IMPOSTO_META) / (p.receita_base * (1 - p.share_fisica))
+    p.ads = meta * (1 + IMPOSTO_META) / p.receita_base
     linhas = orcamento_do_mes(mes, premissas=p)
     linhas["_receita_base"] = p.receita_base
     linhas["_ads"] = p.ads
@@ -1098,8 +1140,51 @@ def orcamento_do_mes(mes: str, premissas=None) -> dict:
         "(-) Demais despesas": outras,
         "Resultado": receita - taxas - imposto - cmv - marketing - outras,
     }
-    linhas.update(_abrir_receita(receita, cmv))
+    linhas.update(_abrir_receita(float(r.receita_site), float(r.receita_fisica), cmv))
     return linhas
+
+
+def aplicar_camadas(linhas: dict, caixa: dict, camadas: list) -> tuple:
+    """Soma ao orçamento o que a projeção não enxerga: uma ação do mês com
+    receita e custo próprios (a sale de novembro, um lançamento). O modelo
+    projeta o site pelo histórico e o CMV por uma média; peça de sale tem
+    custo sobre preço bem acima da média, então ela entra à parte, com o
+    custo dela.
+
+    Cada camada: {"nome", "receita" (bruta do site), "custo" (CMV),
+    "pedidos", "producao" (pago no mês, além da produção do modelo)}.
+    Estorno e taxa seguem a proporção medida do site.
+    """
+    import plano
+    linhas, caixa = dict(linhas), dict(caixa)
+    prop = _proporcoes()
+    m = premissas_medidas()
+    est, desc = prop.get("estornos", 0.0), prop.get("desconto", 0.0)
+    taxa, imposto, prazo = m["taxa_site"][0], m["imposto"][0], m["prazo_recebimento"][0]
+    for c in camadas:
+        bruta = float(c["receita"])
+        liq = bruta * (1 - est - desc)
+        tx, imp, cmv = liq * taxa, liq * imposto, float(c["custo"])
+        for k, v in {"Receita bruta": bruta, "Receita do site (Shopify)": bruta, "(-) Estornos": bruta * est,
+                     "(-) Desconto Pix": bruta * desc, "Receita líquida": liq, "(-) Taxas Pagar.me": tx,
+                     "(-) Imposto": imp, "(-) CMV": cmv, "(-) CMV do site": cmv,
+                     "Pedidos no site": float(c.get("pedidos", 0))}.items():
+            linhas[k] = linhas.get(k, 0.0) + v
+        linhas[f"_camada {c['nome']}"] = bruta
+        if caixa:
+            caixa["Site"] = caixa.get("Site", 0.0) + liq * (1 - prazo) - tx
+            caixa["Estoque"] = caixa.get("Estoque", 0.0) - float(c.get("producao", 0.0))
+            caixa["Imposto"] = caixa.get("Imposto", 0.0) - imp
+    linhas["Margem bruta"] = (linhas["Receita líquida"] - linhas["(-) Taxas Pagar.me"]
+                              - linhas["(-) Imposto"] - linhas["(-) CMV"])
+    linhas["Resultado"] = linhas["Margem bruta"] - linhas["(-) Meta e agência"] - linhas["(-) Demais despesas"]
+    if caixa:
+        antes = caixa.get("Caixa", 0.0) - caixa.get("Saldo do mês", 0.0) - caixa.get("Aportes", 0.0)
+        saldo = sum(caixa.get(k, 0.0) for k in ("Site", "Fora do site", "Estoque", "Despesas", "Imposto"))
+        caixa["Saldo do mês"] = saldo
+        caixa["Aportes"] = max(0.0, -(antes + saldo))
+        caixa["Caixa"] = antes + saldo + caixa["Aportes"]
+    return linhas, caixa
 
 
 @memo()
@@ -1164,20 +1249,22 @@ def _aparada(s: pd.Series) -> float:
     return float(s.mean()) if len(s) else 0.0
 
 
-def _abrir_receita(receita: float, cmv: float) -> dict:
+def _abrir_receita(site_liq: float, fisica: float, cmv: float) -> dict:
     """Quebra a receita líquida projetada em canal, desconto e estorno."""
     p = _proporcoes()
     if not p:
         return {}
-    fisica = receita * p["fisica"]
     maq = fisica * p["maq_na_fisica"]
     pix = fisica - maq
-    site_liq = receita - fisica
     # Desconto e estorno são só do site, e são medidos sobre a receita cheia
     # dele: site_liq = site_bruta × (1 − desconto − estorno).
     fator = 1 - p["desconto"] - p["estornos"]
     site_bruta = site_liq / fator if fator > 0 else site_liq
-    cmv_site = cmv * p["cmv_site"]
+    # O modelo aplica uma taxa de CMV só sobre a receita inteira; com a física
+    # projetada à parte, o CMV se reparte pela receita de cada canal. A fatia
+    # medida (cmv_site) vinha de meses com evento e punha R$ 3,8 mil de CMV
+    # fora do site num mês de R$ 2,4 mil de venda física.
+    cmv_site = cmv * site_liq / (site_liq + fisica) if site_liq + fisica else 0.0
     return {
         "Receita bruta": site_bruta + maq + pix,
         "Receita do site (Shopify)": site_bruta,

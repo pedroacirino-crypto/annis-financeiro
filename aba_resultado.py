@@ -445,14 +445,10 @@ def render():
     # acontecer. Mês só conta como fechado quando o extrato alcança o último
     # dia dele; antes disso a receita ainda está incompleta e puxaria a base
     # para baixo.
-    import calendar
     primeiro_projetado = str(pd.Period(hoje, "M") + 1)
-    fim_dado = ex.data.max()
-    ultimo_dia = calendar.monthrange(fim_dado.year, fim_dado.month)[1]
-    mes_base = fim_dado.strftime("%Y-%m") if fim_dado.day >= ultimo_dia else \
-        str(pd.Period(fim_dado, "M") - 1)
+    mes_base = hoje
     linha_base = t[t.mes == mes_base]
-    base_real = float(linha_base.receita_liquida.iloc[0]) if not linha_base.empty else 20000.0
+    base_real = float(linha_base.receita_site_liquida.iloc[0]) if not linha_base.empty else 20000.0
 
     med = fin.premissas_medidas()
     # Decisão tomada sobrescreve a medição nos campos: depois que o Pedro
@@ -472,16 +468,17 @@ def render():
         )
         q1, q2, q3, q4 = st.columns(4)
         pr_receita = float(q1.number_input(
-            f"Receita líquida em {mes_curto(primeiro_projetado)} (R$)",
+            f"Receita líquida do site em {mes_curto(primeiro_projetado)} (R$)",
             min_value=0.0, value=inicial("receita_base"), step=100.0, format="%.2f",
-            help=f"Âncora: {mes_curto(mes_base)} fechou em {brl(base_real)}. "
+            help=f"Âncora: o site fechou {mes_curto(mes_base)} em {brl(base_real)}. A venda física vem à parte. "
                  f"Aqui ele já vem crescido pela taxa do modelo."
                  + (f" Carrega a decisão de Meta congelada no orçamento, com ROAS de "
                     f"{dec.get('roas', 0):.2f}x." if "receita_base" in dec else "")))
         pr_g = q2.number_input(
             "Crescimento ao mês (%)", min_value=-50.0, max_value=100.0,
             value=float(med["crescimento"][0] * 100), step=0.5, format="%.2f",
-            help=f"Ajuste log-linear da receita líquida nos 6 meses fechados até {mes_curto(mes_base)}.") / 100
+            help=f"Ajuste log-linear da receita líquida total nos 6 meses fechados até {mes_curto(mes_base)}, "
+                 "aplicado ao site. A venda física não cresce: fica no nível com ou sem evento.") / 100
         pr_fator = float(q3.number_input(
             "Fator de redução do crescimento", min_value=0.0, max_value=1.0, value=0.8, step=0.05, format="%.2f",
             help="g no mês t = g × fator^t. Com 0,8 a receita converge para 1,7x a inicial; com 0,9, para 2,6x."))
@@ -512,15 +509,27 @@ def render():
             help="Média aparada dos seis meses fechados. Só sobre o que passa pela "
                  "Pagar.me: maquininha já entra líquida de MDR e Pix direto não tem taxa. "
                  "O Simples, de 2,64%, incide sobre tudo e é fixo.") / 100
-        q9, _, _, _ = st.columns(4)
+        eventos = fin.meses_evento()
+        q9, q10, q11, _ = st.columns(4)
+        pr_fis_sem = float(q10.number_input(
+            "Venda física sem evento (R$/mês)", min_value=0.0, value=float(med["fisica_sem_evento"][0]),
+            step=100.0, format="%.2f",
+            help="Maquininha, Pix direto e link num mês sem evento: média aparada dos 12 meses fechados sem evento."))
+        pr_fis_com = float(q11.number_input(
+            "Venda física com evento (R$/mês)", min_value=0.0, value=float(med["fisica_com_evento"][0]),
+            step=100.0, format="%.2f",
+            help="Média aparada dos meses com evento desde set/25. Os meses de evento, passados e planejados, "
+                 "entram por carga.py eventos."))
         pr_envelh = q9.number_input(
             "Estoque que envelhece por mês (%)", min_value=0.0, max_value=20.0, value=2.0, step=0.5, format="%.1f",
             help="Peça que deixa de vender a preço cheio. Sai do estoque sem virar receita.") / 100
 
+        st.caption(md("**Meses com evento:** " + (", ".join(mes_curto(m) for m in eventos) or "nenhum cadastrado")
+                      + ". Mês projetado que está na lista usa a venda física com evento."))
         if dec:
             st.caption(md(
                 f"**Decisão congelada para {mes_curto(fin.mes_corrente())}**: Meta de "
-                f"{brl(dec.get('ads', 0) * dec.get('receita_base', 0) * (1 - med['share_fisica'][0]))} "
+                f"{brl(dec.get('ads', 0) * dec.get('receita_base', 0) / (1 + fin.IMPOSTO_META))} "
                 f"com ROAS de {dec.get('roas', 0):.2f}x, o que leva a receita de partida de "
                 f"{brl(med['receita_base'][0])} medidos para {brl(dec.get('receita_base', 0))}. "
                 "Os campos acima já vêm com ela; a tabela abaixo mostra o que o dado diz, sem a decisão."))
@@ -538,7 +547,7 @@ def render():
     prem = plano.Premissas(inicio=str(pd.Period(hoje, "M") + 1), receita_base=pr_receita, crescimento=pr_g,
                            fator_reducao=pr_fator, cobertura_alvo=pr_cobertura, envelhecimento=pr_envelh,
                            cmv=pr_cmv, ads=pr_ads, fixos=pr_fixos, taxa_site=pr_taxa_site,
-                           share_fisica=med["share_fisica"][0],
+                           fisica_sem_evento=pr_fis_sem, fisica_com_evento=pr_fis_com, meses_evento=eventos,
                            prazo_recebimento=med["prazo_recebimento"][0],
                            estoque_custo=estoque_custo, acumulado_historico=acumulado,
                            caixa_inicial=max(float(fx.caixa.iloc[-1]), 0.0),
@@ -550,8 +559,10 @@ def render():
     # Taxa e Meta incidem sobre bases diferentes da receita total: o Simples
     # pega tudo, a Pagar.me só o site, e o Meta é indexado ao site. Antes de
     # 30/09/2026 os três eram somados como se fossem todos sobre o total.
-    taxa_efetiva = prem.imposto + (1 - prem.share_fisica) * prem.taxa_site
-    ads_efetivo = (1 - prem.share_fisica) * prem.ads
+    # O ponto de lucro é lido num mês sem evento.
+    share_fisica = prem.fisica_sem_evento / (prem.receita_base + prem.fisica_sem_evento) if prem.receita_base else 0.0
+    taxa_efetiva = prem.imposto + (1 - share_fisica) * prem.taxa_site
+    ads_efetivo = (1 - share_fisica) * prem.ads
     contrib = 1 - taxa_efetiva - prem.cmv - ads_efetivo
     breakeven_lucro = prem.fixos / contrib if contrib > 0 else float("inf")
 
