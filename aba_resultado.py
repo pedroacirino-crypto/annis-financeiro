@@ -141,7 +141,7 @@ def render():
     # ─── Cabeçalho: quatro números que resumem tudo ─────────────────────────────
     st.title("Resultado")
     st.caption(md(f"Shopify na receita do site, Pagar.me nas taxas, extrato da conta Stone em custos, venda física e aportes "
-                  f"(lido até {ex.data.max():%d/%m/%Y}), planilha de 2025 nas fichas técnicas."))
+                  f"(cobre até {fin.fim_dos_custos():%d/%m/%Y}), planilha de 2025 nas fichas técnicas."))
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Aportes das sócias", mil(ap.valor.sum()), help=f"Ana {brl(ap[ap.quem == 'Ana'].valor.sum())} · Isa {brl(ap[ap.quem == 'Isa'].valor.sum())} · pagas do bolso antes da conta {brl(ap[ap.quem.str.contains('bolso')].valor.sum())}")
@@ -420,7 +420,7 @@ def render():
 
     # ═══════════════════════════════════════════════════════════════════════════
     st.header("2. Onde estamos hoje")
-    st.caption(md(f"Foto de {ex.data.max():%d/%m/%Y}. O que tem para vender, o que tem para pagar."))
+    st.caption(md(f"Foto de {fin.fim_dos_custos():%d/%m/%Y}. O que tem para vender, o que tem para pagar."))
 
     loja = d["estoque_loja"]
     h1, h2, h3, h4 = st.columns(4)

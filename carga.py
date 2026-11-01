@@ -1,6 +1,7 @@
 """Carrega no Supabase o que o Pedro manda na conversa.
 
-    python carga.py extrato  caminho/Extrato.csv       exportação da conta Stone (csv ou xlsx)
+    python carga.py extrato  caminho/Extrato.csv       exportação da conta Stone (csv ou xlsx); vale até a hora do download
+    python carga.py extrato  caminho/Extrato.csv 2026-10-31   idem, dizendo até que dia o arquivo cobre
     python carga.py contas   caminho/contas.xlsx       planilha de contas a pagar (uma aba por mês)
     python carga.py meta     2026-09 2500              investimento em Meta de um mês
     python carga.py legado                             fichas e lançamentos pré-conta, da planilha de 2025
@@ -27,10 +28,17 @@ import extrato
 import financeiro
 
 
-def carregar_extrato(caminho: str) -> None:
+def carregar_extrato(caminho: str, ate: str = None) -> None:
+    """`ate` é até quando o arquivo cobre; sem ele, a hora em que foi baixado.
+    Dia sem movimento não aparece no extrato: em 01/11/2026 o de outubro
+    terminava em 30/10 porque 31/10 não teve nada, e o mês não fechava."""
+    import os
+    from datetime import datetime
     cru = extrato.ler_arquivo(caminho)
     n = dados_fin.salvar_extrato(cru)
     print(f"extrato: {n} movimentações gravadas, de {cru.data.min():%d/%m/%Y} a {cru.data.max():%d/%m/%Y}")
+    cobre = datetime.fromisoformat(ate) if ate else datetime.fromtimestamp(os.path.getmtime(caminho))
+    print(f"  cobre até {dados_fin.salvar_extrato_ate(cobre):%d/%m/%Y %H:%M}")
     df = extrato.classificar(cru)
     pend = df[(df.confianca != "ok") & (df.natureza != "interna")]
     print(f"  a classificar ou confirmar: {len(pend)} linhas, R$ {pend.valor_abs.sum():,.2f}")
@@ -330,7 +338,7 @@ def main(argv):
         return 1
     cmd = argv[1] if len(argv) > 1 else "resumo"
     if cmd == "extrato":
-        carregar_extrato(argv[2])
+        carregar_extrato(argv[2], argv[3] if len(argv) > 3 else None)
     elif cmd == "contas":
         carregar_contas(argv[2])
     elif cmd == "meta":

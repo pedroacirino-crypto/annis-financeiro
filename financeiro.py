@@ -1209,10 +1209,16 @@ def orcamento_congelado_em(mes: str):
 
 
 def fim_dos_custos():
-    """Última data com saída registrada. Depois dela o PnL está cego."""
+    """Até onde o extrato enxerga. Depois disso o PnL está cego. É o último
+    movimento ou, se for depois, a hora em que o arquivo foi baixado: dia
+    sem movimento não aparece no extrato (31/10/2026 não teve nada)."""
+    import dados_fin
     import extrato
     ex = extrato.carregar()
-    return ex.data.max() if not ex.empty else None
+    if ex.empty:
+        return None
+    ate = dados_fin.ler_extrato_ate()
+    return max(ex.data.max(), ate) if ate is not None else ex.data.max()
 
 
 def _classificar_saida(setor: str, atividade: str) -> str:

@@ -230,6 +230,35 @@ def salvar_extrato(df: pd.DataFrame) -> int:
     return _upsert("fin_extrato", linhas, "id")
 
 
+def salvar_extrato_ate(quando):
+    """Guarda até quando o extrato carregado cobre, se for depois do que já
+    estava. Fica em avisos.estado, como o 'stone_ate' da conciliação."""
+    from sqlalchemy import text
+    atual = ler_extrato_ate()
+    if atual is not None and atual >= pd.Timestamp(quando):
+        return atual
+    with nuvem._conectar().begin() as con:
+        con.execute(text("insert into avisos.estado (chave, valor, em) values ('extrato_ate', :v, now()) "
+                         "on conflict (chave) do update set valor = excluded.valor, em = now()"),
+                    {"v": pd.Timestamp(quando).isoformat()})
+    import memo as _m
+    _m.limpar_tudo()
+    return pd.Timestamp(quando)
+
+
+def ler_extrato_ate():
+    """Até quando o extrato carregado cobre, ou None."""
+    if not disponivel():
+        return None
+    from sqlalchemy import text
+    try:
+        with nuvem._conectar().connect() as con:
+            v = con.execute(text("select valor from avisos.estado where chave = 'extrato_ate'")).scalar()
+        return pd.Timestamp(v) if v else None
+    except Exception:
+        return None
+
+
 @memo()
 def ler_extrato() -> pd.DataFrame:
     df = _ler("SELECT data, sentido, tipo, valor, contraparte, documento, conta_origem, saldo_depois FROM fin_extrato ORDER BY data")
