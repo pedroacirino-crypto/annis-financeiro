@@ -240,6 +240,41 @@ def vitrine_ligar(simular):
         alvo.pop("url", None)
         _gravar_menu(menu, itens)
     regulamento_ligar()
+    sale_antiga_redirecionar(simular)
+
+
+# Os anúncios de remarketing da agência apontavam para /collections/sale (Pedro,
+# 01/11). Redirecionamento da Shopify só vale para endereço que não existe, então
+# a coleção Sale sai da loja e /collections/sale passa a levar para a da campanha.
+# O desligar faz o caminho de volta.
+SALE_ANTIGA = "sale"
+_REDIRECTS = 'query($q:String!){urlRedirects(first:5, query:$q){nodes{id path target}}}'
+
+
+def sale_antiga_redirecionar(simular):
+    caminho, destino = f"/collections/{SALE_ANTIGA}", HOME_LINK
+    print(f"  {caminho} sai da loja e redireciona para {destino}")
+    if simular:
+        return
+    sale = _g('query($h:String!){collectionByHandle(handle:$h){id}}', {"h": SALE_ANTIGA})["collectionByHandle"]
+    if sale:
+        _erros(_g(_DESPUBLICA, {"id": sale["id"], "p": [{"publicationId": _publicacao()}]}), "publishableUnpublish")
+    if not any(r["path"] == caminho for r in _g(_REDIRECTS, {"q": f"path:{caminho}"})["urlRedirects"]["nodes"]):
+        _erros(_g('mutation($r:UrlRedirectInput!){urlRedirectCreate(urlRedirect:$r){userErrors{message}}}',
+                  {"r": {"path": caminho, "target": destino}}), "urlRedirectCreate")
+
+
+def sale_antiga_voltar(simular):
+    caminho = f"/collections/{SALE_ANTIGA}"
+    print(f"  {caminho} volta para a loja, sem redirecionamento")
+    if simular:
+        return
+    for r in _g(_REDIRECTS, {"q": f"path:{caminho}"})["urlRedirects"]["nodes"]:
+        if r["path"] == caminho:
+            _erros(_g('mutation($id:ID!){urlRedirectDelete(id:$id){userErrors{message}}}', {"id": r["id"]}), "urlRedirectDelete")
+    sale = _g('query($h:String!){collectionByHandle(handle:$h){id}}', {"h": SALE_ANTIGA})["collectionByHandle"]
+    if sale:
+        _erros(_g(_PUBLICA, {"id": sale["id"], "p": [{"publicationId": _publicacao()}]}), "publishablePublish")
 
 
 REGULAMENTO = "regulamento-novembro-annis"
@@ -273,6 +308,7 @@ def vitrine_desligar(simular):
         with nuvem._conectar().begin() as con:
             con.execute(text("delete from campanha.estado where chave = 'menu_antes'"))
     _erros(_g(_DESPUBLICA, {"id": _colecao(COLECAO_SALE), "p": [{"publicationId": _publicacao()}]}), "publishableUnpublish")
+    sale_antiga_voltar(simular)
 
 
 TEMA = "gid://shopify/OnlineStoreTheme/161637400611"  # Atelier publicado
