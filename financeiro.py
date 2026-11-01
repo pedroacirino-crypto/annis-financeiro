@@ -1422,8 +1422,13 @@ def pedidos_pagos() -> pd.DataFrame:
     """Um pedido por linha, nuvem e local juntos, só os pagos, cada um casado
     com a cobrança da Pagar.me que o pagou (quando existe)."""
     import nuvem
+    nuvem_ped = list(nuvem.ler_pedidos())
+    if nuvem.configurado() and not nuvem_ped:
+        # Sem os pedidos da nuvem sobra só o banco local, que é parcial. Melhor
+        # falhar (e não guardar) do que calcular o resultado com metade da venda.
+        raise RuntimeError("os pedidos da nuvem não vieram; clique em Atualizar dados")
     vistos, linhas = set(), []
-    for p in list(nuvem.ler_pedidos()) + db.pedidos_para_nuvem():
+    for p in nuvem_ped + db.pedidos_para_nuvem():
         if p["numero"] in vistos or str(p.get("situacao", "")).lower() != "paid":
             continue
         vistos.add(p["numero"])

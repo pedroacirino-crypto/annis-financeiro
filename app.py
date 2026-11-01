@@ -555,7 +555,7 @@ import memo as _memo
 if not hasattr(_memo, "mudou") or not hasattr(nuvem, "dado_novo_em") or not hasattr(nuvem, "ler_pos_compra") \
         or not hasattr(nuvem, "ler_eventos") or not hasattr(nuvem, "ler_clarity") \
         or not hasattr(nuvem, "esquecer_pedidos") or not hasattr(nuvem, "registrar_tempo") \
-        or hasattr(nuvem, "meses_com_plano"):
+        or hasattr(nuvem, "meses_com_plano") or not hasattr(nuvem, "PEDIDOS_COM_NOVA_TENTATIVA"):
     import importlib
     _memo = importlib.reload(_memo)
     nuvem = importlib.reload(nuvem)

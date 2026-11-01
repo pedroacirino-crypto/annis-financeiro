@@ -106,7 +106,7 @@ def _conectar():
         return _motor
     from sqlalchemy import create_engine
     _motor = create_engine(
-        _url(), pool_size=1, max_overflow=1, pool_pre_ping=True,
+        _url(), pool_size=1, max_overflow=3, pool_pre_ping=True,
         pool_recycle=300, connect_args={"connect_timeout": 10},
     )
     return _motor
@@ -202,6 +202,9 @@ def esquecer_pedidos() -> None:
     _PEDIDOS_LIDOS["linhas"] = None
 
 
+PEDIDOS_COM_NOVA_TENTATIVA = True  # marca para o app recarregar o módulo velho
+
+
 def ler_pedidos() -> List[dict]:
     """Todos os pedidos guardados. Lista vazia se não estiver configurado.
 
@@ -212,7 +215,18 @@ def ler_pedidos() -> List[dict]:
         return []
     if _PEDIDOS_LIDOS["linhas"] is not None:
         return [dict(l) for l in _PEDIDOS_LIDOS["linhas"]]
-    linhas = _ler_pedidos_do_banco()
+    # A leitura falha calada quando as conexões estão ocupadas (o aquecimento
+    # em segundo plano e a tela leem ao mesmo tempo). Tenta de novo antes de
+    # devolver vazio: vazio aqui virava resultado com metade dos pedidos,
+    # guardado até "Atualizar dados" (01/11/2026, receita de R$ 172 mil em vez
+    # de R$ 232 mil e projeção torta na aba Resultado).
+    import time
+    linhas = []
+    for tentativa in range(3):
+        linhas = _ler_pedidos_do_banco()
+        if linhas:
+            break
+        time.sleep(1 + tentativa)
     if linhas:
         _PEDIDOS_LIDOS["linhas"] = linhas
     return [dict(l) for l in linhas]
