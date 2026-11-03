@@ -46,6 +46,8 @@ def classificar_origem(origem: str, busca: str, pagina: str) -> str:
     o = (origem or "").lower()
     if "fbads" in fonte or meio in ("paid", "cpc", "ads", "paid_social") or "fbads" in meio:
         return "Anúncio Meta"
+    if fonte == "email":
+        return "E-mail"
     if "n" in u and (pagina or "").startswith("/pages/entretempos"):
         return "Campanha WhatsApp"
     if "whatsapp" in fonte or "whatsapp" in o or o.startswith("wa.me") or o.endswith("wa.me"):

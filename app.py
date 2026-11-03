@@ -2701,8 +2701,8 @@ if "Novembro Annis" in abas:
             _nums = ("Visitas", "Página da sale", "Peça da sale", "Carrinho da sale", "Carrinho total", "Compras")
             tabela(pd.DataFrame([{"Origem": x["origem"], **_colunas(x)} for x in _t["origens"]]),
                    num=_nums, titulo="Tráfego por origem")
-            st.caption("Origem da entrada no site. O link do e-mail não tem marcação: a visita dele conta em Direto "
-                       "e os cliques estão na tabela de e-mails. Compras pelo rastreio do site; pedidos reais estão em Vendas.")
+            st.caption("Origem da entrada no site. O e-mail de 01/11 saiu sem marcação no link: a visita dele conta em "
+                       "Direto. Do lembrete em diante, aparece como E-mail. Compras pelo rastreio do site; pedidos reais estão em Vendas.")
             if _t["anuncios"]:
                 tabela(pd.DataFrame([{"Anúncio": x["anuncio"], "Da campanha": "Sim" if x["campanha"] else "Não",
                                       **_colunas(x)} for x in _t["anuncios"]]),

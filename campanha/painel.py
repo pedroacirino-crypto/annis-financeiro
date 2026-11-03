@@ -123,8 +123,8 @@ def _anuncio(busca: str) -> str:
 
 def trafego(agora: datetime = None) -> dict:
     """Visita = mesmo navegador sem pausa de 30 minutos, como na aba Inteligência.
-    O e-mail não leva marcação no link, então a visita dele cai em Direto: os
-    cliques do e-mail estão na tabela de e-mails."""
+    O e-mail de 01/11 saiu sem marcação no link e a visita dele cai em Direto;
+    os seguintes aparecem como E-mail."""
     agora = agora or datetime.now(BRT)
     ate = min(agora, FIM)
     antes = INICIO - timedelta(days=7)

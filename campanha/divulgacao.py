@@ -269,8 +269,16 @@ def montar(versao: str, nome: str, itens: list) -> dict:
     rodape = rodape.replace("</td></tr>", f'<p style="margin:14px 0 0 0;"><a href="{{SAIR}}" style="color:{B.APOIO};font-size:11px;">'
                                           f'{B.esc(d["sair"])}</a></p>{{PIXEL}}</td></tr>', 1)
     linhas.append(rodape)
-    html = B.documento(t["assunto"], t["previa"], linhas)
+    html = _marcar(B.documento(t["assunto"], t["previa"], linhas), versao)
     return {"assunto": t["assunto"], "html": html, "texto": modelos._texto_plano(html, t["previa"])}
+
+
+def _marcar(html: str, versao: str) -> str:
+    """Marca os links da loja, para o rastreio do site mostrar o e-mail como origem
+    (o clique passa por /pages/ir, que redireciona sem levar referência nenhuma)."""
+    marca = f"utm_source=email&amp;utm_medium=email&amp;utm_campaign=novembro-annis&amp;utm_content={versao}"
+    return re.sub(r'href="(https://annis\.store[^"]*)"',
+                  lambda m: f'href="{m[1]}{"&amp;" if "?" in m[1] else "?"}{marca}"', html)
 
 
 def _finalizar(html: str, texto: str, token: str) -> tuple:
