@@ -2607,6 +2607,11 @@ def _nov_sale():
 
 
 @_memo.memo(600)
+def _nov_trafego():
+    return _nov.trafego()
+
+
+@_memo.memo(600)
 def _nov_cashback():
     return _nov.cashback(_nov_vendas()["pedidos"])
 
@@ -2664,6 +2669,47 @@ if "Novembro Annis" in abas:
                             use_container_width=True)
             st.caption("Valor das peças por dia, sem frete.")
 
+        # Tráfego ---------------------------------------------------------------
+        st.subheader("Visitas e tráfego")
+        try:
+            _t = _nov_trafego()
+        except Exception as _e:
+            st.error(f"Não consegui ler o rastreio do site agora ({type(_e).__name__}).")
+            _t = None
+        if _t is not None and not _t["visitas"]:
+            st.caption("Os números aparecem com as primeiras visitas da campanha.")
+        elif _t is not None:
+            t1, t2, t3, t4 = st.columns(4)
+            t1.metric("Visitas no site", f"{_t['visitas']:,}".replace(",", "."),
+                      delta=(f"{(_t['por_dia'] / _t['por_dia_antes'] - 1) * 100:+.0f}% por dia"
+                             if _t["por_dia"] and _t["por_dia_antes"] else None),
+                      help=(f"{_t['pessoas']} pessoas. Média por dia já fechado: {_t['por_dia'] or 0:.0f}. "
+                            f"Nos 7 dias antes da campanha: {_t['por_dia_antes']:.0f}."))
+            t2.metric("Foram à página da sale", _t["colecao"], help="Visitas que passaram pela coleção Novembro Annis.")
+            t3.metric("Abriram peça da sale", _t["peca_sale"])
+            t4.metric("Carrinho com peça da sale", _t["carrinho_sale"],
+                      help=f"Carrinho com qualquer peça: {_t['carrinho']} visitas.")
+            _df_col = pd.DataFrame([{"Dia": d["dia"].strftime("%d/%m"), "Visitas": d["colecao"],
+                                     "Rotulo": str(d["colecao"])} for d in _t["dias"]])
+            if _df_col["Visitas"].sum():
+                st.altair_chart(barras(_df_col, "Dia", "Visitas", rotulo="Rotulo"), use_container_width=True)
+                st.caption("Visitas à página da sale por dia.")
+
+            _colunas = lambda x: {"Visitas": x["visitas"], "Página da sale": x["colecao"], "Peça da sale": x["peca_sale"],
+                                  "Carrinho da sale": x["carrinho_sale"], "Carrinho total": x["carrinho"],
+                                  "Compras": x["compras"]}
+            _nums = ("Visitas", "Página da sale", "Peça da sale", "Carrinho da sale", "Carrinho total", "Compras")
+            tabela(pd.DataFrame([{"Origem": x["origem"], **_colunas(x)} for x in _t["origens"]]),
+                   num=_nums, titulo="Tráfego por origem")
+            st.caption("Origem da entrada no site. O link do e-mail não tem marcação: a visita dele conta em Direto "
+                       "e os cliques estão na tabela de e-mails. Compras pelo rastreio do site; pedidos reais estão em Vendas.")
+            if _t["anuncios"]:
+                tabela(pd.DataFrame([{"Anúncio": x["anuncio"], "Da campanha": "Sim" if x["campanha"] else "Não",
+                                      **_colunas(x)} for x in _t["anuncios"]]),
+                       num=_nums, titulo="Tráfego por anúncio")
+            tabela(pd.DataFrame([{"Dia": d["dia"].strftime("%d/%m"), **_colunas(d)} for d in reversed(_t["dias"])]),
+                   num=_nums, titulo="Tráfego por dia")
+
         # Sale -----------------------------------------------------------------
         st.subheader("Peças da sale")
         _s = _nov_sale()
@@ -2672,10 +2718,14 @@ if "Novembro Annis" in abas:
         s2.metric("Receita da sale", _rs(sum(x["receita"] for x in _s)))
         s3.metric("Desconto dado", _rs(sum(x["desconto_dado"] for x in _s)),
                   help="Diferença entre o preço de antes da campanha e o da sale, nas peças vendidas.")
+        _vistas = _t["pecas"] if _t else {}
         tabela(pd.DataFrame([{
-            "Peça": x["peca"], "Desconto": fmt_pct(x["desconto"] * 100, 0), "Vendidas": x["vendidas"],
-            "Receita": _rs(x["receita"]), "Estoque": x["estoque"], "Restam": ", ".join(x["restam"]) or "esgotada",
-        } for x in _s]), num=("Desconto", "Vendidas", "Receita", "Estoque"), titulo="Peças da sale")
+            "Peça": x["peca"], "Desconto": fmt_pct(x["desconto"] * 100, 0),
+            "Viram": _vistas.get(x["peca"], {}).get("viram", 0), "Carrinho": _vistas.get(x["peca"], {}).get("carrinho", 0),
+            "Vendidas": x["vendidas"], "Receita": _rs(x["receita"]), "Estoque": x["estoque"],
+            "Restam": ", ".join(x["restam"]) or "esgotada",
+        } for x in _s]), num=("Desconto", "Viram", "Carrinho", "Vendidas", "Receita", "Estoque"), titulo="Peças da sale")
+        st.caption("Viram e Carrinho contam pessoas, pelo rastreio do site.")
 
         # Cashback ---------------------------------------------------------------
         st.subheader("Cashback")

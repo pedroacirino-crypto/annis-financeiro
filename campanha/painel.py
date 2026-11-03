@@ -1,10 +1,12 @@
 """Números do Novembro Annis para a aba do portal (Trabalho > Novembro Annis), 30/10/2026.
 
-Quatro blocos, cada um uma função que devolve dados prontos para a tela:
+Cinco blocos, cada um uma função que devolve dados prontos para a tela:
 
   vendas()    pedidos do site desde 01/11, peça a peça, separando sale e fora
               da sale (variante em campanha.sale_precos), e o mesmo período de
               outubro para comparar
+  trafego()   visitas do site e da coleção da sale, por dia, por origem e por
+              anúncio, e quem abriu ou pôs no carrinho cada peça (site.eventos)
   sale()      peças da sale: vendidas, desconto dado e estoque que resta
   cashback()  emitido, usado, em aberto, cancelado e vencido (campanha.cashback)
   emails()    por e-mail de divulgação: enviados, abriram, clicaram, compraram
@@ -22,13 +24,18 @@ from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import inteligencia  # noqa: E402
 import nuvem  # noqa: E402
+import pandas as pd  # noqa: E402
 import shopify_client  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
 BRT = timezone(timedelta(hours=-3))
 INICIO = datetime(2026, 11, 1, tzinfo=BRT)
 FIM = datetime(2026, 12, 1, tzinfo=BRT)
+COLECAO = "/collections/novembro-annis"
+ANUNCIO_NOVEMBRO = "Anúncios do Novembro Annis"
+ANUNCIO_OUTROS = "Outros anúncios"
 
 _PEDIDOS = """query($c:String, $q:String!){orders(first:100, after:$c, query:$q){pageInfo{hasNextPage endCursor}
   nodes{name createdAt email sourceName cancelledAt test discountCodes
@@ -94,6 +101,87 @@ def vendas(agora: datetime = None) -> dict:
         "pedidos": pedidos, "itens": itens,
         "outubro": {"receita": sum(float(o["currentTotalPriceSet"]["shopMoney"]["amount"]) for o in outubro),
                     "pedidos": len(outubro)},
+    }
+
+
+def _origem(origem: str, busca: str, pagina: str) -> str:
+    """Origem da visita, separando os anúncios da campanha dos demais."""
+    o = inteligencia.classificar_origem(origem, busca, pagina)
+    if o != "Anúncio Meta":
+        return o
+    u = inteligencia._utm(busca)
+    return ANUNCIO_NOVEMBRO if "novembro-annis" in u.get("utm_content", "") + u.get("utm_medium", "") else ANUNCIO_OUTROS
+
+
+def _anuncio(busca: str) -> str:
+    """Nome curto do anúncio: ad_auto_novembro-annis1_categoria_imagem_31-10 vira novembro-annis1."""
+    c = inteligencia._utm(busca).get("utm_content", "").replace(" ", "+")
+    if not c.startswith("ad_auto_") or c.count("_") < 3:
+        return "Outros"
+    return c.split("_")[2]
+
+
+def trafego(agora: datetime = None) -> dict:
+    """Visita = mesmo navegador sem pausa de 30 minutos, como na aba Inteligência.
+    O e-mail não leva marcação no link, então a visita dele cai em Direto: os
+    cliques do e-mail estão na tabela de e-mails."""
+    agora = agora or datetime.now(BRT)
+    ate = min(agora, FIM)
+    antes = INICIO - timedelta(days=7)
+    with nuvem._conectar().connect() as con:
+        ev = pd.read_sql_query(text(
+            "select em, visitante, evento, pagina, busca, origem, produto from site.eventos"
+            " where em >= :de and em < :ate"), con, params={"de": antes, "ate": ate}, parse_dates=["em"])
+    da_sale = {s["produto"] for s in _sale_precos().values()}
+    vazio = {"visitas": 0, "pessoas": 0, "por_dia_antes": 0.0, "por_dia": None, "colecao": 0, "peca_sale": 0,
+             "carrinho_sale": 0, "carrinho": 0, "compras": 0, "dias": [], "origens": [], "anuncios": [], "pecas": {}}
+    if ev.empty:
+        return vazio
+    ev = inteligencia._marca_visitas(ev)
+    ev["sale"] = ev.produto.isin(da_sale)
+    ev["na_colecao"] = ev.pagina.fillna("").str.startswith(COLECAO)
+    prim = ev.groupby("visita").first()
+    v = pd.DataFrame({
+        "visitante": prim.visitante, "inicio": prim.em,
+        "origem": [_origem(o, b, p) for o, b, p in zip(prim.origem, prim.busca, prim.pagina)],
+        "anuncio": [_anuncio(b) for b in prim.busca],
+    })
+    grupo = lambda m: ev[m].groupby("visita").size().reindex(v.index).fillna(0).gt(0)
+    v["colecao"] = grupo(ev.na_colecao)
+    v["peca_sale"] = grupo((ev.evento == "product_viewed") & ev.sale)
+    v["carrinho_sale"] = grupo((ev.evento == "product_added_to_cart") & ev.sale)
+    v["carrinho"] = grupo(ev.evento == "product_added_to_cart")
+    v["comprou"] = grupo(ev.evento == "checkout_completed")
+    v["dia"] = v.inicio.dt.tz_convert(BRT).dt.date
+
+    inicio = pd.Timestamp(INICIO)
+    previas = v[v.inicio < inicio]
+    v = v[v.inicio >= inicio]
+    camp = ev[ev.em >= inicio]
+
+    def _resumo(g) -> dict:
+        return {"visitas": len(g), "colecao": int(g.colecao.sum()), "peca_sale": int(g.peca_sale.sum()),
+                "carrinho_sale": int(g.carrinho_sale.sum()), "carrinho": int(g.carrinho.sum()),
+                "compras": int(g.comprou.sum())}
+
+    anuncios = v[v.origem.isin([ANUNCIO_NOVEMBRO, ANUNCIO_OUTROS])]
+    # Cada dia da campanha aparece, mesmo sem visita, para o gráfico não pular dia.
+    hoje = agora.astimezone(BRT).date()
+    n_dias = (min(hoje, (FIM - timedelta(seconds=1)).date()) - INICIO.date()).days + 1
+    dias = [{"dia": d, **_resumo(v[v.dia == d])}
+            for d in (INICIO.date() + timedelta(days=i) for i in range(max(n_dias, 0)))]
+    pecas = {}
+    for evento, campo in (("product_viewed", "viram"), ("product_added_to_cart", "carrinho")):
+        for prod, n in camp[(camp.evento == evento) & camp.sale].groupby("produto").visitante.nunique().items():
+            pecas.setdefault(prod, {"viram": 0, "carrinho": 0})[campo] = int(n)
+    fechados = [d["visitas"] for d in dias if d["dia"] < hoje]
+    return {
+        **_resumo(v), "pessoas": int(v.visitante.nunique()), "dias": dias, "por_dia_antes": len(previas) / 7,
+        "por_dia": sum(fechados) / len(fechados) if fechados else None,
+        "origens": sorted(({"origem": o, **_resumo(g)} for o, g in v.groupby("origem")), key=lambda x: -x["visitas"]),
+        "anuncios": sorted(({"anuncio": a, "campanha": g.origem.iloc[0] == ANUNCIO_NOVEMBRO, **_resumo(g)}
+                            for a, g in anuncios.groupby("anuncio")), key=lambda x: -x["visitas"]),
+        "pecas": pecas,
     }
 
 
@@ -191,6 +279,9 @@ if __name__ == "__main__":
     agora = datetime(2026, 10, 30, 22, tzinfo=BRT) if "--outubro" in sys.argv else None
     v = vendas(agora)
     print(len(v["pedidos"]), "pedidos;", v["outubro"])
+    t = trafego()
+    print({k: t[k] for k in ("visitas", "pessoas", "por_dia_antes", "colecao", "peca_sale", "carrinho_sale")})
+    print(t["origens"], t["anuncios"][:5])
     print(sale(v["itens"])[:3])
     print(cashback(v["pedidos"]))
     print(emails(v["pedidos"]))
