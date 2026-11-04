@@ -372,22 +372,22 @@ divulgacao:
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off + 10% de volta"
     eyebrow: "Novembro Annis"
-    titulo: "Enquanto tiver o seu tamanho"
+    titulo: "Aproveite! Nossos estoques são limitados e sem reposição."
     texto:
       - "Oi{virgula_nome}. As peças da sale têm poucas unidades de cada tamanho, e quando acaba não volta mais. Abaixo, as peças que ainda temos disponíveis pra você."
     botao_topo: "Garantir meu tamanho"
     botao: "Ver todas as peças da sale"
   d2b:
-    aprovado: false
-    assunto: "Ainda tem no seu tamanho, com até 40% off"
+    aprovado: true
+    assunto: "Ainda tem peças esperando por você, com até 40% off"
     previa: "Separamos o que ainda resta das peças com mais desconto."
     faixa: "Novembro Annis · até 30/11"
     hero_titulo: "Novembro Annis"
     hero_sub: "Até 40% off + 10% de volta"
     eyebrow: "Novembro Annis"
-    titulo: "Os tamanhos que ainda restam"
+    titulo: "Aproveite! Nossos estoques são limitados e sem reposição."
     texto:
-      - "Oi{virgula_nome}. Separamos as peças com mais desconto e os tamanhos que ainda têm no estoque. Quando um tamanho acaba, não volta."
+      - "Oi{virgula_nome}. As peças da sale têm poucas unidades de cada tamanho, e quando acaba não volta mais. Abaixo, as peças que ainda temos disponíveis pra você."
     botao_topo: "Garantir meu tamanho"
     botao: "Ver todas as peças da sale"
   d3:
