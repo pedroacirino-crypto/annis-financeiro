@@ -25,6 +25,8 @@ pessoa (avisos.enviados, "div:<qual>:<email>").
     python campanha/divulgacao.py status          enviados, aberturas, cliques e compras
 """
 
+import email
+import imaplib
 import os
 import re
 import secrets
@@ -32,6 +34,7 @@ import sys
 import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from email.utils import parseaddr
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -95,6 +98,32 @@ def lista() -> list:
     with nuvem._conectar().connect() as con:
         fora = set(con.execute(text("select email from campanha.descadastro")).scalars())
     return [p for e, p in saida.items() if e not in fora]
+
+
+def sairam_por_email() -> list:
+    """Quem pediu para sair pelo botão do Mail ou do Gmail: ele manda um e-mail de
+    assunto "sair" para a contato@ (List-Unsubscribe). Às vezes cai no spam, então
+    lê a caixa geral e o spam. Devolve quem entrou agora em campanha.descadastro."""
+    caixa = imaplib.IMAP4_SSL("imap.gmail.com")
+    caixa.login(gmail.CONTA, os.environ["GMAIL_SENHA_APP"].replace(" ", ""))
+    pediram = set()
+    for linha in caixa.list()[1]:
+        linha = linha.decode()
+        if "\\All" not in linha and "\\Junk" not in linha:
+            continue
+        caixa.select(linha.split(' "/" ')[1], readonly=True)
+        for i in caixa.search(None, f'(SINCE "{INICIO:%d-%b-%Y}" SUBJECT "sair")')[1][0].split():
+            h = email.message_from_bytes(caixa.fetch(i, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])")[1][0][1])
+            if (h.get("Subject") or "").strip().lower() == "sair":
+                pediram.add(parseaddr(h.get("From") or "")[1].strip().lower())
+    caixa.logout()
+    with nuvem._conectar().begin() as con:
+        recebeu = {r[0] for r in con.execute(text("select distinct email from campanha.divulgacao_envios"))}
+        ja = set(con.execute(text("select email from campanha.descadastro")).scalars())
+        novos = sorted((pediram & recebeu) - ja)
+        for e in novos:
+            con.execute(text("insert into campanha.descadastro (email, origem) values (:e, 'resposta') on conflict do nothing"), {"e": e})
+    return novos
 
 
 def compraram() -> set:
@@ -309,6 +338,11 @@ def enviar(qual: str, simular: bool = False) -> None:
     if falta and not simular:
         _telegram(f"E-mail {qual} do Novembro Annis não saiu: falta aprovar o texto ({', '.join(falta)}).")
         raise SystemExit(f"{qual}: falta aprovar {falta}")
+    if not simular:
+        try:
+            print("saíram pelo botão do e-mail:", len(sairam_por_email()))
+        except Exception as e:  # sem ler a caixa o envio segue, com aviso
+            _telegram(f"Não consegui ler os pedidos de saída da caixa antes do e-mail {qual}: {type(e).__name__}.")
     itens = pecas()
     fila_ = fila(qual)
     print(f"{qual}: {len(fila_)} na fila, {len(itens)} peças")
