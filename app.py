@@ -2646,17 +2646,23 @@ if "Novembro Annis" in abas:
         st.subheader("Vendas da campanha")
         if datetime.now(_nov.BRT) < _nov.INICIO:
             st.info("A campanha começa domingo, 01/11, à meia-noite. Os números aparecem a partir daí.")
+        _dias, _odias = _v["dias_corridos"], _out["dias"]
+        _vir = lambda x: f"{x:.1f}".replace(".", ",")
+        _delta_dia = lambda n, o: (f"{(n / _dias) / (o / _odias) * 100 - 100:+.0f}% vs média de outubro"
+                                   if _dias and o else None)
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Receita", _rs(_rec),
-                  delta=(f"{(_rec / _out['receita'] - 1) * 100:+.0f}% vs outubro".replace(".", ",")
-                         if _out["receita"] else None),
-                  help=f"Com frete. Mesmo período de outubro: {_rs(_out['receita'])} em {_out['pedidos']} pedidos.")
-        k2.metric("Pedidos", len(_ped),
-                  delta=(f"{len(_ped) - _out['pedidos']:+d} vs outubro" if _out["pedidos"] else None))
+        k1.metric("Receita", _rs(_rec), delta=_delta_dia(_rec, _out["receita"]),
+                  help=(f"Com frete. Por dia: {_rs(_rec / _dias) if _dias else '—'} na campanha, "
+                        f"{_rs(_out['receita'] / _odias)} em outubro."))
+        k2.metric("Pedidos", len(_ped), delta=_delta_dia(len(_ped), _out["pedidos"]),
+                  help=(f"Por dia: {_vir(len(_ped) / _dias) if _dias else '—'} na campanha, "
+                        f"{_vir(_out['pedidos'] / _odias)} em outubro."))
         k3.metric("Ticket médio", _rs(_rec / len(_ped)) if _ped else "—")
         _sale_rs, _fora_rs = sum(p["sale"] for p in _ped), sum(p["fora"] for p in _ped)
         k4.metric("Peças da sale", fmt_pct(_sale_rs / (_sale_rs + _fora_rs) * 100, 0) if _sale_rs + _fora_rs else "—",
                   help=f"Parte do valor em peças que veio da sale: {_rs(_sale_rs)} na sale, {_rs(_fora_rs)} fora.")
+        st.caption(f"Comparação: média por dia da campanha até agora ({_vir(_dias)} dias) contra a média por dia "
+                   f"de outubro inteiro ({_rs(_out['receita'])} e {_out['pedidos']} pedidos em {_odias} dias).")
         if _ped:
             _por_dia = []
             for p in _ped:

@@ -71,7 +71,8 @@ def _sale_precos() -> dict:
 def vendas(agora: datetime = None) -> dict:
     """pedidos: um por pedido (data, total, sale, fora, cupons, e-mail).
     dias: receita por dia e por tipo. itens: cada peça vendida.
-    outubro: receita e pedidos de 01/10 até o mesmo dia de outubro."""
+    dias_corridos: dias desde o início da campanha, com fração do dia de hoje.
+    outubro: receita e pedidos do mês inteiro, régua da média por dia."""
     agora = agora or datetime.now(BRT)
     sp = _sale_precos()
     pedidos, itens = [], []
@@ -93,14 +94,13 @@ def vendas(agora: datetime = None) -> dict:
         pedidos.append({"pedido": o["name"], "dia": dia, "email": (o["email"] or "").lower(),
                         "total": float(o["currentTotalPriceSet"]["shopMoney"]["amount"]),
                         "sale": na_sale, "fora": fora, "cupons": o["discountCodes"]})
-    # Outubro, do dia 1 até o mesmo dia e hora do mês, para comparar ritmo.
-    dias_corridos = max(agora - INICIO, timedelta(0))
-    out_ini = datetime(2026, 10, 1, tzinfo=BRT)
-    outubro = _pedidos(out_ini, out_ini + dias_corridos) if dias_corridos else []
+    # Outubro inteiro: comparar dia a dia oscila com o pico do lançamento (04/10).
+    outubro = _pedidos(datetime(2026, 10, 1, tzinfo=BRT), INICIO)
     return {
         "pedidos": pedidos, "itens": itens,
+        "dias_corridos": max(min(agora, FIM) - INICIO, timedelta(0)) / timedelta(days=1),
         "outubro": {"receita": sum(float(o["currentTotalPriceSet"]["shopMoney"]["amount"]) for o in outubro),
-                    "pedidos": len(outubro)},
+                    "pedidos": len(outubro), "dias": 31},
     }
 
 
