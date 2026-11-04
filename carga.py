@@ -107,7 +107,8 @@ def carregar_contas(caminho: str) -> None:
             continue
         df = df.dropna(subset=["VALOR"])
         df = df[df["VALOR"].astype(str).str.strip() != ""]
-        datas = pd.to_datetime(df["DATA"])
+        # "??" na data vira linha sem data, tratada abaixo como fim do mês da aba.
+        datas = pd.to_datetime(df["DATA"], errors="coerce")
         # A aba é o mês. Data de outro mês dentro dela é erro de digitação
         # (em 12/10/2026 a agência de novembro estava com 20/10 e duplicava a
         # de outubro), e linha sem data ("PROGRAMAR") cai no fim do mês da aba.
@@ -125,7 +126,8 @@ def carregar_contas(caminho: str) -> None:
             "descricao": df["DESCRIÇÃO"].astype(str).str.strip(),
             "valor": df["VALOR"].map(valor),
             "situacao": df["SITUAÇÃO"].fillna("").astype(str).str.strip().str.upper() if "SITUAÇÃO" in df else "",
-            "observacao": df.iloc[:, 4].fillna("").astype(str) if df.shape[1] > 4 else "",
+            # A quinta coluna é observação em setembro e saldo corrido em novembro: número não é observação.
+            "observacao": df.iloc[:, 4].map(lambda v: v if isinstance(v, str) else "") if df.shape[1] > 4 else "",
         }))
     _gravar_contas(pd.concat(partes, ignore_index=True))
 
