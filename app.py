@@ -656,7 +656,7 @@ def barras_canal(df, x, y, canal, tooltip=None, altura=250, dominio=("Digital", 
         x=eixo_x,
         y=alt.Y(f"sum({y}):Q", title=None, axis=None, scale=escala_y),
         color=alt.Color(f"{canal}:N", title=None, legend=alt.Legend(orient="top"),
-                        scale=alt.Scale(domain=list(dominio), range=[MARROM, "#C9A27E"])),
+                        scale=alt.Scale(domain=list(dominio), range=[MARROM, "#C9A27E", "#8C8C6A"])),
         order=alt.Order(f"{canal}:N", sort="ascending"),
         tooltip=tooltip or [],
     )
@@ -2630,7 +2630,7 @@ if "Novembro Annis" in abas:
     st.header("Novembro Annis")
     st.caption(
         "De 01/11 a 30/11: até 40% off em peças selecionadas e 10% de cashback em todas as compras "
-        "do site. Pedidos do site, sem cancelados; devolução conta pelo que ficou. Atualiza a cada 10 minutos."
+        "do site. Site e loja física; pedidos do site sem cancelados, devolução conta pelo que ficou. Atualiza a cada 10 minutos."
     )
     try:
         _v = _nov_vendas()
@@ -2639,8 +2639,11 @@ if "Novembro Annis" in abas:
         _v = None
     if _v is not None:
         _ped = _v["pedidos"]
-        _rec = sum(p["total"] for p in _ped)
+        _fis = _v["fisico"]
+        _rec_site, _rec_fis = sum(p["total"] for p in _ped), sum(f["valor"] for f in _fis)
+        _rec, _n = _rec_site + _rec_fis, len(_ped) + len(_fis)
         _out = _v["outubro"]
+        _out_rec, _out_n = _out["receita"] + _out["fisico"], _out["pedidos"] + _out["fisico_vendas"]
 
         # Vendas ---------------------------------------------------------------
         st.subheader("Vendas da campanha")
@@ -2651,29 +2654,32 @@ if "Novembro Annis" in abas:
         _delta_dia = lambda n, o: (f"{(n / _dias) / (o / _odias) * 100 - 100:+.0f}% vs média de outubro"
                                    if _dias and o else None)
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Receita", _rs(_rec), delta=_delta_dia(_rec, _out["receita"]),
-                  help=(f"Com frete. Por dia: {_rs(_rec / _dias) if _dias else '—'} na campanha, "
-                        f"{_rs(_out['receita'] / _odias)} em outubro."))
-        k2.metric("Pedidos", len(_ped), delta=_delta_dia(len(_ped), _out["pedidos"]),
-                  help=(f"Por dia: {_vir(len(_ped) / _dias) if _dias else '—'} na campanha, "
-                        f"{_vir(_out['pedidos'] / _odias)} em outubro."))
-        k3.metric("Ticket médio", _rs(_rec / len(_ped)) if _ped else "—")
+        k1.metric("Receita", _rs(_rec), delta=_delta_dia(_rec, _out_rec),
+                  help=(f"Site com frete: {_rs(_rec_site)}. Loja física: {_rs(_rec_fis)}. Por dia: "
+                        f"{_rs(_rec / _dias) if _dias else '—'} na campanha, {_rs(_out_rec / _odias)} em outubro."))
+        k2.metric("Pedidos", _n, delta=_delta_dia(_n, _out_n),
+                  help=(f"Site: {len(_ped)}. Loja física: {len(_fis)}. Por dia: {_vir(_n / _dias) if _dias else '—'} "
+                        f"na campanha, {_vir(_out_n / _odias)} em outubro."))
+        k3.metric("Ticket médio", _rs(_rec / _n) if _n else "—")
         _sale_rs, _fora_rs = sum(p["sale"] for p in _ped), sum(p["fora"] for p in _ped)
         k4.metric("Peças da sale", fmt_pct(_sale_rs / (_sale_rs + _fora_rs) * 100, 0) if _sale_rs + _fora_rs else "—",
-                  help=f"Parte do valor em peças que veio da sale: {_rs(_sale_rs)} na sale, {_rs(_fora_rs)} fora.")
-        st.caption(f"Comparação: média por dia da campanha até agora ({_vir(_dias)} dias) contra a média por dia "
-                   f"de outubro inteiro ({_rs(_out['receita'])} e {_out['pedidos']} pedidos em {_odias} dias).")
-        if _ped:
-            _por_dia = []
+                  help=(f"Só o site, a loja não registra a peça. Parte do valor em peças que veio da sale: "
+                        f"{_rs(_sale_rs)} na sale, {_rs(_fora_rs)} fora."))
+        _ate = f", lida até {_v['fisico_ate']:%d/%m}" if _v["fisico_ate"] else ""
+        st.caption(f"Site {_rs(_rec_site)} e loja física {_rs(_rec_fis)}{_ate}. Comparação: média por dia da campanha até agora "
+                   f"({_vir(_dias)} dias) contra a média por dia de outubro inteiro ({_rs(_out['receita'])} no site e "
+                   f"{_rs(_out['fisico'])} na loja, {_out_n} vendas em {_odias} dias).")
+        if _ped or _fis:
+            _por_dia = [{"Dia": f["dia"].strftime("%d/%m"), "Tipo": "Loja física", "Valor": f["valor"]} for f in _fis]
             for p in _ped:
                 _d = p["dia"].strftime("%d/%m")
                 _por_dia += [{"Dia": _d, "Tipo": "Sale", "Valor": p["sale"]},
                              {"Dia": _d, "Tipo": "Fora da sale", "Valor": p["fora"]}]
             _df_dia = pd.DataFrame(_por_dia).groupby(["Dia", "Tipo"], as_index=False)["Valor"].sum()
-            st.altair_chart(barras_canal(_df_dia, "Dia", "Valor", "Tipo", dominio=["Sale", "Fora da sale"],
+            st.altair_chart(barras_canal(_df_dia, "Dia", "Valor", "Tipo", dominio=["Sale", "Fora da sale", "Loja física"],
                                          tooltip=["Dia", "Tipo", alt.Tooltip("Valor:Q", format=",.0f")]),
                             use_container_width=True)
-            st.caption("Valor das peças por dia, sem frete.")
+            st.caption("Valor por dia, sem frete. A loja física não separa sale.")
 
         # Tráfego ---------------------------------------------------------------
         st.subheader("Visitas e tráfego")

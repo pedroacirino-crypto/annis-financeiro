@@ -3,8 +3,8 @@
 Cinco blocos, cada um uma função que devolve dados prontos para a tela:
 
   vendas()    pedidos do site desde 01/11, peça a peça, separando sale e fora
-              da sale (variante em campanha.sale_precos), e o mesmo período de
-              outubro para comparar
+              da sale (variante em campanha.sale_precos), vendas da loja física
+              (omni.py) e outubro inteiro para comparar
   trafego()   visitas do site e da coleção da sale, por dia, por origem e por
               anúncio, e quem abriu ou pôs no carrinho cada peça (site.eventos)
   sale()      peças da sale: vendidas, desconto dado e estoque que resta
@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import inteligencia  # noqa: E402
 import nuvem  # noqa: E402
+import omni  # noqa: E402
 import pandas as pd  # noqa: E402
 import shopify_client  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -72,7 +73,9 @@ def vendas(agora: datetime = None) -> dict:
     """pedidos: um por pedido (data, total, sale, fora, cupons, e-mail).
     dias: receita por dia e por tipo. itens: cada peça vendida.
     dias_corridos: dias desde o início da campanha, com fração do dia de hoje.
-    outubro: receita e pedidos do mês inteiro, régua da média por dia."""
+    fisico: vendas da loja (maquininha, link e Pix), sem detalhe de peça.
+    fisico_ate: último dia que a loja está lida (conciliação da Stone e extrato).
+    outubro: site e loja do mês inteiro, régua da média por dia."""
     agora = agora or datetime.now(BRT)
     sp = _sale_precos()
     pedidos, itens = [], []
@@ -96,11 +99,17 @@ def vendas(agora: datetime = None) -> dict:
                         "sale": na_sale, "fora": fora, "cupons": o["discountCodes"]})
     # Outubro inteiro: comparar dia a dia oscila com o pico do lançamento (04/10).
     outubro = _pedidos(datetime(2026, 10, 1, tzinfo=BRT), INICIO)
+    fis_out = omni.vendas_fisicas("2026-10-01", "2026-10-31")
+    fis = omni.vendas_fisicas("2026-11-01", min(agora, FIM - timedelta(days=1)).date())
+    lidos = [d.date() if isinstance(d, datetime) else d for d in (omni.ultimo_extrato(), omni.stone_conciliada_ate()) if d]
     return {
         "pedidos": pedidos, "itens": itens,
+        "fisico": [{"dia": q, "valor": b / 100} for q, b in zip(fis.quando, fis.bruto)],
+        "fisico_ate": min(lidos) if lidos else None,
         "dias_corridos": max(min(agora, FIM) - INICIO, timedelta(0)) / timedelta(days=1),
         "outubro": {"receita": sum(float(o["currentTotalPriceSet"]["shopMoney"]["amount"]) for o in outubro),
-                    "pedidos": len(outubro), "dias": 31},
+                    "pedidos": len(outubro), "dias": 31,
+                    "fisico": float(fis_out.bruto.sum()) / 100, "fisico_vendas": len(fis_out)},
     }
 
 
