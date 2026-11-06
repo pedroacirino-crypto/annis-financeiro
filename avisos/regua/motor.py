@@ -62,7 +62,7 @@ CONSULTA = '''query($c:String, $q:String){orders(first:50, after:$c, sortKey:CRE
   customer{firstName email} shippingAddress{firstName name address1 address2 city provinceCode zip}
   subtotalPriceSet{shopMoney{amount}} totalShippingPriceSet{shopMoney{amount}} totalDiscountsSet{shopMoney{amount}} totalPriceSet{shopMoney{amount}}
   shippingLines(first:2){nodes{title}}
-  lineItems(first:20){nodes{title variantTitle quantity originalTotalSet{shopMoney{amount}} image{url} product{featuredImage{url} descriptionHtml}}}
+  lineItems(first:20){nodes{title variantTitle sku quantity originalTotalSet{shopMoney{amount}} image{url} product{featuredImage{url} descriptionHtml}}}
   fulfillments{createdAt trackingInfo{number}} refunds{createdAt}
   transactions(first:10){kind status processedAt gateway receiptJson}}}}'''
 

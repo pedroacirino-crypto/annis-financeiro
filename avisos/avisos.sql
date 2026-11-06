@@ -464,6 +464,7 @@ end $$;
 -- dia; depois disso, no fim de semana ou no feriado, no dia útil seguinte.
 -- Peça sob encomenda soma os dias úteis de produção escritos na descrição
 -- ("produzida em até 10 dias úteis", "Prazo de produção 10 dias úteis").
+-- Tamanho sob encomenda em peça com outros prontos vem do SKU (ENC8-...).
 -- Postado é pedido marcado como enviado na Shopify, o que a baixa faz quando
 -- os Correios registram a coleta, ou com baixa anotada em avisos.enviados.
 drop function if exists avisos.status_pedidos();
@@ -486,7 +487,7 @@ begin
         nodes { name createdAt cancelledAt test
           shippingAddress { name } customer { displayName }
           shippingLines(first: 1) { nodes { title } }
-          lineItems(first: 20) { nodes { product { descriptionHtml } } } }
+          lineItems(first: 20) { nodes { sku product { descriptionHtml } } } }
       }
     }$q$, jsonb_build_object('q', 'fulfillment_status:unfulfilled financial_status:paid created_at:>='
                               || to_char(hoje - 90, 'YYYY-MM-DD')));
@@ -496,10 +497,11 @@ begin
              (n ->> 'createdAt')::timestamptz at time zone fuso as quando,
              initcap(lower(coalesce(n -> 'shippingAddress' ->> 'name', n -> 'customer' ->> 'displayName', ''))) as cliente,
              coalesce(n -> 'shippingLines' -> 'nodes' -> 0 ->> 'title', '') as frete,
-             (select coalesce(max((regexp_match(
+             (select coalesce(max(greatest((regexp_match(
                         replace(replace(regexp_replace(li -> 'product' ->> 'descriptionHtml', '<[^>]+>', ' ', 'g'),
                                         '&nbsp;', ' '), chr(160), ' '),
-                        'produ[^.]{0,80}?([0-9]+)\s*dias?\s+úteis', 'i'))[1]::int), 0)
+                        'produ[^.]{0,80}?([0-9]+)\s*dias?\s+úteis', 'i'))[1]::int,
+                        (regexp_match(li ->> 'sku', '^ENC([0-9]+)-', 'i'))[1]::int)), 0)
                 from jsonb_array_elements(n -> 'lineItems' -> 'nodes') li) as dias_producao
       from jsonb_array_elements(d -> 'orders' -> 'nodes') n
       where n ->> 'cancelledAt' is null and not coalesce((n ->> 'test')::boolean, false)

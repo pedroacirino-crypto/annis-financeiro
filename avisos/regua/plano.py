@@ -114,7 +114,11 @@ def dias_producao(li):
     h = (li.get("product") or {}).get("descriptionHtml") or ""
     t = re.sub(r"<[^>]+>", " ", h).replace("&nbsp;", " ").replace("\xa0", " ")
     m = re.search(r"produ[^.]{0,80}?([0-9]+)\s*dias?\s+úteis", t, re.I)
-    return int(m.group(1)) if m else 0
+    # Tamanho sob encomenda em peça que tem outros prontos: o prazo não cabe na
+    # descrição, que vale para o produto inteiro, e vem do SKU (ENC8-...), o
+    # mesmo prefixo que a Frenet usa no checkout.
+    s = re.match(r"ENC([0-9]+)-", li.get("sku") or "", re.I)
+    return max(int(m.group(1)) if m else 0, int(s.group(1)) if s else 0)
 
 
 _tk = None
