@@ -361,6 +361,28 @@ def pedido_link(caminho: str) -> None:
     print(f"pedido {pedido['name']} criado, {pedido['displayFinancialStatus']}")
 
 
+def vendas_loja(caminho: str) -> None:
+    """Quem comprou o quê nas vendas da loja (dados_fin.fin_vendas_loja). O
+    arquivo fica em legado/, fora do Git, porque leva o nome das clientes.
+    Cada venda: id, data, pagamentos (chaves "pix:AAAA-MM-DD:valor" ou
+    "stone:<Stone ID>") e itens ({cliente, peca, preco de etiqueta})."""
+    import json
+    import extrato
+    with open(caminho, encoding="utf-8") as f:
+        vendas = json.load(f)
+    ex = extrato.carregar()
+    vs = dados_fin.ler_vendas_stone()
+    existentes = {dados_fin.chave_pix(r.data, r.valor) for r in ex[ex.sentido == "entrada"].itertuples(index=False)}
+    existentes |= {dados_fin.chave_stone(i) for i in vs.stone_id} if not vs.empty else set()
+    faltam = [k for v in vendas for k in v["pagamentos"] if k not in existentes]
+    if faltam:
+        raise SystemExit(f"pagamentos que não estão no extrato nem nas vendas da Stone: {faltam}")
+    n = dados_fin.salvar_vendas_loja(vendas)
+    print(f"vendas da loja: {n} com cliente identificada")
+    for v in vendas:
+        print(f"  {v['data']}  {dados_fin.compradoras(v)}: {len(v['pagamentos'])} pagamentos, {len(v['itens'])} peças")
+
+
 def carregar_regras() -> None:
     import json
     with open(extrato.ARQUIVO_REGRAS, encoding="utf-8") as f:
@@ -393,6 +415,8 @@ def main(argv):
         gravar_eventos(argv[2:])
     elif cmd == "plano":
         carregar_plano(argv[2])
+    elif cmd == "loja":
+        vendas_loja(argv[2])
     elif cmd == "pedido-link":
         pedido_link(argv[2])
     elif cmd == "orcamento":

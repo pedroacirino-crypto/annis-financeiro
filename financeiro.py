@@ -975,8 +975,22 @@ def base_fisica() -> dict:
                 "fatia_recompra": recompra / total * 100 if total else 0.0,
             })
 
+    # Venda da loja com cliente identificada sai do grupo do pagador e conta
+    # pela cliente, com o recebido repartido pelo preço de etiqueta das peças.
+    identificadas = dados_fin.vendas_loja_por_pagamento()
+
+    def normalizar(nome: str) -> str:
+        nome = unicodedata.normalize("NFKD", str(nome)).encode("ascii", "ignore").decode()
+        return " ".join(nome.upper().split())
+
     vs = dados_fin.ler_vendas_stone()
+    recebido = {}
     if not vs.empty:
+        for r in vs[vs.status == "Aprovada"].itertuples(index=False):
+            k = dados_fin.chave_stone(r.stone_id)
+            if k in identificadas:
+                recebido[k] = float(r.bruto)
+        vs = vs[~vs.stone_id.map(dados_fin.chave_stone).isin(identificadas)]
         ok = vs[(vs.status == "Aprovada") & (vs.bruto > 5) & vs.cartao.notna() & (vs.cartao != "")]
         for captura, canal in (("POS", "Maquininha"), ("E-commerce", "Cartão no site (Stone)")):
             grupos = {}
@@ -989,10 +1003,21 @@ def base_fisica() -> dict:
         pix = ex[(ex.sentido == "entrada") & (ex.categoria.isin(["Pix direto", "Link de pagamento"]))]
         grupos = {}
         for r in pix.itertuples(index=False):
-            nome = unicodedata.normalize("NFKD", str(r.contraparte)).encode("ascii", "ignore").decode()
-            nome = " ".join(nome.upper().split())
-            grupos.setdefault(nome, []).append((pd.Timestamp(r.data).to_pydatetime(), float(r.valor)))
-        fechar("Pix direto e link", grupos)
+            k = dados_fin.chave_pix(r.data, r.valor)
+            if k in identificadas:
+                recebido[k] = float(r.valor)
+                continue
+            grupos.setdefault(normalizar(r.contraparte), []).append((pd.Timestamp(r.data).to_pydatetime(), float(r.valor)))
+        # No mesmo grupo do Pix, porque os dois são por nome: a Sandra da
+        # venda de 09/11/2026 já tinha pago um Pix em seu nome antes, e em
+        # grupos separados a volta dela não contava.
+        for v in dados_fin.ler_vendas_loja():
+            total = sum(recebido.get(k, 0.0) for k in v["pagamentos"])
+            etiqueta = sum(float(i["preco"]) for i in v["itens"]) or 1.0
+            for i in v["itens"]:
+                grupos.setdefault(normalizar(i["cliente"]), []).append(
+                    (v["data"].to_pydatetime(), total * float(i["preco"]) / etiqueta))
+        fechar("Pix, link e cliente identificada", grupos)
 
     clientes = pd.DataFrame(linhas)
     if not clientes.empty:

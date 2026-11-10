@@ -22,6 +22,8 @@ Tabelas, todas com prefixo `fin_`:
                          setembro tinha o seguro incêndio dentro
   fin_orcamento          projeção congelada de um mês, linha a linha do PnL,
                          para o mês corrente ter contra o que ser comparado
+  fin_vendas_loja        quem comprou o quê numa venda da loja: liga os Pix e
+                         os cartões ao nome da cliente, que o pagamento não diz
 
 Sem conexão configurada, tudo devolve vazio e os módulos caem nos arquivos
 locais em `legado/`, que é como se trabalha nesta máquina.
@@ -117,6 +119,7 @@ def garantir() -> None:
         con.execute(text(_SQL_RATEIO))
         con.execute(text(_SQL_ORCAMENTO))
         con.execute(text(_SQL_VENDAS_STONE))
+        con.execute(text(_SQL_VENDAS_LOJA))
     _tabelas_garantidas = True
 
 
@@ -166,6 +169,22 @@ _SQL_RATEIO = """
         categoria_parte TEXT NOT NULL,
         natureza_parte  TEXT NOT NULL,
         observacao      TEXT
+    )"""
+
+
+# Venda da loja com a cliente identificada. Quem paga nem sempre é quem
+# compra: em 09/11/2026 um vestido e um conjunto, de duas clientes, foram
+# pagos com três Pix de parentes e dois cartões pelo link. Cada pagamento
+# entra por uma chave (`chave_pix`, `chave_stone`) e as peças levam a cliente
+# e o preço de etiqueta, que reparte o recebido entre elas.
+_SQL_VENDAS_LOJA = """
+    CREATE TABLE IF NOT EXISTS fin_vendas_loja (
+        id           TEXT PRIMARY KEY,
+        data         DATE NOT NULL,
+        pagamentos   TEXT NOT NULL,
+        itens        TEXT NOT NULL,
+        observacao   TEXT,
+        carregado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     )"""
 
 
@@ -423,6 +442,48 @@ def ler_fatura_cartao() -> pd.DataFrame:
     if not df.empty:
         df["data"] = pd.to_datetime(df["data"])
     return df
+
+
+# ─── Vendas da loja com cliente ─────────────────────────────────────────────
+
+def chave_pix(data, valor) -> str:
+    return f"pix:{pd.Timestamp(data):%Y-%m-%d}:{float(valor):.2f}"
+
+
+def chave_stone(stone_id) -> str:
+    return f"stone:{stone_id}"
+
+
+def salvar_vendas_loja(vendas: List[dict]) -> int:
+    import json
+    linhas = [{"id": v["id"], "data": pd.Timestamp(v["data"]).date(),
+               "pagamentos": json.dumps(v["pagamentos"], ensure_ascii=False),
+               "itens": json.dumps(v["itens"], ensure_ascii=False),
+               "observacao": v.get("observacao") or None}
+              for v in vendas]
+    return _upsert("fin_vendas_loja", linhas, "id")
+
+
+@memo()
+def ler_vendas_loja() -> list:
+    import json
+    df = _ler("SELECT id, data, pagamentos, itens, observacao FROM fin_vendas_loja ORDER BY data")
+    return [{"id": r.id, "data": pd.Timestamp(r.data), "pagamentos": json.loads(r.pagamentos),
+             "itens": json.loads(r.itens), "observacao": r.observacao or ""}
+            for r in df.itertuples(index=False)] if not df.empty else []
+
+
+def vendas_loja_por_pagamento() -> dict:
+    """{chave do pagamento: venda} para as vendas da loja com cliente."""
+    return {k: v for v in ler_vendas_loja() for k in v["pagamentos"]}
+
+
+def compradoras(venda: dict) -> str:
+    nomes = []
+    for i in venda["itens"]:
+        if i["cliente"] not in nomes:
+            nomes.append(i["cliente"])
+    return ", ".join(nomes)
 
 
 # ─── Rateios ────────────────────────────────────────────────────────────────

@@ -1301,12 +1301,15 @@ def _pedido_por_cobranca() -> dict:
         return {}
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=600)
 def _saldo_pagarme(recip) -> dict:
     """Saldo da Pagar.me com a hora em que foi lido. Era buscado ao vivo duas
-    vezes por clique (4 chamadas, uns 2 s); agora fica até "Atualizar dados"."""
+    vezes por clique (4 chamadas, uns 2 s); agora fica guardado por 10 minutos.
+    Sem prazo, ficava dias: em 10/11/2026 a tela mostrava o saldo de 08/11 às
+    16h14 como "saldo de 16:14", R$ 1.825,20 que já tinham ido para a Stone
+    em 09/11, e o Total contava esse dinheiro duas vezes."""
     bal = pagarme_client.get_balance(recip)
-    return {**bal, "_lido_em": (datetime.utcnow() - timedelta(hours=3)).strftime("%H:%M")}
+    return {**bal, "_lido_em": (datetime.utcnow() - timedelta(hours=3)).strftime("%d/%m %H:%M")}
 
 
 @st.cache_data(show_spinner=False)
@@ -2873,16 +2876,16 @@ if "A receber" in abas:
     elif visao == omni.DIGITAL:
         c1, c2, c3 = st.columns(3)
         c1.metric(rot_pagarme, fmt_brl(avail),
-                  help="Saldo da Pagar.me que já pode ser transferido. Fica parado na hora "
-                       "em que foi lido e só muda ao clicar em Atualizar dados.")
+                  help="Saldo da Pagar.me que já pode ser transferido. É relido a cada "
+                       "10 minutos, ou ao clicar em Atualizar dados.")
         c2.metric("Pagar.me, a liquidar", fmt_brl(waiting), help="Venda do site que a Pagar.me ainda vai liberar.")
         c3.metric("Total", fmt_brl(avail + waiting), help="Pagar.me disponível + a liquidar.")
     else:
         c1, c2, c3 = st.columns(3)
         c1.metric("Conta Stone", fmt_brl(s_stone), help=f"Saldo da conta Stone no último movimento ({quando_stone}).")
         c2.metric(rot_pagarme, fmt_brl(avail),
-                  help="Saldo da Pagar.me que já pode ser transferido. Fica parado na hora "
-                       "em que foi lido e só muda ao clicar em Atualizar dados.")
+                  help="Saldo da Pagar.me que já pode ser transferido. É relido a cada "
+                       "10 minutos, ou ao clicar em Atualizar dados.")
         c3.metric("Total", fmt_brl(s_stone + avail + waiting + fis_total),
                   help="Conta Stone + Pagar.me disponível + Pagar.me a liquidar + maquininha a repassar.")
         d1, d2, d3 = st.columns(3)
