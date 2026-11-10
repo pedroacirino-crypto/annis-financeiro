@@ -572,6 +572,21 @@ if not hasattr(shopify_client, "rascunhos_link") or not hasattr(shopify_client, 
     import importlib
     shopify_client = importlib.reload(shopify_client)
     omni = importlib.reload(omni)
+# Venda contada em peças (10/11/2026): o portal caiu com AttributeError em
+# pecas_no_periodo, porque o financeiro da memória era o de antes. A ordem
+# importa: quem é importado vem antes de quem importa.
+import dados_fin as _dados_fin
+import financeiro as _financeiro
+from campanha import painel as _painel
+if not hasattr(_dados_fin, "vendas_loja_por_pagamento") or not hasattr(_financeiro, "pecas_no_periodo") \
+        or not hasattr(_financeiro, "pecas_loja") or "pecas" not in _painel.vendas.__code__.co_consts.__repr__():
+    import importlib
+    _dados_fin = importlib.reload(_dados_fin)
+    _financeiro = importlib.reload(_financeiro)
+    omni = importlib.reload(omni)
+    aba_resultado = importlib.reload(aba_resultado)
+    _painel = importlib.reload(_painel)
+    _esquecer_derivados()   # o que foi calculado pelo código velho não tem as peças
 try:
     if _memo.mudou(nuvem.dado_novo_em()):
         _esquecer_derivados()
