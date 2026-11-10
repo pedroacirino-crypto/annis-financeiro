@@ -10,4 +10,4 @@ psycopg2-binary>=2.9,<3
 # Sem isso ela puxa o commit novo para o disco e continua servindo o codigo
 # velho: aconteceu em 01/10 e de novo em 02/10/2026. A linha abaixo existe
 # so para ser trocada a cada publicacao que precisa valer de verdade.
-# reinicio: 2026-11-10T10:40 módulos novos em dados_fin e omni junto com app.py
+# reinicio: 2026-11-10T12:10 venda contada em peças, financeiro e painel novos junto com app.py

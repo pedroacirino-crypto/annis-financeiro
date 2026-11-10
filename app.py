@@ -1880,22 +1880,34 @@ if "Vendas" in abas:
         st.info("ℹ️ Sem vendas no período. Use **Atualizar dados** na barra lateral.")
     else:
         vendido = int(vv["bruto"].sum())
-        qtd = len(vv)
         dig = vv[vv.canal == omni.DIGITAL]
         fis = vv[vv.canal == omni.FISICO]
         pagas = df_chg[df_chg["status"] == "paid"] if not df_chg.empty else df_chg
+        # Venda é peça (financeiro.pecas_no_periodo). Pagamento da loja sem
+        # peça registrada fica de fora da conta e é avisado embaixo.
+        import financeiro as _fin_v
+        _pec = _fin_v.pecas_no_periodo(date_from_str, date_to_str)
+        n_site = _pec["site"] if omni.ver_digital(visao) else 0
+        n_loja = _pec["loja"] if omni.ver_fisico(visao) else 0
+        pecas = n_site + n_loja
+        sem_peca = int((fis.venda_loja == "").sum()) if "venda_loja" in fis else len(fis)
+        com_peca = int(dig.bruto.sum()) + (int(round(_pec["valor_loja"] * 100)) if omni.ver_fisico(visao) else 0)
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Vendido", fmt_brl(vendido))
-        c2.metric("Vendas", qtd)
-        c3.metric("Ticket médio", fmt_brl(int(vendido / qtd)) if qtd else "—")
+        c2.metric("Peças vendidas", pecas,
+                  help="Site: itens dos pedidos pagos. Loja: só as peças registradas em cada venda.")
+        c3.metric("Ticket médio por peça", fmt_brl(int(com_peca / pecas)) if pecas else "—",
+                  help="Valor das vendas com peça conhecida dividido pelas peças.")
         if visao == omni.CONSOLIDADO:
-            st.caption(md(f"Site {fmt_brl(int(dig.bruto.sum()))} em {len(dig)} vendas · loja {fmt_brl(int(fis.bruto.sum()))} "
-                          f"em {len(fis)} (maquininha, link e Pix direto). O Pix direto só aparece até o último extrato da "
-                          "Stone carregado."))
+            st.caption(md(f"Site {fmt_brl(int(dig.bruto.sum()))} em {n_site} peças · loja {fmt_brl(int(fis.bruto.sum()))} "
+                          f"em {n_loja} peças registradas (maquininha, link e Pix direto)"
+                          + (f", e {sem_peca} pagamentos da loja sem peça registrada" if sem_peca else "")
+                          + ". O Pix direto só aparece até o último extrato da Stone carregado."))
         elif visao == omni.FISICO:
             st.caption("Maquininha e link no cartão pela API da Stone, todo dia; Pix direto pelo extrato da conta Stone, "
-                       "que só chega até o último extrato carregado.")
+                       "que só chega até o último extrato carregado."
+                       + (f" {sem_peca} pagamentos sem peça registrada." if sem_peca else ""))
 
         if omni.ver_digital(visao) and not pagas.empty:
             qtd_site = len(pagas)
@@ -2009,10 +2021,10 @@ if "Vendas" in abas:
                                     ("Crédito à vista" if r.parcelas <= 1 else f"Crédito {int(r.parcelas)}x"), axis=1)
             gq = st_.groupby(["origem", "Tipo"]).agg(bruto=("bruto", "sum"), liquido=("liquido", "sum"), n=("id", "count")).reset_index()
             tabela(pd.DataFrame({
-                "Onde": gq.origem, "Tipo": gq.Tipo, "Vendas": gq.n,
+                "Onde": gq.origem, "Tipo": gq.Tipo, "Pagamentos": gq.n,
                 "Taxa paga": ((gq.bruto - gq.liquido) / gq.bruto * 100).map(fmt_pct),
                 "Bruto": gq.bruto.map(fmt_brl), "Líquido": gq.liquido.map(fmt_brl),
-            }), num=("Vendas", "Taxa paga", "Bruto", "Líquido"))
+            }), num=("Pagamentos", "Taxa paga", "Bruto", "Líquido"))
             st.caption("Taxa paga é bruto menos líquido da própria Stone, já com a antecipação do repasse no dia seguinte.")
 
         st.divider()
@@ -2644,9 +2656,19 @@ if "Novembro Annis" in abas:
         _ped = _v["pedidos"]
         _fis = _v["fisico"]
         _rec_site, _rec_fis = sum(p["total"] for p in _ped), sum(f["valor"] for f in _fis)
-        _rec, _n = _rec_site + _rec_fis, len(_ped) + len(_fis)
+        _rec = _rec_site + _rec_fis
         _out = _v["outubro"]
-        _out_rec, _out_n = _out["receita"] + _out["fisico"], _out["pedidos"] + _out["fisico_vendas"]
+        _out_rec = _out["receita"] + _out["fisico"]
+        # Venda é peça: site pelos itens, loja só pelas peças registradas.
+        # Outubro não tem peça da loja registrada, então a comparação de
+        # peças com outubro é só do site.
+        import financeiro as _fin_n
+        _pl = _fin_n.pecas_loja()
+        _pl = _pl[_pl.mes == "2026-11"] if not _pl.empty else _pl
+        _pc_site = sum(i["qtd"] for i in _v["itens"])
+        _pc_loja = int(_pl.qtd.sum()) if not _pl.empty else 0
+        _n = _pc_site + _pc_loja
+        _val_peca = sum(i["valor"] for i in _v["itens"]) + (float(_pl.valor.sum()) if not _pl.empty else 0.0)
 
         # Vendas ---------------------------------------------------------------
         st.subheader("Vendas da campanha")
@@ -2660,10 +2682,14 @@ if "Novembro Annis" in abas:
         k1.metric("Receita", _rs(_rec), delta=_delta_dia(_rec, _out_rec),
                   help=(f"Site com frete: {_rs(_rec_site)}. Loja física: {_rs(_rec_fis)}. Por dia: "
                         f"{_rs(_rec / _dias) if _dias else '—'} na campanha, {_rs(_out_rec / _odias)} em outubro."))
-        k2.metric("Pedidos", _n, delta=_delta_dia(_n, _out_n),
-                  help=(f"Site: {len(_ped)}. Loja física: {len(_fis)}. Por dia: {_vir(_n / _dias) if _dias else '—'} "
-                        f"na campanha, {_vir(_out_n / _odias)} em outubro."))
-        k3.metric("Ticket médio", _rs(_rec / _n) if _n else "—")
+        _d_site = _delta_dia(_pc_site, _out["pecas"])
+        k2.metric("Peças vendidas", _n, delta=_d_site.replace("% vs", "% no site vs") if _d_site else None,
+                  help=(f"Site: {_pc_site} peças em {len(_ped)} pedidos. Loja física: {_pc_loja} peças registradas"
+                        + (f", de {len(_fis)} pagamentos" if _fis else "") + ". A comparação é só do site, "
+                        f"{_vir(_pc_site / _dias) if _dias else '—'} peças por dia contra {_vir(_out['pecas'] / _odias)} em outubro, "
+                        "porque outubro não tem peça da loja registrada."))
+        k3.metric("Ticket médio por peça", _rs(_val_peca / _n) if _n else "—",
+                  help="Valor das peças sem frete (site) e o recebido nas vendas da loja com peça registrada.")
         _sale_rs, _fora_rs = sum(p["sale"] for p in _ped), sum(p["fora"] for p in _ped)
         k4.metric("Peças da sale", fmt_pct(_sale_rs / (_sale_rs + _fora_rs) * 100, 0) if _sale_rs + _fora_rs else "—",
                   help=(f"Só o site, a loja não registra a peça. Parte do valor em peças que veio da sale: "
@@ -2671,7 +2697,7 @@ if "Novembro Annis" in abas:
         _ate = f", lida até {_v['fisico_ate']:%d/%m}" if _v["fisico_ate"] else ""
         st.caption(f"Site {_rs(_rec_site)} e loja física {_rs(_rec_fis)}{_ate}. Comparação: média por dia da campanha até agora "
                    f"({_vir(_dias)} dias) contra a média por dia de outubro inteiro ({_rs(_out['receita'])} no site e "
-                   f"{_rs(_out['fisico'])} na loja, {_out_n} vendas em {_odias} dias).")
+                   f"{_rs(_out['fisico'])} na loja, {_out['pecas']} peças no site em {_odias} dias).")
         if _ped or _fis:
             _por_dia = [{"Dia": f["dia"].strftime("%d/%m"), "Tipo": "Loja física", "Valor": f["valor"]} for f in _fis]
             for p in _ped:
@@ -3279,9 +3305,9 @@ def _conciliacao_da_loja():
     resumo = c.groupby("situacao").agg(dias=("vendido_em", "count"), vendas=("vendas", "sum"),
                                        liquido=("liquido", "sum")).reset_index()
     tabela(pd.DataFrame({
-        "Situação": resumo.situacao, "Dias": resumo.dias, "Vendas": resumo.vendas,
+        "Situação": resumo.situacao, "Dias": resumo.dias, "Pagamentos": resumo.vendas,
         "Líquido": resumo.liquido.map(fmt_brl),
-    }), num=("Dias", "Vendas", "Líquido"))
+    }), num=("Dias", "Pagamentos", "Líquido"))
     sem = c[c.situacao == "Sem repasse no extrato"]
     if not sem.empty:
         st.warning(f"{len(sem)} dia(s) de venda sem repasse correspondente no extrato, "
@@ -3290,12 +3316,12 @@ def _conciliacao_da_loja():
         st.success("Todo dia de venda da loja tem repasse no extrato, pelo valor certo (ou ainda está no prazo).")
     det = c.sort_values("vendido_em", ascending=False)
     tabela(pd.DataFrame({
-        "Vendido em": det.vendido_em.dt.strftime("%d/%m/%Y"), "Vendas": det.vendas,
+        "Vendido em": det.vendido_em.dt.strftime("%d/%m/%Y"), "Pagamentos": det.vendas,
         "Bruto": det.bruto.map(fmt_brl), "Líquido esperado": det.liquido.map(fmt_brl),
         "Repassado": det.repassado.map(lambda v: fmt_brl(int(v)) if v else "—"),
         "Repassado em": det.repassado_em.map(lambda d: d.strftime("%d/%m/%Y") if pd.notna(d) else "—"),
         "Situação": det.situacao,
-    }), num=("Vendas", "Bruto", "Líquido esperado", "Repassado"), altura_max=420)
+    }), num=("Pagamentos", "Bruto", "Líquido esperado", "Repassado"), altura_max=420)
     st.caption("O repasse da Stone não traz o número da venda e o link parcelado cai em mais de um lançamento, "
                "então a conferência é por dia: o líquido vendido no dia tem que aparecer, somado, nos repasses "
                "seguintes, com tolerância de R$ 1. **Pendente** é venda cujo repasse ainda não cabe no extrato "
@@ -3456,8 +3482,15 @@ def _historico_omni(visao: str) -> pd.DataFrame:
                 "tentativas": int(h["tentativas"]), "perdidas": int(h["perdidas"]),
                 "custo_site": int(h["custo"]),
             })
+    t = fin_.pnl_competencia()["tabela"]
+    # Venda é peça: site pelos itens dos pedidos, loja só pelas peças
+    # registradas (desde nov/26). O ticket usa só o valor que tem peça.
+    pl = fin_.pecas_loja()
+    v_loja = pl.groupby("mes")["valor"].sum() if not pl.empty else pd.Series(dtype=float)
+    for r in t.itertuples(index=False):
+        if omni.ver_digital(visao) and r.mes in meses:
+            meses[r.mes]["pecas_site"] = int(r.pecas_site)
     if omni.ver_fisico(visao):
-        t = fin_.pnl_competencia()["tabela"]
         vf = omni.vendas_fisicas()
         n_fis = vf.groupby(vf.quando.dt.strftime("%Y-%m")).size() if not vf.empty else pd.Series(dtype=int)
         for r in t.itertuples(index=False):
@@ -3467,17 +3500,19 @@ def _historico_omni(visao: str) -> pd.DataFrame:
             meses.setdefault(r.mes, {}).update({
                 "fat_loja": fat, "custo_loja": int(round(r.taxas_stone * 100)),
                 "vendas_loja": int(n_fis.get(r.mes, 0)),
+                "pecas_loja": int(r.pecas_loja), "fat_loja_peca": int(round(float(v_loja.get(r.mes, 0.0)) * 100)),
             })
     if not meses:
         return pd.DataFrame()
     df = pd.DataFrame([{"mes": m, **v} for m, v in sorted(meses.items())]).fillna(0)
-    for c in ["fat_site", "vendas_site", "tentativas", "perdidas", "custo_site", "fat_loja", "custo_loja", "vendas_loja"]:
+    for c in ["fat_site", "vendas_site", "tentativas", "perdidas", "custo_site", "fat_loja", "custo_loja", "vendas_loja",
+              "pecas_site", "pecas_loja", "fat_loja_peca"]:
         df[c] = df.get(c, 0)
         df[c] = df[c].fillna(0).astype(int)
     df["faturamento"] = df.fat_site + df.fat_loja
-    df["vendas"] = df.vendas_site + df.vendas_loja
+    df["vendas"] = df.pecas_site + df.pecas_loja
     df["custo"] = df.custo_site + df.custo_loja
-    df["ticket"] = (df.faturamento / df.vendas.where(df.vendas > 0)).fillna(0).round().astype(int)
+    df["ticket"] = ((df.fat_site + df.fat_loja_peca) / df.vendas.where(df.vendas > 0)).fillna(0).round().astype(int)
     df["aprovacao"] = (df.vendas_site / df.tentativas.where(df.tentativas > 0) * 100).fillna(0)
     df["custo_pct"] = (df.custo / df.faturamento.where(df.faturamento > 0) * 100).fillna(0)
     df["liquido"] = df.faturamento - df.custo
@@ -3514,11 +3549,11 @@ if "Histórico" in abas:
         t1.caption(f"em {len(dfh)} meses"
                    + (f" · site {md(fmt_brl(int(dfh.fat_site.sum())))}, loja {md(fmt_brl(int(dfh.fat_loja.sum())))}"
                       if visao == omni.CONSOLIDADO else ""))
-        t2.metric("Vendas", f"{vendas}")
+        t2.metric("Peças vendidas", f"{vendas}")
         if site:
-            t2.caption(f"de {tent + int(dfh.vendas_loja.sum())} compras tentadas" if visao == omni.CONSOLIDADO
-                       else f"de {tent} compras tentadas")
-        t3.metric("Ticket médio", fmt_brl(int(fat / vendas)) if vendas else "—")
+            t2.caption(f"no site, {int(dfh.vendas_site.sum())} compras aprovadas de {tent} tentadas")
+        com_peca = int(dfh.fat_site.sum() + dfh.fat_loja_peca.sum()) if site else int(dfh.fat_loja_peca.sum())
+        t3.metric("Ticket médio por peça", fmt_brl(int(com_peca / vendas)) if vendas else "—")
 
         t4, t5, t6 = st.columns(3)
         if site:
@@ -3526,11 +3561,13 @@ if "Histórico" in abas:
                       fmt_pct(int(dfh.vendas_site.sum()) / tent * 100, 0) if tent else "—")
             t4.caption(f"{perd} não entraram")
         else:
-            t4.metric("Vendas por mês", f"{vendas / len(dfh):.1f}".replace(".", ","))
+            t4.metric("Peças por mês", f"{vendas / len(dfh):.1f}".replace(".", ","))
         t5.metric("Custo", fmt_pct(custo / fat * 100) if fat else "—")
         t5.caption(f"{md(fmt_brl(custo))} em taxas e antecipação")
         t6.metric("Líquido", fmt_brl(fat - custo))
 
+        st.caption("Peças: no site, os itens dos pedidos pagos; na loja, só as peças registradas em cada venda, "
+                   "o que começou em nov/26. Antes disso a loja entra no faturamento, mas não nas peças nem no ticket.")
         st.divider()
 
         cartao_fat = st.container(border=True)
@@ -3539,7 +3576,7 @@ if "Histórico" in abas:
         g["Faturamento"] = g["faturamento"] / 100
         g["Valor"] = g["faturamento"].apply(fmt_brl)
         g["Rotulo"] = g["faturamento"].apply(fmt_curto)
-        g["Vendas "] = g["vendas"]
+        g["Peças "] = g["vendas"]
         with cartao_fat:
             st.subheader("Faturamento por mês")
             if visao == omni.CONSOLIDADO:
@@ -3554,7 +3591,7 @@ if "Histórico" in abas:
             else:
                 st.altair_chart(
                     barras(g, "Mês", "Faturamento", rotulo="Rotulo",
-                           tooltip=["Mês", "Valor", "Vendas "], altura=280),
+                           tooltip=["Mês", "Valor", "Peças "], altura=280),
                     use_container_width=True,
                 )
 
@@ -3578,14 +3615,14 @@ if "Histórico" in abas:
                 ga["RotAprov"] = ga["aprovacao"].apply(lambda x: fmt_pct(x, 0))
                 st.altair_chart(
                     barras(ga, "Mês", "Aprovação", rotulo="RotAprov",
-                           tooltip=["Mês", "Aprovação", "Vendas ", "Não entraram"], altura=220),
+                           tooltip=["Mês", "Aprovação", "Peças ", "Não entraram"], altura=220),
                     use_container_width=True,
                 )
             else:
-                st.subheader("Vendas por mês")
+                st.subheader("Peças por mês")
                 g["RotVendas"] = g["vendas"].astype(str)
                 st.altair_chart(
-                    barras(g, "Mês", "Vendas ", rotulo="RotVendas", tooltip=["Mês", "Vendas "], altura=220),
+                    barras(g, "Mês", "Peças ", rotulo="RotVendas", tooltip=["Mês", "Peças "], altura=220),
                     use_container_width=True,
                 )
 
@@ -3595,7 +3632,7 @@ if "Histórico" in abas:
         if visao == omni.CONSOLIDADO:
             linhas_hist["Site"] = dfh["fat_site"].apply(fmt_brl)
             linhas_hist["Loja"] = dfh["fat_loja"].apply(fmt_brl)
-        linhas_hist.update({"Vendas": dfh["vendas"], "Ticket médio": dfh["ticket"].apply(fmt_brl)})
+        linhas_hist.update({"Peças": dfh["vendas"], "Ticket por peça": dfh["ticket"].apply(fmt_brl)})
         if site:
             linhas_hist["Não entraram"] = dfh["perdidas"]
             linhas_hist["Aprovação" + (" site" if visao == omni.CONSOLIDADO else "")] = \

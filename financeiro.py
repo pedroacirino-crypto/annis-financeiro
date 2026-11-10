@@ -1642,6 +1642,58 @@ def vendas_stone_por_mes() -> pd.DataFrame:
     return ok.groupby("mes")[["bruto", "liquido"]].sum()
 
 
+# Venda é peça (Pedro, 10/11/2026): pedido e pagamento contam diferente em
+# cada aba, e a venda da loja de 09/11 virou cinco "vendas" porque foi paga
+# em cinco vezes. No site a peça vem dos itens do pedido; na loja, só das
+# vendas registradas em fin_vendas_loja, porque o pagamento não diz o que
+# saiu. Antes de nov/26 a loja não tem peça registrada.
+def _recebido_por_chave() -> dict:
+    """Valor de cada pagamento da loja, pela chave de dados_fin."""
+    import dados_fin
+    import extrato
+    out = {}
+    vs = dados_fin.ler_vendas_stone()
+    if not vs.empty:
+        for r in vs[vs.status == "Aprovada"].itertuples(index=False):
+            out[dados_fin.chave_stone(r.stone_id)] = float(r.bruto)
+    ex = extrato.carregar()
+    if ex is not None and not ex.empty:
+        for r in ex[ex.sentido == "entrada"].itertuples(index=False):
+            out[dados_fin.chave_pix(r.data, r.valor)] = float(r.valor)
+    return out
+
+
+@memo()
+def pecas_loja() -> pd.DataFrame:
+    """Uma linha por peça registrada nas vendas da loja, com o recebido da
+    venda repartido pelo preço de etiqueta."""
+    import dados_fin
+    rec = _recebido_por_chave()
+    linhas = []
+    for v in dados_fin.ler_vendas_loja():
+        total = sum(rec.get(k, 0.0) for k in v["pagamentos"])
+        etiqueta = sum(float(i["preco"]) * int(i.get("qtd", 1)) for i in v["itens"]) or 1.0
+        for i in v["itens"]:
+            q = int(i.get("qtd", 1))
+            linhas.append({"data": v["data"], "mes": v["data"].strftime("%Y-%m"), "qtd": q,
+                           "valor": total * float(i["preco"]) * q / etiqueta, "venda": v["id"]})
+    return pd.DataFrame(linhas, columns=["data", "mes", "qtd", "valor", "venda"])
+
+
+def pecas_no_periodo(ini: str, fim: str) -> dict:
+    """Peças vendidas entre as datas (inclusive): site e loja registrada, e o
+    valor da loja que tem peça registrada."""
+    ped = pedidos_pagos()
+    site = 0
+    if not ped.empty:
+        dia = (ped.quando - pd.Timedelta(hours=3)).dt.strftime("%Y-%m-%d")
+        dentro = ped[(dia >= str(ini)) & (dia <= str(fim))]
+        site = int(sum(q for s in dentro.itens for q, _ in separar_itens(s)))
+    pl = pecas_loja()
+    pl = pl[(pl.data.dt.strftime("%Y-%m-%d") >= str(ini)) & (pl.data.dt.strftime("%Y-%m-%d") <= str(fim))]
+    return {"site": site, "loja": int(pl.qtd.sum()), "valor_loja": float(pl.valor.sum())}
+
+
 @memo()
 def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     ped = pedidos_pagos()
@@ -1690,6 +1742,12 @@ def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     t.index.name = "mes"
     z = pd.Series(0.0, index=meses)
     t["pedidos"] = pedidos_n.reindex(meses).fillna(0).astype(int)
+    pecas_site = (ped.assign(q=ped.itens.map(lambda s: sum(q for q, _ in separar_itens(s)))).groupby("mes")["q"].sum()
+                  if not ped.empty else pd.Series(dtype=float))
+    pl = pecas_loja()
+    t["pecas_site"] = pecas_site.reindex(meses).fillna(0).astype(int)
+    t["pecas_loja"] = pl.groupby("mes")["qtd"].sum().reindex(meses).fillna(0).astype(int) if not pl.empty else 0
+    t["pecas"] = t.pecas_site + t.pecas_loja
     t["receita_site"] = receita.reindex(meses).fillna(0.0)
     desc = ped.groupby("mes")["desconto_pix"].sum() if not ped.empty else pd.Series(dtype=float)
     t["desconto_pix"] = desc.reindex(meses).fillna(0.0)
@@ -1943,12 +2001,16 @@ def pnl_por_canal(t: pd.DataFrame, canal: str, imposto: float = IMPOSTO_PADRAO) 
         c["taxas"] = t.taxas_pagarme
         c["cmv_fisico_estimado"] = zero
         c["cmv"] = t.cmv_site
+        c["pecas"] = t.pecas_site
+        c["pecas_loja"] = 0
     else:
         c["receita_site"] = zero
         c["receita_site_liquida"] = zero
         c["desconto_pix"] = zero
         c["estornos"] = zero
         c["pedidos"] = 0
+        c["pecas"] = t.pecas_loja
+        c["pecas_site"] = 0
         c["receita_bruta"] = t.receita_fisica
         c["receita_liquida"] = t.receita_fisica
         c["taxas_pagarme"] = zero

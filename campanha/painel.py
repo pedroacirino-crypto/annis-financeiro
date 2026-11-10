@@ -73,7 +73,8 @@ def vendas(agora: datetime = None) -> dict:
     """pedidos: um por pedido (data, total, sale, fora, cupons, e-mail).
     dias: receita por dia e por tipo. itens: cada peça vendida.
     dias_corridos: dias desde o início da campanha, com fração do dia de hoje.
-    fisico: vendas da loja (maquininha, link e Pix), sem detalhe de peça.
+    fisico: pagamentos da loja (maquininha, link e Pix); as peças da loja vêm das
+            vendas registradas (financeiro.pecas_loja).
     fisico_ate: último dia que a loja está lida (conciliação da Stone e extrato).
     outubro: site e loja do mês inteiro, régua da média por dia."""
     agora = agora or datetime.now(BRT)
@@ -109,6 +110,7 @@ def vendas(agora: datetime = None) -> dict:
         "dias_corridos": max(min(agora, FIM) - INICIO, timedelta(0)) / timedelta(days=1),
         "outubro": {"receita": sum(float(o["currentTotalPriceSet"]["shopMoney"]["amount"]) for o in outubro),
                     "pedidos": len(outubro), "dias": 31,
+                    "pecas": sum(li["currentQuantity"] or 0 for o in outubro for li in o["lineItems"]["nodes"]),
                     "fisico": float(fis_out.bruto.sum()) / 100, "fisico_vendas": len(fis_out)},
     }
 

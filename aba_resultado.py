@@ -203,7 +203,7 @@ def render():
                       f"Aportes no período: {brl(fx_vis.aportes.sum())}."))
 
     LINHAS_PNL = [
-        ("Pedidos no site", "pedidos", False),
+        ("Peças vendidas", "pecas", False),
         ("Receita bruta", "receita_bruta", True),
         ("Receita do site (Shopify)", "receita_site", True),
         ("Maquininha e link no cartão", "receita_maquininha", True),
@@ -233,9 +233,9 @@ def render():
         b = b.loc[[m for m in b.index if m <= fechado]]
         linhas = {}
         LINHAS_CANAL = {
-            "Digital": {"pedidos", "receita_bruta", "receita_site", "desconto_pix", "estornos", "receita_liquida",
+            "Digital": {"pecas", "receita_bruta", "receita_site", "desconto_pix", "estornos", "receita_liquida",
                         "taxas_pagarme", "imposto", "cmv_site", "margem_bruta", "marketing", "resultado"},
-            "Físico": {"receita_bruta", "receita_maquininha", "receita_pix_direto", "receita_liquida",
+            "Físico": {"pecas", "receita_bruta", "receita_maquininha", "receita_pix_direto", "receita_liquida",
                        "taxas_stone", "imposto", "cmv_fisico_estimado", "margem_bruta"},
         }
         linhas_vis = [l for l in LINHAS_PNL if not por_canal or l[1] in LINHAS_CANAL[visao]]
@@ -321,7 +321,8 @@ def render():
                if mostra_mtd else
                f"O realizado de {mes_curto(corrente)} entra a partir do dia {DIA_DO_MTD}: "
                "antes disso o mês mal começou e o número engana mais do que informa. ")
-            + "No orçado a maquininha já vem líquida da taxa da Stone, por isso a taxa aparece zerada."))
+            + "No orçado a maquininha já vem líquida da taxa da Stone, por isso a taxa aparece zerada. "
+            + "Peças vendidas: no site, os itens dos pedidos; na loja, só as peças registradas, a partir de nov/26."))
         if pnl["cobertura_cmv"] < 0.999:
             faltam = ", ".join(f"{k} ({v})" for k, v in pnl["pecas_sem_custo"].items())
             st.caption(md(f"CMV do site cobre {pct(pnl['cobertura_cmv'])} das peças; sem ficha: {faltam}. "

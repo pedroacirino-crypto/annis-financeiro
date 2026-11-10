@@ -115,10 +115,12 @@ def vendas_fisicas(ini=None, fim=None) -> pd.DataFrame:
     # Quem pagou não é sempre quem comprou: a venda da loja com cliente
     # identificada troca o pagador pelo nome de quem levou as peças.
     vendas = dados_fin.vendas_loja_por_pagamento()
+    df["venda_loja"] = ""
     if vendas:
         chaves = [dados_fin.chave_pix(q, b / 100) if str(i).startswith("pix-") else dados_fin.chave_stone(i)
                   for q, b, i in zip(df.quando, df.bruto, df.id)]
         df["cliente"] = [dados_fin.compradoras(vendas[k]) if k in vendas else c for k, c in zip(chaves, df.cliente)]
+        df["venda_loja"] = [vendas[k]["id"] if k in vendas else "" for k in chaves]
     return _janela(df, ini, fim).sort_values("quando").reset_index(drop=True)
 
 
