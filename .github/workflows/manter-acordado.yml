@@ -48,7 +48,9 @@ jobs:
       - name: Preparar o navegador
         run: |
           pip install --quiet playwright
-          playwright install --with-deps chromium
+          # As dependências vêm do apt do Ubuntu; se o espelho cair (11/11/2026), segue sem elas:
+          # o Chromium da imagem do GitHub abre e imprime PDF do mesmo jeito.
+          playwright install --with-deps chromium || playwright install chromium
 
       - name: Atualizar os dados
         env:

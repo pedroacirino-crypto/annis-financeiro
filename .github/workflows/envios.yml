@@ -36,7 +36,9 @@ jobs:
       - name: Preparar
         run: |
           pip install --quiet requests sqlalchemy psycopg2-binary playwright pypdf
-          playwright install --with-deps chromium
+          # As dependências vêm do apt do Ubuntu; se o espelho cair (11/11/2026), segue sem elas:
+          # o Chromium da imagem do GitHub abre e imprime PDF do mesmo jeito.
+          playwright install --with-deps chromium || playwright install chromium
 
       - name: Montar e mandar o PDF
         env:
