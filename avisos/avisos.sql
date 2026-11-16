@@ -34,6 +34,19 @@ create table if not exists avisos.estado (
   em     timestamptz not null default now()
 );
 
+-- Cada tentativa de mandar uma nota para a SEFAZ e o que a Olist respondeu.
+-- Criada em 16/11/2026, quando a NF 184 não foi transmitida na primeira
+-- tentativa e não havia como saber o motivo.
+create table if not exists avisos.nf_tentativas (
+  id_nota   text not null,
+  numero    text,
+  pedido    text,
+  tentativa int  not null,
+  em        timestamptz not null default now(),
+  resposta  text,
+  primary key (id_nota, tentativa)
+);
+
 create or replace function avisos.segredo(nome text) returns text
 language sql stable security definer set search_path = '' as $$
   select decrypted_secret from vault.decrypted_secrets where name = 'annis_' || nome
@@ -357,19 +370,20 @@ end $$;
 -- e gera a nota sozinha, alguns minutos depois do pedido. Enquanto houver
 -- pedido esperando nota ("aguarda_nf:<número>", anotado por avisos.checar),
 -- esta função pergunta à Olist; sem pedido esperando, não consulta nada.
---   - nota pendente: manda para a SEFAZ pela API (uma vez por nota) e, se der
---     erro, avisa o motivo;
+--   - nota pendente: manda para a SEFAZ pela API, até 3 vezes com 4 minutos
+--     entre elas, guardando cada resposta em avisos.nf_tentativas; se
+--     continuar pendente depois da terceira, avisa uma vez com a última
+--     resposta da Olist;
 --   - nota autorizada: dispara o workflow que manda o PDF no grupo (ele tira a
 --     marca do pedido depois de enviar);
 --   - nota rejeitada pela SEFAZ: avisa uma vez;
---   - nota parada em "pendente" há 30 minutos: avisa uma vez (rede de
---     segurança se a transmissão pela API não andar);
 --   - pedido há 3 dias sem nota: avisa e para de esperar.
 create or replace function avisos.notas() returns void
 language plpgsql security definer set search_path = extensions, public as $$
 declare
   fuso constant text := 'America/Sao_Paulo';
   ret jsonb; n jsonb; pedido text; idn text; precisa_pdf boolean := false; ultimo timestamptz;
+  tentativas int; ultima timestamptz; resp text;
 begin
   if not exists (select 1 from avisos.enviados where id like 'aguarda_nf:%') then
     return;
@@ -401,23 +415,33 @@ begin
 
     elsif (n ->> 'situacao')::int = 1 then
       -- O plano da Olist gera a nota mas não transmite (confirmado com o
-      -- pedido #1144, 07/10/2026). Manda para a SEFAZ uma vez, como o botão
+      -- pedido #1144, 07/10/2026). Manda para a SEFAZ como o botão
       -- "Autorizar no SEFAZ"; a autorizada entra na próxima volta e vira PDF.
-      -- A marca vem antes do bloco para sobreviver ao erro e não repetir.
-      if not exists (select 1 from avisos.enviados where id = 'nfemit:' || idn) then
-        insert into avisos.enviados (id, tipo) values ('nfemit:' || idn, 'nota transmitida');
-        begin
-          perform avisos.olist('nota.fiscal.emitir', 'enviarEmail=N&id=' || idn);
-        exception when others then
-          perform avisos.telegram('NF ' || (n ->> 'numero') || ' do pedido #' || pedido
-            || ' não foi para a SEFAZ: ' || left(sqlerrm, 250) || E'\nAbrir a nota na Olist para ver e autorizar.');
-        end;
-      end if;
+      -- Até 3 tentativas, com 4 minutos entre elas: a NF 184 (16/11) não
+      -- transmitiu na primeira e ficou parada até um clique manual. Cada
+      -- resposta da Olist fica em avisos.nf_tentativas; a linha é gravada
+      -- antes da chamada para a tentativa contar mesmo se a função cair.
       insert into avisos.enviados (id, tipo) values ('nfpend:' || idn, 'nota pendente') on conflict do nothing;
-      if exists (select 1 from avisos.enviados where id = 'nfpend:' || idn and criado < now() - interval '30 minutes')
-         and not exists (select 1 from avisos.enviados where id = 'nfpend_aviso:' || idn) then
+      select count(*), max(em) into tentativas, ultima from avisos.nf_tentativas where id_nota = idn;
+
+      if tentativas = 0 or (tentativas < 3 and ultima < now() - interval '4 minutes') then
+        tentativas := tentativas + 1;
+        insert into avisos.nf_tentativas (id_nota, numero, pedido, tentativa)
+        values (idn, n ->> 'numero', pedido, tentativas);
+        begin
+          resp := left(avisos.olist('nota.fiscal.emitir', 'enviarEmail=N&id=' || idn)::text, 2000);
+        exception when others then
+          resp := 'ERRO: ' || left(sqlerrm, 1990);
+        end;
+        update avisos.nf_tentativas set resposta = resp where id_nota = idn and tentativa = tentativas;
+
+      elsif tentativas >= 3 and ultima < now() - interval '4 minutes'
+            and not exists (select 1 from avisos.enviados where id = 'nfpend_aviso:' || idn) then
+        select resposta into resp from avisos.nf_tentativas
+        where id_nota = idn order by tentativa desc limit 1;
         perform avisos.telegram('NF ' || (n ->> 'numero') || ' do pedido #' || pedido
-          || ' está pendente há 30 minutos. Falta autorizar na Olist: Vendas > Notas fiscais > autorizar pendentes.');
+          || ' continua pendente depois de 3 tentativas de mandar para a SEFAZ. Autorizar na Olist: Vendas > Notas fiscais > autorizar pendentes.'
+          || E'\nÚltima resposta da Olist: ' || left(coalesce(resp, 'sem resposta'), 250));
         insert into avisos.enviados (id, tipo) values ('nfpend_aviso:' || idn, 'nota pendente avisada');
       end if;
     end if;
