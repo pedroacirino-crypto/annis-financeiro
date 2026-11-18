@@ -579,7 +579,7 @@ import dados_fin as _dados_fin
 import financeiro as _financeiro
 from campanha import painel as _painel
 if not hasattr(_dados_fin, "vendas_loja_por_pagamento") or not hasattr(_financeiro, "pecas_no_periodo") \
-        or not hasattr(_financeiro, "pecas_loja") or "pecas" not in _painel.vendas.__code__.co_consts.__repr__():
+        or not hasattr(_financeiro, "pecas_loja") or not hasattr(_financeiro, "meta_pecas") or "pecas" not in _painel.vendas.__code__.co_consts.__repr__():
     import importlib
     _dados_fin = importlib.reload(_dados_fin)
     _financeiro = importlib.reload(_financeiro)
@@ -2709,6 +2709,24 @@ if "Novembro Annis" in abas:
         k4.metric("Peças da sale", fmt_pct(_sale_rs / (_sale_rs + _fora_rs) * 100, 0) if _sale_rs + _fora_rs else "—",
                   help=(f"Só o site, a loja não registra a peça. Parte do valor em peças que veio da sale: "
                         f"{_rs(_sale_rs)} na sale, {_rs(_fora_rs)} fora."))
+        # Meta do mês em peças (financeiro.meta_pecas), confirmada pelo Pedro em 18/11.
+        _meta = _fin_n.meta_pecas("2026-11", datetime.now(_nov.BRT).replace(tzinfo=None))
+        if _meta:
+            _esp, (_lo, _hi) = _meta["esperado_site"], _meta["faixa_site"]
+            _m1, _m2, _m3, _m4 = st.columns(4)
+            _m1.metric("Meta do mês", f"{_meta['total']} peças",
+                      help=f"Site {_meta['site']} e loja {_meta['loja']}, do orçamento congelado de novembro.")
+            _m2.metric("Site até agora", _pc_site, delta=f"{_pc_site - _esp:+.0f} vs esperado".replace(".", ","),
+                      help=(f"Esperado até agora: {_vir(_esp)} peças, pela curva de dia da semana e parte do mês. "
+                            f"Entre {_lo} e {_hi} é variação normal."))
+            _m3.metric("Faixa normal do site hoje", f"{_lo} a {_hi}",
+                      help="90% das vezes a contagem cai nessa faixa quando o ritmo está na meta.")
+            _m4.metric("Loja", f"{_pc_loja} de {_meta['loja']}",
+                      help="Peças registradas nas vendas da loja. A loja vai por evento, então não tem curva por dia.")
+            _sit = ("abaixo da faixa normal" if _pc_site < _lo else "acima da faixa normal" if _pc_site > _hi
+                    else "dentro da faixa normal")
+            st.caption(f"Site {_sit}: {_pc_site} peças contra {_vir(_esp)} esperadas até agora. O esperado pesa domingo "
+                       "e os primeiros dias do mês, e as 4 peças do lançamento só contam a partir de 18/11.")
         _ate = f", lida até {_v['fisico_ate']:%d/%m}" if _v["fisico_ate"] else ""
         st.caption(f"Site {_rs(_rec_site)} e loja física {_rs(_rec_fis)}{_ate}. Comparação: média por dia da campanha até agora "
                    f"({_vir(_dias)} dias) contra a média por dia de outubro inteiro ({_rs(_out['receita'])} no site e "
@@ -3648,6 +3666,10 @@ if "Histórico" in abas:
             linhas_hist["Site"] = dfh["fat_site"].apply(fmt_brl)
             linhas_hist["Loja"] = dfh["fat_loja"].apply(fmt_brl)
         linhas_hist.update({"Peças": dfh["vendas"], "Ticket por peça": dfh["ticket"].apply(fmt_brl)})
+        import financeiro as _fin_h
+        _metas = {m: (v["site"] if site else 0) + (v["loja"] if visao != omni.DIGITAL else 0)
+                  for m, v in _fin_h.META_PECAS.items()}
+        linhas_hist["Meta de peças"] = dfh["mes"].map(lambda m: str(_metas[m]) if m in _metas else "")
         if site:
             linhas_hist["Não entraram"] = dfh["perdidas"]
             linhas_hist["Aprovação" + (" site" if visao == omni.CONSOLIDADO else "")] = \

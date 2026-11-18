@@ -1697,6 +1697,68 @@ def pecas_no_periodo(ini: str, fim: str) -> dict:
     return {"site": site, "loja": int(pl.qtd.sum()), "valor_loja": float(pl.valor.sum())}
 
 
+# Meta de peças do mês (Pedro, 18/11/2026). Novembro sai do orçamento
+# congelado: 44 pedidos no site vezes 1,5 peça por pedido (média de maio a
+# outubro) dá 66, e os R$ 2.359 da loja a R$ 562 por peça dão 4. As 4 peças
+# a mais do lançamento (2 conjuntos) só valem a partir do dia em que ele
+# entrou no ar, 18/11, e não espalhadas no mês.
+META_PECAS = {"2026-11": {"site": 66, "loja": 4, "lancamento": ("2026-11-18", 4)}}
+# Peso de cada dia na venda do site, medido nos pedidos de fev a out/26
+# (Poisson com efeito de mês). Domingo vende o dobro da média; segunda e
+# quinta, pouco mais da metade; os dias 1 a 7 vendem 1,5 vez a média.
+_PESO_DIA_SEMANA = (0.61, 1.03, 0.96, 0.58, 0.97, 1.46, 2.02)
+_PESO_PARTE_MES = ((7, 1.49), (14, 0.68), (21, 0.81), (31, 1.21))
+
+
+def _peso_dia(dia: pd.Timestamp) -> float:
+    parte = next(p for limite, p in _PESO_PARTE_MES if dia.day <= limite)
+    return _PESO_DIA_SEMANA[dia.dayofweek] * parte
+
+
+def _faixa_poisson(media: float, cauda: float = 0.05) -> tuple:
+    """Menor e maior contagem dentro de 90% numa Poisson com essa média."""
+    import math
+    p, acum, k, lo = math.exp(-media), 0.0, 0, None
+    while True:
+        acum += p
+        if lo is None and acum >= cauda:
+            lo = k
+        if acum >= 1 - cauda:
+            return lo, k
+        k += 1
+        p *= media / k
+
+
+def meta_pecas(mes: str, agora: datetime) -> dict:
+    """Meta do mês e quanto dela o site já deveria ter vendido até agora.
+
+    O esperado do site segue a curva de dia da semana e parte do mês, com o
+    dia de hoje contando pela fração que já passou. A faixa é a variação
+    normal de uma contagem pequena: com 66 peças no mês, no dia 15 qualquer
+    número entre uns 25 e 40 está dentro do normal."""
+    m = META_PECAS.get(mes)
+    if not m:
+        return {}
+    dias = pd.date_range(f"{mes}-01", periods=pd.Period(mes).days_in_month)
+    ini_lanc, n_lanc = m.get("lancamento", (None, 0))
+    base = m["site"] - n_lanc
+    hoje = pd.Timestamp(agora.date())
+    fracao = (agora.hour * 60 + agora.minute) / 1440
+
+    def esperado(total, dias_validos):
+        pesos = [_peso_dia(d) for d in dias_validos]
+        soma = sum(pesos) or 1.0
+        ate = sum(p * (1.0 if d < hoje else fracao if d == hoje else 0.0) for d, p in zip(dias_validos, pesos))
+        return total * ate / soma
+
+    esp = esperado(base, list(dias))
+    if n_lanc:
+        esp += esperado(n_lanc, [d for d in dias if d >= pd.Timestamp(ini_lanc)])
+    lo, hi = _faixa_poisson(esp) if esp > 0 else (0, 0)
+    return {"site": m["site"], "loja": m["loja"], "total": m["site"] + m["loja"],
+            "esperado_site": esp, "faixa_site": (lo, hi)}
+
+
 @memo()
 def pnl_competencia(imposto: float = IMPOSTO_PADRAO) -> dict:
     ped = pedidos_pagos()
