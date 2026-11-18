@@ -41,6 +41,9 @@ TAXA_DESCONTO_MENSAL_PADRAO = 0.010
 MAPA_FICHAS = [
     (r"^Top .*Giverny", "Top Alça Peplum"),
     (r"^Saia .*Giverny", "Saia Midi Reta"),
+    # Bellagio (lançado em 18/11/2026): ficha "Top Peplum Bellagio" da precificação,
+    # que só tem o tecido azul; o rosa usa a mesma ficha.
+    (r"^Top .*Bellagio", "Top Peplum Bellagio"),
     (r"Monet", "Vestido"),
     (r"^Bolsa de Jacquard Rel", "Bolsa Jacquard"),
     (r"Loulou", "Vestido Jacquard Loulou"),
