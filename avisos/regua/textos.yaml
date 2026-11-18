@@ -391,21 +391,44 @@ divulgacao:
     botao_topo: "Garantir meu tamanho"
     botao: "Ver todas as peças da sale"
   d3:
-    aprovado: false
-    # Junto do lançamento: falta o nome da coleção, o link e a data (13/11 a confirmar).
-    link_lancamento: "https://annis.store/collections/all?sort_by=created-descending"
-    assunto: "Coleção nova, com 10% de volta, e a sale com até 40% off"
-    previa: "As peças novas chegaram, o cashback vale nelas, e o Novembro Annis continua até 30/11."
-    faixa: "Coleção nova · até 40% off + 10% de volta"
-    hero_titulo: "Coleção nova"
-    hero_sub: "E o Novembro Annis continua"
-    eyebrow: "Lançamento"
-    titulo: "Chegaram as peças novas"
+    aprovado: true
+    # Lançamento do Bellagio (18/11), no tom dos posts do Instagram. Formato de lançamento
+    # (Pedro, 18/11): foto limpa na abertura, texto curto, um botão, sale compacta no fim.
+    lancamento: true
+    link_lancamento: "https://annis.store/collections/bellagio"
+    assunto: "Bellagio, nosso próximo destino"
+    previa: "Nova criação em jacquard, em pré-venda. E o Novembro Annis continua até 30/11."
+    faixa: "Lançamento · pré-venda no site"
+    abertura:
+      img: "https://annis.store/cdn/shop/files/annis-2026-novembro-562.png?width=1200&height=1500&crop=top&format=pjpg"
+      link: "https://annis.store/collections/bellagio"
+      alt: "Conjunto Bellagio Azul"
+    eyebrow: "Novos destinos, outras paisagens"
+    titulo: "Bellagio"
     texto:
-      - "Oi{virgula_nome}. A coleção nova já está no site, e toda compra dela devolve 10% em cashback. E a sale continua até 30/11, com até 40% off."
-    botao_lancamento: "Ver a coleção nova"
-    botao_topo: "Comprar com até 40% off"
-    botao: "Ver todas as peças da sale"
+      - "Oi{virgula_nome}. Depois de Giverny, nosso olhar percorreu os jardins italianos, suas vilas históricas e a arquitetura ornamental. Daí vêm os arabescos do Bellagio, nossa nova criação em jacquard, em azul e em rosa. A Bolsa Relíquia ganha duas versões para acompanhar."
+      - "Em pré-venda no site, com envios a partir de 07/12."
+    fotos:
+      - img: "https://annis.store/cdn/shop/files/annis-2026-novembro-726.png?width=600&format=pjpg"
+        link: "https://annis.store/products/top-de-jacquard-rosa-bellagio"
+        alt: "Conjunto Bellagio Rosa"
+      - img: "https://annis.store/cdn/shop/files/annis-2026-novembro-716.png?width=600&format=pjpg"
+        link: "https://annis.store/products/bolsa-de-jacquard-reliquia-rosa"
+        alt: "Bolsa Relíquia Rosa com a Saia Bellagio Rosa"
+      - img: "https://annis.store/cdn/shop/files/annis-2026-novembro-552.png?width=600&format=pjpg"
+        link: "https://annis.store/products/top-de-jacquard-azul-bellagio"
+        alt: "Conjunto Bellagio Azul"
+      - img: "https://annis.store/cdn/shop/files/annis-2026-novembro-594.png?width=600&format=pjpg"
+        link: "https://annis.store/products/bolsa-de-jacquard-reliquia-azul"
+        alt: "Bolsa Relíquia Azul com a Saia Bellagio Azul"
+    botao_lancamento: "Descobrir Bellagio"
+    sale:
+      eyebrow: "O Novembro Annis continua"
+      titulo: "Até 40% off"
+      sub: "na sale, até 30/11"
+      texto: "E 10% de volta em cashback em todo o site, para usar até 31/01."
+      botao: "Ver as peças da sale"
+      nota: "Desconto em peças selecionadas, enquanto durar o estoque. Frete grátis não vale em pedidos com peças da sale."
   d4:
     aprovado: false
     assunto: "Últimos dias: até 40% off e 10% de volta"

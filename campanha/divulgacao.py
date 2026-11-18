@@ -233,6 +233,47 @@ def _banner(img: str, link: str) -> str:
             f'style="width:100%;max-width:600px;height:auto;display:block;"></a></td></tr>')
 
 
+def _fotos(fotos: list) -> str:
+    """Fotos do lançamento lado a lado, cada uma levando à sua página."""
+    cel = [f'<td width="50%" valign="top" style="width:50%;padding:0 6px 12px 6px;"><a href="{f["link"]}">'
+           f'<img src="{f["img"]}" width="256" alt="{B.esc(f["alt"])}" style="width:100%;height:auto;display:block;background:#efe3d6;"></a></td>'
+           for f in fotos]
+    linhas = "".join("<tr>" + "".join(cel[i:i + 2]) + "</tr>" for i in range(0, len(cel), 2))
+    return (f'<tr><td class="px" style="padding:4px 38px 0 38px;">'
+            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{linhas}</table></td></tr>')
+
+
+def _foto_abertura(f: dict) -> str:
+    """Foto do lançamento de ponta a ponta, sem texto por cima (Pedro, 18/11:
+    o título sobre a foto deixava a abertura bagunçada)."""
+    return (f'<tr><td align="center" style="padding:0;"><a href="{f["link"]}"><img src="{f["img"]}" width="600" '
+            f'alt="{B.esc(f["alt"])}" style="width:100%;max-width:600px;height:auto;display:block;background:#efe3d6;"></a></td></tr>')
+
+
+def _sale_curta(s: dict, itens: list, link: str, link_regulamento: str) -> str:
+    """A sale no fim do e-mail de lançamento: bloco bege claro com a oferta, três
+    peças com o desconto e o botão marrom; as regras numa linha pequena embaixo.
+    (Pedro, 18/11: o bloco marrom cheio pesava demais.)"""
+    fundo = "#f3e6d8"
+    cel = "".join(
+        f'<td width="33%" valign="top" style="width:33%;padding:0 5px;"><a href="{x["url"]}" style="text-decoration:none;color:{B.TINTA};">'
+        f'<img src="{x["img"]}" width="160" alt="{B.esc(x["nome"])}" style="width:100%;height:auto;display:block;background:#efe3d6;">'
+        f'<p style="margin:8px 0 0 0;font-family:{B.SERIF};font-size:14px;line-height:1.25;color:{B.TINTA};">{B.esc(x["nome"].split(" - ")[0])}</p>'
+        f'<p style="margin:2px 0 0 0;font-size:12px;color:{B.TINTA};"><span style="text-decoration:line-through;color:{B.APOIO};">{_reais(x["de"])}</span>'
+        f'&nbsp; {_reais(x["por"])}</p></a></td>' for x in itens[:3])
+    bloco = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+             f'<td align="center" bgcolor="{fundo}" style="background:{fundo};padding:30px 22px 28px 22px;text-align:center;">'
+             f'{B._eyebrow(s["eyebrow"])}'
+             f'<p style="margin:0;font-family:{B.SERIF};font-weight:300;font-size:44px;line-height:1.05;color:{B.MARROM};">{B.esc(s["titulo"])}</p>'
+             f'<p style="margin:4px 0 0 0;font-family:{B.SERIF};font-weight:300;font-size:20px;color:{B.MARROM};">{B.esc(s["sub"])}</p>'
+             f'<p style="margin:12px 0 22px 0;font-size:13px;color:{B.TINTA};">{B.esc(s["texto"])}</p>'
+             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>{cel}</tr></table>'
+             f'<div style="padding-top:24px;">{B._botao(s["botao"], link)}</div></td></tr></table>'
+             f'<p style="margin:14px 0 0 0;font-size:11.5px;line-height:1.5;color:{B.APOIO};text-align:center;">{B.esc(s["nota"])} '
+             f'<a href="{link_regulamento}" style="color:{B.APOIO};">Ver o regulamento</a></p>')
+    return B._sec(bloco, topo=22, base=10, alinhar="center")
+
+
 def _cartao(x: dict, restam: str, comprar: str) -> str:
     """Foto, nome e uma linha de preço (de, por e % off). A peça inteira é o link."""
     tam = (f'<p style="margin:2px 0 0 0;font-size:11.5px;color:{B.APOIO};">{B.esc(restam.format(tamanhos=x["tamanhos"]))}</p>'
@@ -273,17 +314,13 @@ def _como(rotulo: str, linhas: list, link_regulamento: str) -> str:
                   f"{itens}</table>{regulamento}", topo=4, base=14)
 
 
-def montar(versao: str, nome: str, itens: list) -> dict:
-    T = modelos.textos()
-    g, d = T["geral"], T["divulgacao"]
-    t = modelos._preencher(d[versao], {"virgula_nome": f", {nome}" if nome else ""})
-    linhas = [B.faixa(t["faixa"]), B.cabecalho()]
-    if d.get("banner") and versao != "d3":
-        linhas.append(_banner(d["banner"], d["link_colecao"]))
-    else:
-        linhas.append(B.abertura(modelos.ABERTURA, t["hero_titulo"], t["hero_sub"]))
+def _corpo_sale(versao: str, t: dict, d: dict, itens: list) -> list:
+    """Corpo dos e-mails da sale (d1, d2, d4): texto, oferta, peças e regras."""
+    linhas = []
     linhas.append(B.texto(t["texto"], t["eyebrow"], t["titulo"]))
     if versao == "d3":
+        if t.get("fotos"):
+            linhas.append(_fotos(t["fotos"]))
         linhas.append(B.botao(t["botao_lancamento"], t["link_lancamento"]))
     # O banner já traz a oferta; o bloco de sale e cashback só entra sem ele (Pedro, 31/10).
     if not (d.get("banner") and versao != "d3"):
@@ -292,6 +329,30 @@ def montar(versao: str, nome: str, itens: list) -> dict:
     linhas.append(_grade(d["rotulo_pecas"], itens, d["restam"] if versao in COM_TAMANHOS else "", d["comprar"]))
     linhas.append(B.botao(t["botao"], d["link_colecao"]))
     linhas.append(_como(d["rotulo_como"], d["como"], d["link_regulamento"]))
+    return linhas
+
+
+def montar(versao: str, nome: str, itens: list) -> dict:
+    T = modelos.textos()
+    g, d = T["geral"], T["divulgacao"]
+    t = modelos._preencher(d[versao], {"virgula_nome": f", {nome}" if nome else ""})
+    linhas = [B.faixa(t["faixa"]), B.cabecalho()]
+    if t.get("lancamento"):
+        # E-mail de lançamento (d3, Bellagio): foto, texto curto, fotos, um botão e a sale no fim.
+        linhas += [_foto_abertura(t["abertura"]), B.texto(t["texto"], t["eyebrow"], t["titulo"])]
+        if t.get("fotos"):
+            linhas.append(_fotos(t["fotos"]))
+        linhas.append(B.botao(t["botao_lancamento"], t["link_lancamento"]))
+        linhas.append(_sale_curta(t["sale"], itens, d["link_colecao"], d["link_regulamento"]))
+    elif d.get("banner") and versao != "d3":
+        linhas.append(_banner(d["banner"], d["link_colecao"]))
+    else:
+        # O d3 abre com a foto do lançamento quando o texto traz uma (Bellagio, 18/11),
+        # ou vai direto ao texto com sem_abertura.
+        if not t.get("sem_abertura"):
+            linhas.append(B.abertura(t.get("imagem") or modelos.ABERTURA, t["hero_titulo"], t["hero_sub"]))
+    if not t.get("lancamento"):
+        linhas += _corpo_sale(versao, t, d, itens)
     links = [(a, b.replace("{whatsapp}", B.link_whatsapp(g["whatsapp"], "Oi, vi o Novembro Annis"))) for a, b in g["rodape_links"]]
     rodape = B.rodape(g["rodape"], links, g["empresa"])
     # O link de sair entra depois de com_cliques (não é clique de interesse).
