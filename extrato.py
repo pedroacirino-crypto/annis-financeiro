@@ -48,7 +48,7 @@ REGRAS_DEBITO = [
     (r"CONCEPT TXTL|EXCIM|PROMEX|MIKKONOS|M ALMEIDA COMERCIO DE TECIDOS|CENTRAL MALHAS|APM MODA|NIKA SECURITIZADORA|ALIANCA FINAN|ECO SIMPLE", "estoque", "Tecido", "ok"),
     (r"PAULISTANA ZIPER|PARANA AVIAMENTOS|ARMARINHOS|CARDOSO DISTRIBUIDORA|DUMA AVIAMENTOS|ALTERO|MIXMETAIS|GEMMA BIJOUX|BONOR|GM2 IMPORTACAO|XIAZHI|PALACIO DAS ESPUMAS|SHPP BRASIL", "estoque", "Aviamento", "ok"),
     (r"GRAFICA PORTO BELO|AJ FERREIRA|A R FERREIRA|FM IMPRESSOS|PRINTI", "estoque", "Embalagem", "ok"),
-    (r"TRANS APUCARANA|BRASPRESS", "estoque", "Frete de insumo", "ok"),
+    (r"TRANS APUCARANA|BRASPRESS|EXPRESSO SAO MIGUEL", "estoque", "Frete de insumo", "ok"),  # São Miguel: "Frete - Sao Miguel" na planilha de contas, nov/2026
     # Marketing
     (r"PROADZ|V60 ANUNCIOS|FACEBK", "despesa", "Ads e agência", "ok"),  # mesma agência, nome e CNPJ novos desde 09/2026
     (r"PORTOSEG", "despesa", "Fatura do cartão de anúncios", "ok"),  # a Meta em si entra pelo relatório da agência
