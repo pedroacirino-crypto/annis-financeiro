@@ -430,15 +430,31 @@ divulgacao:
       botao: "Ver as peças da sale"
       nota: "Desconto em peças selecionadas, enquanto durar o estoque. Frete grátis não vale em pedidos com peças da sale."
   d4:
+    # Fim de semana de 27 a 29/11 (Pedro, 27/11): 10% com preço riscado nas coleções novas,
+    # menos acessórios (campanha/black_friday.py), também com o nome Novembro Annis.
+    # Vai para todo mundo da lista, inclusive quem já comprou no mês.
     aprovado: false
-    assunto: "Últimos dias: até 40% off e 10% de volta"
-    previa: "Termina segunda, 30/11. Veja o que ainda tem no seu tamanho."
-    faixa: "Novembro Annis · termina 30/11"
-    hero_titulo: "Últimos dias"
-    hero_sub: "Até 40% off + 10% de volta, até 30/11"
-    eyebrow: "Últimos dias"
-    titulo: "Termina na segunda, 30/11"
+    sem_banner: true
+    pecas_novas: true
+    sem_regulamento: true
+    link_colecao: "https://annis.store/collections/shop"
+    assunto: "Novembro Annis: 10% off nas coleções novas, até domingo"
+    previa: "Só neste fim de semana, até domingo às 23h59. E a sale segue com até 40% off."
+    faixa: "Novembro Annis · até domingo, 29/11"
+    hero_titulo: "Novembro Annis"
+    hero_sub: "10% off nas coleções novas, até domingo"
+    eyebrow: "Só neste fim de semana"
+    titulo: "10% off nas coleções novas"
     texto:
-      - "Oi{virgula_nome}. O Novembro Annis termina na segunda, às 23h59. Depois disso, os preços voltam e o cashback das compras acaba. Abaixo, o que ainda resta das peças com mais desconto."
+      - "Oi{virgula_nome}. Até domingo, 29/11, às 23h59, todas as peças das nossas coleções novas estão com 10% de desconto, já no preço do site. Só os acessórios ficam de fora."
+      - "A sale continua com até 40% off, e toda compra no site ainda volta 10% em cashback."
+    oferta:
+      - ["Coleções novas", "10% off", "até domingo, 29/11, às 23h59"]
+      - ["Sale", "até 40% off", "em peças selecionadas"]
+    rotulo_pecas: "Das coleções novas"
     botao_topo: "Ver as peças"
-    botao: "Ver todas as peças da sale"
+    botao: "Ver todas as peças"
+    como:
+      - "10% em todas as peças das coleções novas, exceto acessórios, até domingo, 29/11, às 23h59. O desconto já aparece no preço."
+      - "Peças da sale seguem com até 40% off, enquanto durar o estoque."
+      - "10% de volta em cashback em todas as compras no site até 30/11. O código chega por e-mail depois do pedido e vale até 31/01 em peças fora da sale."

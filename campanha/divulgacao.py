@@ -64,7 +64,7 @@ JANELA = {
     "d4": (datetime(2026, 11, 24, 0, 0, tzinfo=BRT), datetime(2026, 12, 1, 0, 0, tzinfo=BRT)),
 }
 # Os que mostram os tamanhos que restam de cada peça.
-COM_TAMANHOS = ("d2a", "d2b", "d4")
+COM_TAMANHOS = ("d2a", "d2b")
 
 
 def _g(q, v=None):
@@ -169,7 +169,8 @@ def fila(qual: str) -> list:
         receberam, abriram, clicaram = _sinais("d1")
     for p in pessoas:
         e = p["email"]
-        if e in comprou:
+        # O d4 (10% nas coleções novas, 27 a 29/11) vai também para quem já comprou.
+        if e in comprou and qual != "d4":
             continue
         if qual == "d2":
             if e not in receberam or e in clicaram:
@@ -222,9 +223,49 @@ def pecas(n: int = 6) -> list:
     return escolhidas[:n]
 
 
+_NOVAS = """query($ids:[ID!]!){nodes(ids:$ids){... on Product{id title handle status createdAt
+  featuredMedia{preview{image{url}}}
+  variants(first:20){nodes{title availableForSale}}}}}"""
+
+
+def pecas_novas(n: int = 6) -> list:
+    """Peças das coleções novas com os 10% do fim de semana (campanha.bf_precos),
+    as mais novas primeiro, uma de cada tipo, só as que ainda estão à venda."""
+    with nuvem._conectar().connect() as con:
+        bf = con.execute(text(
+            "select produto_id, max(preco_antes) as de, min(preco_bf) as por from campanha.bf_precos group by produto_id"
+        )).mappings().all()
+    info = {p["id"]: p for p in _g(_NOVAS, {"ids": [b["produto_id"] for b in bf]})["nodes"] if p}
+    linhas = []
+    for b in bf:
+        p = info.get(b["produto_id"])
+        if not p or p["status"] != "ACTIVE" or not p["featuredMedia"]:
+            continue
+        if not any(v["availableForSale"] for v in p["variants"]["nodes"]):
+            continue
+        de, por = float(b["de"]), float(b["por"])
+        linhas.append({"nome": p["title"], "tipo": p["title"].split(" ")[0], "url": f"https://annis.store/products/{p['handle']}",
+                       "img": p["featuredMedia"]["preview"]["image"]["url"].split("?")[0] + "?width=560",
+                       "desconto": round(1 - por / de, 2), "de": de, "por": por, "tamanhos": "", "criado": p["createdAt"]})
+    linhas.sort(key=lambda x: x["criado"], reverse=True)
+    escolhidas, tipos = [], set()
+    for x in linhas:
+        if x["tipo"] not in tipos:
+            escolhidas.append(x)
+            tipos.add(x["tipo"])
+    return escolhidas[:n]
+
+
+def itens_de(versao: str) -> list:
+    return pecas_novas() if modelos.textos()["divulgacao"][versao].get("pecas_novas") else pecas()
+
+
 # Montagem -----------------------------------------------------------------------
 
 def _reais(v: float) -> str:
+    # Com centavos só quando tem (os 10% do fim de semana dão R$ 628,20).
+    if round(v, 2) != round(v):
+        return "R$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {v:,.0f}".replace(",", ".")
 
 
@@ -306,10 +347,10 @@ def _oferta(partes: list, link: str) -> str:
             f'<tr>{"".join(celulas)}</tr></table></a></td></tr>')
 
 
-def _como(rotulo: str, linhas: list, link_regulamento: str) -> str:
+def _como(rotulo: str, linhas: list, link_regulamento=None) -> str:
     itens = "".join(f'<tr><td style="padding:8px 0;border-top:1px solid {B.LINHA};font-size:13px;">{B.esc(l)}</td></tr>' for l in linhas)
     regulamento = (f'<p style="margin:10px 0 0 0;font-size:12px;"><a href="{link_regulamento}" style="color:{B.MARROM};">'
-                   f"Ver o regulamento</a></p>")
+                   f"Ver o regulamento</a></p>") if link_regulamento else ""
     return B._sec(f'{B._eyebrow(rotulo)}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">'
                   f"{itens}</table>{regulamento}", topo=4, base=14)
 
@@ -323,12 +364,14 @@ def _corpo_sale(versao: str, t: dict, d: dict, itens: list) -> list:
             linhas.append(_fotos(t["fotos"]))
         linhas.append(B.botao(t["botao_lancamento"], t["link_lancamento"]))
     # O banner já traz a oferta; o bloco de sale e cashback só entra sem ele (Pedro, 31/10).
-    if not (d.get("banner") and versao != "d3"):
-        linhas.append(_oferta(d["oferta"], d["link_colecao"]))
-    linhas.append(B.botao(t["botao_topo"], d["link_colecao"]))
-    linhas.append(_grade(d["rotulo_pecas"], itens, d["restam"] if versao in COM_TAMANHOS else "", d["comprar"]))
-    linhas.append(B.botao(t["botao"], d["link_colecao"]))
-    linhas.append(_como(d["rotulo_como"], d["como"], d["link_regulamento"]))
+    # Cada e-mail pode trocar oferta, link, rótulo e regras (d4, 27/11).
+    link = t.get("link_colecao", d["link_colecao"])
+    if not (d.get("banner") and versao != "d3") or t.get("sem_banner"):
+        linhas.append(_oferta(t.get("oferta", d["oferta"]), link))
+    linhas.append(B.botao(t["botao_topo"], link))
+    linhas.append(_grade(t.get("rotulo_pecas", d["rotulo_pecas"]), itens, d["restam"] if versao in COM_TAMANHOS else "", d["comprar"]))
+    linhas.append(B.botao(t["botao"], link))
+    linhas.append(_como(d["rotulo_como"], t.get("como", d["como"]), None if t.get("sem_regulamento") else d["link_regulamento"]))
     return linhas
 
 
@@ -344,7 +387,7 @@ def montar(versao: str, nome: str, itens: list) -> dict:
             linhas.append(_fotos(t["fotos"]))
         linhas.append(B.botao(t["botao_lancamento"], t["link_lancamento"]))
         linhas.append(_sale_curta(t["sale"], itens, d["link_colecao"], d["link_regulamento"]))
-    elif d.get("banner") and versao != "d3":
+    elif d.get("banner") and versao != "d3" and not t.get("sem_banner"):
         linhas.append(_banner(d["banner"], d["link_colecao"]))
     else:
         # O d3 abre com a foto do lançamento quando o texto traz uma (Bellagio, 18/11),
@@ -404,7 +447,7 @@ def enviar(qual: str, simular: bool = False) -> None:
             print("saíram pelo botão do e-mail:", len(sairam_por_email()))
         except Exception as e:  # sem ler a caixa o envio segue, com aviso
             _telegram(f"Não consegui ler os pedidos de saída da caixa antes do e-mail {qual}: {type(e).__name__}.")
-    itens = pecas()
+    itens = itens_de(versoes[0])
     fila_ = fila(qual)
     print(f"{qual}: {len(fila_)} na fila, {len(itens)} peças")
     contagem, erros, copia_feita = Counter(), [], set()
@@ -446,9 +489,8 @@ def enviar(qual: str, simular: bool = False) -> None:
 
 
 def previa(versoes=("d1", "d2a", "d2b", "d3", "d4")) -> None:
-    itens = pecas()
     for versao in versoes:
-        m = montar(versao, "Michelle", itens)
+        m = montar(versao, "Michelle", itens_de(versao))
         html, texto = _finalizar(m["html"], m["texto"], "previa")
         gmail.enviar(CONTATO, f"[prévia divulgação {versao}] {m['assunto']}", html, texto, remetente=REMETENTE)
         print(f"{versao}: {m['assunto']}")
