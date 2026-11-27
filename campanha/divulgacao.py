@@ -434,7 +434,10 @@ def montar(versao: str, nome: str, itens: list) -> dict:
     else:
         # O d3 abre com a foto do lançamento quando o texto traz uma (Bellagio, 18/11),
         # ou vai direto ao texto com sem_abertura.
-        if not t.get("sem_abertura"):
+        if t.get("abertura"):
+            # Foto limpa, sem título por cima, como no d3 (d4: foto 757, Pedro, 27/11).
+            linhas.append(_foto_abertura(t["abertura"]))
+        elif not t.get("sem_abertura"):
             linhas.append(B.abertura(t.get("imagem") or modelos.ABERTURA, t["hero_titulo"], t["hero_sub"]))
     if not t.get("lancamento"):
         linhas += _corpo_sale(versao, t, d, itens)

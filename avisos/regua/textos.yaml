@@ -440,6 +440,10 @@ divulgacao:
     sem_regulamento: true
     link_colecao: "https://annis.store/collections/shop"
     link_sale: "https://annis.store/collections/novembro-annis"
+    abertura:
+      img: "https://annis.store/cdn/shop/files/annis-2026-novembro-757.png?width=1200&height=1500&crop=top&format=pjpg"
+      link: "https://annis.store/collections/shop"
+      alt: "Conjunto Bellagio Rosa"
     assunto: "Novembro Annis: até 45% off, só até domingo"
     previa: "Peças novas com 10% off e a sale com até 45% off, até domingo às 23h59."
     faixa: "Novembro Annis · até domingo, 29/11"
