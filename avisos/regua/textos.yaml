@@ -434,7 +434,7 @@ divulgacao:
     # 10% com preço riscado nas peças novas, menos acessórios (campanha/black_friday.py),
     # e a sale com até 45% off. Duas grades: 4 peças novas e as 4 com mais desconto.
     # Vai para todo mundo da lista, inclusive quem já comprou no mês.
-    aprovado: false
+    aprovado: true  # Pedro, 27/11, "Aprovado, pode mandar agora"
     sem_banner: true
     pecas_novas: true
     sem_regulamento: true
