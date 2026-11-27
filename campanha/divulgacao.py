@@ -256,8 +256,39 @@ def pecas_novas(n: int = 6) -> list:
     return escolhidas[:n]
 
 
-def itens_de(versao: str) -> list:
-    return pecas_novas() if modelos.textos()["divulgacao"][versao].get("pecas_novas") else pecas()
+_SALE_AO_VIVO = """query($h:String!){collectionByHandle(handle:$h){products(first:100){nodes{id title handle status
+  featuredMedia{preview{image{url}}}
+  variants(first:20){nodes{price compareAtPrice availableForSale}}}}}}"""
+
+
+def sale_ao_vivo(n: int = 4) -> list:
+    """As peças da sale com mais desconto, pelo preço que está no site agora
+    (o fim de semana de 27/11 aprofundou a sale para até 45%), uma de cada tipo."""
+    linhas = []
+    for p in _g(_SALE_AO_VIVO, {"h": "novembro-annis"})["collectionByHandle"]["products"]["nodes"]:
+        vs = [v for v in p["variants"]["nodes"] if v["availableForSale"] and v["compareAtPrice"]
+              and float(v["compareAtPrice"]) > float(v["price"])]
+        if p["status"] != "ACTIVE" or not p["featuredMedia"] or not vs:
+            continue
+        v = max(vs, key=lambda v: 1 - float(v["price"]) / float(v["compareAtPrice"]))
+        de, por = float(v["compareAtPrice"]), float(v["price"])
+        linhas.append({"nome": p["title"], "tipo": p["title"].split(" ")[0], "url": f"https://annis.store/products/{p['handle']}",
+                       "img": p["featuredMedia"]["preview"]["image"]["url"].split("?")[0] + "?width=560",
+                       "desconto": 1 - por / de, "de": de, "por": por, "tamanhos": ""})
+    linhas.sort(key=lambda x: -x["desconto"])
+    escolhidas, tipos = [], set()
+    for x in linhas:
+        if x["tipo"] not in tipos:
+            escolhidas.append(x)
+            tipos.add(x["tipo"])
+    return escolhidas[:n]
+
+
+def itens_de(versao: str):
+    """Peças do e-mail. O d4 leva duas grades: peças novas e a sale."""
+    if modelos.textos()["divulgacao"][versao].get("pecas_novas"):
+        return {"novas": pecas_novas(4), "sale": sale_ao_vivo(4)}
+    return pecas()
 
 
 # Montagem -----------------------------------------------------------------------
@@ -322,7 +353,7 @@ def _cartao(x: dict, restam: str, comprar: str) -> str:
     return f"""<td width="50%" valign="top" style="width:50%;padding:0 6px 22px 6px;">
 <a href="{x['url']}" style="text-decoration:none;color:{B.TINTA};"><img src="{x['img']}" width="248" alt="{B.esc(x['nome'])}" style="width:100%;height:auto;display:block;background:#efe3d6;">
 <p style="margin:10px 0 0 0;font-family:{B.SERIF};font-size:17px;line-height:1.25;color:{B.TINTA};">{B.esc(x['nome'])}</p>
-<p style="margin:4px 0 0 0;font-size:13px;color:{B.TINTA};"><span style="text-decoration:line-through;color:{B.APOIO};">{_reais(x['de'])}</span>&nbsp; {_reais(x['por'])}&nbsp; <span style="color:{B.MARROM};font-weight:500;">{round(x['desconto'] * 100)}% off</span></p></a>
+<p style="margin:4px 0 0 0;font-size:13px;color:{B.TINTA};"><span style="text-decoration:line-through;color:{B.APOIO};">{_reais(x['de'])}</span>&nbsp; {_reais(x['por'])}&nbsp; <span style="color:{B.MARROM};font-weight:500;">{int(x['desconto'] * 100 + 0.01)}% off</span></p></a>
 {tam}</td>"""
 
 
@@ -369,8 +400,15 @@ def _corpo_sale(versao: str, t: dict, d: dict, itens: list) -> list:
     if not (d.get("banner") and versao != "d3") or t.get("sem_banner"):
         linhas.append(_oferta(t.get("oferta", d["oferta"]), link))
     linhas.append(B.botao(t["botao_topo"], link))
-    linhas.append(_grade(t.get("rotulo_pecas", d["rotulo_pecas"]), itens, d["restam"] if versao in COM_TAMANHOS else "", d["comprar"]))
-    linhas.append(B.botao(t["botao"], link))
+    if isinstance(itens, dict):
+        # d4: as peças novas com o preço riscado e, logo abaixo, as de maior desconto da sale (Pedro, 27/11).
+        linhas.append(_grade(t["rotulo_novas"], itens["novas"], "", d["comprar"]))
+        linhas.append(B.botao(t["botao_novas"], link))
+        linhas.append(_grade(t["rotulo_sale"], itens["sale"], "", d["comprar"]))
+        linhas.append(B.botao(t["botao"], t.get("link_sale", d["link_colecao"])))
+    else:
+        linhas.append(_grade(t.get("rotulo_pecas", d["rotulo_pecas"]), itens, d["restam"] if versao in COM_TAMANHOS else "", d["comprar"]))
+        linhas.append(B.botao(t["botao"], link))
     linhas.append(_como(d["rotulo_como"], t.get("como", d["como"]), None if t.get("sem_regulamento") else d["link_regulamento"]))
     return linhas
 
