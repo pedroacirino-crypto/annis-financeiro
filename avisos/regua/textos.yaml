@@ -455,7 +455,7 @@ divulgacao:
       - ["Todo o site*", "10% off", "exceto acessórios"]
       - ["Sale", "até 45%", "off nas peças da sale"]
       - ["Cashback", "+10%", "de volta em toda compra"]
-    nota_oferta: "*Exceto acessórios. As peças da sale têm o desconto delas, de até 45%."
+    nota_oferta: "*Exceto acessórios."
     rotulo_novas: "Peças novas com 10% off"
     rotulo_sale: "Os maiores descontos"
     botao_topo: "Ver as peças"
