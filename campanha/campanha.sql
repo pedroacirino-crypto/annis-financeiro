@@ -65,3 +65,9 @@ create table if not exists campanha.estado (
 -- código descontou de fato e quanto já foi avisado para sair do reembolso.
 alter table campanha.cashback add column if not exists valor_usado numeric;
 alter table campanha.cashback add column if not exists descontar numeric;
+
+-- Black Friday 2026 (Pedro, 26/11): preço -10% com riscado em Fora da sale menos
+-- Acessórios, de 26/11 até 29/11 23h59. campanha/black_friday.py grava o antes
+-- em campanha.bf_precos. Volta às 23h59 de 29/11 (02h59 UTC de 30/11).
+select cron.schedule('annis-bf-reverter', '59 2 30 11 *',
+  $$select avisos.disparar_workflow('black-friday.yml', '{"acao": "reverter"}')$$);

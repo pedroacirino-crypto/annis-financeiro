@@ -1,0 +1,87 @@
+# Black Friday 2026: preços voltam às 23h59 de 29/11 (Pedro, 26/11/2026).
+#
+# Quem dispara é o pg_cron do Supabase (annis-bf-reverter, campanha/campanha.sql),
+# porque o agendamento do GitHub atrasa horas. A trava de data impede que um
+# disparo fora de hora mexa nos preços.
+name: Black Friday
+
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "reverter, aplicar, status ou conferir"
+        required: true
+        default: "status"
+      forcar:
+        description: "Rodar fora da data prevista (sim/nao)"
+        required: false
+        default: "nao"
+
+concurrency:
+  group: campanha
+  cancel-in-progress: false
+
+jobs:
+  black-friday:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar
+        run: pip install --quiet requests sqlalchemy psycopg2-binary
+
+      - name: Conferir a data
+        env:
+          ACAO: ${{ inputs.acao }}
+          FORCAR: ${{ inputs.forcar }}
+        run: |
+          hoje=$(TZ=America/Sao_Paulo date +%Y-%m-%d)
+          if [ "$FORCAR" != "sim" ] && [ "$ACAO" = "reverter" ] && [ "$hoje" != "2026-11-29" ] && [ "$hoje" != "2026-11-30" ]; then
+            echo "fora da data ($hoje)"; exit 1
+          fi
+
+      - name: Rodar
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+        run: |
+          case "${{ inputs.acao }}" in
+            aplicar|reverter) for i in 1 2 3; do python campanha/black_friday.py ${{ inputs.acao }} && break; sleep 20; done ;;
+          esac
+          python campanha/black_friday.py status
+
+      - name: Conferir a loja
+        if: always() && (inputs.acao == 'aplicar' || inputs.acao == 'reverter' || inputs.acao == 'conferir')
+        env:
+          SUPABASE_URL_BANCO: ${{ secrets.SUPABASE_URL_BANCO }}
+          SHOPIFY_LOJA: ${{ secrets.SHOPIFY_LOJA }}
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          ACAO: ${{ inputs.acao }}
+        run: |
+          fase="$ACAO"; [ "$fase" = "conferir" ] && fase=reverter
+          python campanha/black_friday.py conferir "$fase" | tee checklist.txt
+
+      - name: Avisar no grupo
+        if: always() && (inputs.acao == 'aplicar' || inputs.acao == 'reverter')
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ACAO: ${{ inputs.acao }}
+          RESULTADO: ${{ job.status }}
+          LINK: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            if [ "$RESULTADO" != "success" ]; then printf "Black Friday: %s deu ERRO, conferir já.\nDetalhe: %s\n\n" "$ACAO" "$LINK"; fi
+            if [ -s checklist.txt ]; then cat checklist.txt; else printf "Sem a conferência da loja. Detalhe: %s\n" "$LINK"; fi
+          } > mensagem.txt
+          curl -s -o /dev/null --retry 3 --connect-timeout 10 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text@mensagem.txt"
