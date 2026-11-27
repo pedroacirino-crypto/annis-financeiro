@@ -448,17 +448,20 @@ divulgacao:
     eyebrow: "Só neste fim de semana"
     titulo: "Até 45% off, até domingo"
     texto:
-      - "Oi{virgula_nome}. Até domingo, 29/11, às 23h59, as peças das coleções novas estão com 10% off e a sale chega a 45% off. Os descontos já estão no preço do site."
-      - "E toda compra no site ainda volta 10% em cashback."
+      - "Oi{virgula_nome}. Até domingo, 29/11, às 23h59, todo o site está com 10% off, exceto acessórios, e as peças da sale chegam a 45% off. Os descontos já estão no preço."
+      - "E em toda compra ainda volta mais 10% em cashback, para usar até 31/01."
+    # Pedro, 27/11: "10% em todo o site* exceto acessórios e até 45% off nas peças da sale mais 10% de cashback".
     oferta:
-      - ["Peças novas", "10% off", "exceto acessórios"]
-      - ["Sale", "até 45% off", "em peças selecionadas"]
+      - ["Todo o site*", "10% off", "exceto acessórios"]
+      - ["Sale", "até 45%", "off nas peças da sale"]
+      - ["Cashback", "+10%", "de volta em toda compra"]
+    nota_oferta: "*Exceto acessórios. As peças da sale têm o desconto delas, de até 45%."
     rotulo_novas: "Peças novas com 10% off"
     rotulo_sale: "Os maiores descontos"
     botao_topo: "Ver as peças"
     botao_novas: "Ver as peças novas"
     botao: "Ver todas as peças da sale"
     como:
-      - "10% em todas as peças das coleções novas, exceto acessórios, até domingo, 29/11, às 23h59. O desconto já aparece no preço."
+      - "10% em todo o site, exceto acessórios e peças da sale, até domingo, 29/11, às 23h59. O desconto já aparece no preço."
       - "Peças da sale com até 45% off, enquanto durar o estoque."
       - "10% de volta em cashback em todas as compras no site até 30/11. O código chega por e-mail depois do pedido e vale até 31/01 em peças fora da sale."

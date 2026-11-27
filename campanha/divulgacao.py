@@ -363,19 +363,23 @@ def _grade(rotulo: str, itens: list, restam: str, comprar: str) -> str:
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{linhas}</table></td></tr>')
 
 
-def _oferta(partes: list, link: str) -> str:
+def _oferta(partes: list, link: str, nota: str = "") -> str:
     """Sale e cashback lado a lado, como as chamadas da página da coleção:
-    sem fundo, texto marrom e uma linha fina no meio."""
+    sem fundo, texto marrom e uma linha fina no meio. Com três partes (d4, 27/11)
+    o número grande diminui para caber; a nota vai embaixo, em letra pequena."""
+    largura = f"{100 // len(partes)}%"
+    tamanho, classe = (38, "oferta-g") if len(partes) <= 2 else (30, "oferta-g3")
     celulas = []
     for k, (rotulo, grande, pequeno) in enumerate(partes):
         borda = f"border-left:1px solid {B.LINHA};" if k else ""
-        celulas.append(f'<td width="50%" valign="top" align="center" style="width:50%;padding:4px 10px;text-align:center;{borda}">'
+        celulas.append(f'<td width="{largura}" valign="top" align="center" style="width:{largura};padding:4px 8px;text-align:center;{borda}">'
                        f'<p style="margin:0;font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;color:{B.MARROM};">{B.esc(rotulo)}</p>'
-                       f'<p class="oferta-g" style="margin:6px 0 0 0;font-family:{B.SERIF};font-weight:300;font-size:38px;line-height:1.1;color:{B.MARROM};white-space:nowrap;">{B.esc(grande)}</p>'
+                       f'<p class="{classe}" style="margin:6px 0 0 0;font-family:{B.SERIF};font-weight:300;font-size:{tamanho}px;line-height:1.1;color:{B.MARROM};white-space:nowrap;">{B.esc(grande)}</p>'
                        f'<p style="margin:4px 0 0 0;font-size:12px;line-height:1.4;color:{B.MARROM};opacity:0.85;">{B.esc(pequeno)}</p></td>')
+    rodape = (f'<p style="margin:10px 0 0 0;font-size:11.5px;text-align:center;color:{B.APOIO};">{B.esc(nota)}</p>' if nota else "")
     return (f'<tr><td class="px" style="padding:8px 44px 14px 44px;"><a href="{link}" style="text-decoration:none;">'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">'
-            f'<tr>{"".join(celulas)}</tr></table></a></td></tr>')
+            f'<tr>{"".join(celulas)}</tr></table>{rodape}</a></td></tr>')
 
 
 def _como(rotulo: str, linhas: list, link_regulamento=None) -> str:
@@ -398,7 +402,7 @@ def _corpo_sale(versao: str, t: dict, d: dict, itens: list) -> list:
     # Cada e-mail pode trocar oferta, link, rótulo e regras (d4, 27/11).
     link = t.get("link_colecao", d["link_colecao"])
     if not (d.get("banner") and versao != "d3") or t.get("sem_banner"):
-        linhas.append(_oferta(t.get("oferta", d["oferta"]), link))
+        linhas.append(_oferta(t.get("oferta", d["oferta"]), link, t.get("nota_oferta", "")))
     linhas.append(B.botao(t["botao_topo"], link))
     if isinstance(itens, dict):
         # d4: as peças novas com o preço riscado e, logo abaixo, as de maior desconto da sale (Pedro, 27/11).

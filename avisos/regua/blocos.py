@@ -57,6 +57,7 @@ a { color:MARROM; }
   .pix-qr { padding:0 0 16px 0 !important; text-align:center !important; }
   .cuidados-img { width:100% !important; height:auto !important; }
   .oferta-g { font-size:26px !important; }
+  .oferta-g3 { font-size:19px !important; }
   .escala td { padding:9px 0 !important; font-size:12px !important; }
 }
 """.replace("FUNDO", FUNDO).replace("MARROM", MARROM)
